@@ -30,8 +30,19 @@ static MPSL_INLINE T mpAllocatorAlign(T p, uintptr_t alignment) noexcept {
 // ============================================================================
 
 void Allocator::reset(bool releaseMemory) noexcept {
+  Chunk* chunk = _first;
+
+  // Dynamic blocks are always freed, regardless of `releaseMemory`.
+  DynamicBlock* block = _dynamicBlocks;
+  _dynamicBlocks = nullptr;
+
+  while (block != nullptr) {
+    DynamicBlock* next = block->next;
+    ::free(block);
+    block = next;
+  }
+
   if (releaseMemory) {
-    Chunk* chunk = _first;
     _first = nullptr;
 
     while (chunk != nullptr) {
@@ -41,9 +52,11 @@ void Allocator::reset(bool releaseMemory) noexcept {
     }
   }
   else {
+    if (chunk != nullptr)
+      chunk->ptr = mpAllocatorAlign<uint8_t*>(reinterpret_cast<uint8_t*>(chunk) + sizeof(Chunk), kChunkAlignment);
   }
 
-  _current = _first;
+  _current = chunk;
   ::memset(_slots, 0, MPSL_ARRAY_SIZE(_slots) * sizeof(Slot*));
 }
 
@@ -132,8 +145,35 @@ void* Allocator::_alloc(size_t size, size_t& allocatedSize) noexcept {
     return ptr;
   }
   else {
-    void* p = ::malloc(size);
-    allocatedSize = p != nullptr ? size : static_cast<size_t>(0);
+    // Allocate a dynamic block.
+    size_t overhead = sizeof(DynamicBlock) + kChunkAlignment;
+
+    // Handle a possible overflow.
+    if (MPSL_UNLIKELY(~static_cast<size_t>(0) - size > overhead))
+      return nullptr;
+
+    void* p = ::malloc(size + overhead);
+    if (MPSL_UNLIKELY(p == nullptr)) {
+      allocatedSize = 0;
+      return NULL;
+    }
+
+    // Link as first in `_dynamicBlocks` double-linked list.
+    DynamicBlock* block = static_cast<DynamicBlock*>(p);
+    DynamicBlock* next = _dynamicBlocks;
+
+    if (next != nullptr)
+      next->prev = block;
+
+    block->next = next;
+    _dynamicBlocks = block;
+
+    // Align the pointer to the guaranteed alignment and store `DynamicBlock`
+    // at the end of the memory block, so `_releaseDynamic()` can find it.
+    p = mpAllocatorAlign(static_cast<char*>(p) + sizeof(DynamicBlock), kChunkAlignment);
+    *reinterpret_cast<DynamicBlock**>(static_cast<char*>(p) + size) = block;
+
+    allocatedSize = size;
     return p;
   }
 }
@@ -152,12 +192,31 @@ char* Allocator::_allocString(const char* s, size_t len) noexcept {
   if (p == nullptr)
     return nullptr;
 
-  // Copy string and NULL terminate as `s` doesn't have to be nullptr terminated.
+  // Copy string and NULL terminate as `s` doesn't have to be NULL terminated.
   if (len > 0)
     ::memcpy(p, s, len);
   p[len] = 0;
 
   return p;
+}
+
+void Allocator::_releaseDynamic(void* p, size_t size) noexcept {
+  // Pointer to `DynamicBlock` is stored at the end of `p`.
+  DynamicBlock* block = *reinterpret_cast<DynamicBlock**>(static_cast<char*>(p) + size);
+
+  // Unlink and free.
+  DynamicBlock* prev = block->prev;
+  DynamicBlock* next = block->next;
+
+  if (prev != nullptr)
+    prev->next = next;
+  else
+    _dynamicBlocks = next;
+
+  if (next != nullptr)
+    next->prev = prev;
+
+  ::free(block);
 }
 
 bool Allocator::multiAlloc(void** pDst, const size_t* sizes, size_t count) noexcept {

@@ -66,9 +66,18 @@ struct Allocator {
     uint8_t* end;
   };
 
+  //! Single-linked list used to store unused blocks.
   struct Slot {
     //! Link to a next slot in a single-linked list.
     Slot* next;
+  };
+
+  //! A block of memory that has been allocated dynamically and is not part of
+  //! chunk-list used by the allocator. This is used to keep track of all these
+  //! blocks so they can be freed by `reset()` if not freed explicitly.
+  struct DynamicBlock {
+    DynamicBlock* prev;
+    DynamicBlock* next;
   };
 
   // --------------------------------------------------------------------------
@@ -131,6 +140,7 @@ struct Allocator {
   MPSL_NOAPI void* _alloc(size_t size, size_t& allocatedSize) noexcept;
   MPSL_NOAPI void* _allocZeroed(size_t size, size_t& allocatedSize) noexcept;
   MPSL_NOAPI char* _allocString(const char* s, size_t len) noexcept;
+  MPSL_NOAPI void _releaseDynamic(void* p, size_t size) noexcept;
 
   //! Allocate `size` bytes of memory, ideally from an available pool.
   //!
@@ -171,7 +181,7 @@ struct Allocator {
     return _allocZeroed(size, allocatedSize);
   }
 
-  //! Return a duplicated copy of string `s` of size `len`.
+  //! Return a copy of string `s` of size `len`.
   MPSL_INLINE char* allocString(const char* s, size_t len) noexcept {
     return _allocString(s, len);
   }
@@ -183,16 +193,14 @@ struct Allocator {
     MPSL_ASSERT(p != nullptr);
     MPSL_ASSERT(size != 0);
 
-    // NOTE: Inlined for the same reason as `alloc()`, however, since releasing
-    // memory is much easier than allocation (in our case) there is no need for
-    // a release helper function, the whole code lays here.
+    // NOTE: Inlined for the same reason as `alloc()`.
     uint32_t slot;
     if (_getSlotIndex(size, slot)) {
       static_cast<Slot*>(p)->next = static_cast<Slot*>(_slots[slot]);
       _slots[slot] = static_cast<Slot*>(p);
     }
     else {
-      ::free(p);
+      _releaseDynamic(p, size);
     }
   }
 
@@ -204,6 +212,8 @@ struct Allocator {
 
   Chunk* _first;
   Chunk* _current;
+  DynamicBlock* _dynamicBlocks;
+
   Slot* _slots[kLoCount + kHiCount];
 };
 

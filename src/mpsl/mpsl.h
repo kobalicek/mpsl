@@ -255,7 +255,7 @@ enum Limits {
 // [mpsl::Types]
 // ============================================================================
 
-//! MPSL error value, alias to `uint8_t`.
+//! MPSL error value, alias to `uint32_t`.
 typedef uint32_t Error;
 
 #define MPSL_DEFINE_VECTOR_TYPE(name, type) \
@@ -476,7 +476,7 @@ public:
   //!
   //! Setting a layout name means that the layout object will be accessible as
   //! through `name` in the shader program. All members that are not explicitly
-  //! marked as `kTypeAnonymous` will be only accessible through `name.member`.
+  //! marked as `kTypeDenest` will be only accessible through `name.member`.
   MPSL_INLINE Error configure(const char* name) noexcept {
     return _configure(name, Globals::kInvalidIndex);
   }

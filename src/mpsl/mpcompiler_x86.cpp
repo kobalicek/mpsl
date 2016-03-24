@@ -385,15 +385,9 @@ void JitCompiler::emit3_F64(uint32_t instId, const Operand& o0, const Operand& o
 
 X86GpVar JitCompiler::varAsPtr(IRVar* irVar) {
   uint32_t id = irVar->getJitId();
+  MPSL_ASSERT(id != kInvalidValue);
 
-  if (id == kInvalidValue) {
-    X86GpVar gp = _c->newIntPtr("%%%u", irVar->getId());
-    irVar->setJitId(gp.getId());
-    return gp;
-  }
-  else {
-    return _c->getIntPtrById(id);
-  }
+  return _c->getIntPtrById(id);
 }
 
 X86GpVar JitCompiler::varAsI32(IRVar* irVar) {
