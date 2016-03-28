@@ -20,7 +20,7 @@ namespace mpsl {
 // ============================================================================
 
 AstAnalysis::AstAnalysis(AstBuilder* ast, ErrorReporter* errorReporter) noexcept
-  : AstVisitor(ast),
+  : AstVisitor<AstAnalysis>(ast),
     _errorReporter(errorReporter),
     _currentRet(nullptr),
     _unreachable(false) {}
@@ -29,6 +29,10 @@ AstAnalysis::~AstAnalysis() noexcept {}
 // ============================================================================
 // [mpsl::AstAnalysis - OnNode]
 // ============================================================================
+
+Error AstAnalysis::onProgram(AstProgram* node) noexcept {
+  return onBlock(node);
+}
 
 Error AstAnalysis::onFunction(AstFunction* node) noexcept {
   bool isMain = node->getFunc()->eq("main", 4);
@@ -184,7 +188,7 @@ Error AstAnalysis::onVarMemb(AstVarMemb* node) noexcept {
   uint32_t typeInfo = child->getTypeInfo();
   uint32_t typeId = typeInfo & kTypeIdMask;
 
-  if (TypeInfo::isObjectId(typeId)) {
+  if (TypeInfo::isPtrId(typeId)) {
     if (child->getNodeType() != kAstNodeVar)
       return MPSL_TRACE_ERROR(kErrorInvalidState);
 
@@ -260,9 +264,9 @@ Error AstAnalysis::onUnaryOp(AstUnaryOp* node) noexcept {
     uint32_t typeInfo = child->getTypeInfo() & ~(kTypeRef | kTypeWrite);
     uint32_t typeId = typeInfo & kTypeIdMask;
 
-    // Only `float` or `double` can be used.
     if (op.isFloatOnly()) {
-      if (!TypeInfo::isRealId(typeId)) {
+      // Only `float` or `double` can be used.
+      if (!TypeInfo::isFPId(typeId)) {
         typeId = kTypeDouble;
         typeInfo = typeId | (typeInfo & ~kTypeIdMask);
 
@@ -271,17 +275,15 @@ Error AstAnalysis::onUnaryOp(AstUnaryOp* node) noexcept {
       }
     }
 
-    // Bitwise operation performed on `float` or `double` is invalid.
     if (op.isBitwise()) {
+      // Bitwise operation performed on `float` or `double` is invalid.
       if (!TypeInfo::isIntOrBoolId(typeId))
         return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
           "Bitwise operation '%s' can't be performed on type '%{Type}'", op.name, typeInfo);
     }
-    // Result of a conditional is `__bool32` or `__bool64`.
-    else if (op.isCondition()) {
-      uint32_t size = TypeInfo::getSize(typeInfo & kTypeIdMask);
-
-      typeId = size == 4 ? kTypeBool32 : kTypeBool64;
+    else if (op.isConditional()) {
+      // Result of a conditional is a boolean.
+      typeId = TypeInfo::boolIdByTypeId(typeInfo & kTypeIdMask);
       typeInfo = typeId | (typeInfo & ~kTypeIdMask);
     }
 
@@ -303,7 +305,7 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
   if (op.isAssignment())
     MPSL_PROPAGATE(checkAssignment(node->getLeft(), op.type));
 
-  // Minimal evaluation requires both operands to be casted to `__bool`.
+  // Minimal evaluation requires both operands to be casted to a boolean.
   if (op.isLogical()) {
     MPSL_PROPAGATE(boolCast(node, node->getLeft()));
     MPSL_PROPAGATE(boolCast(node, node->getRight()));
@@ -319,20 +321,14 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
     uint32_t lTypeId = lTypeInfo & kTypeIdMask;
     uint32_t rTypeId = rTypeInfo & kTypeIdMask;
 
-    if (op.isFloatOnly() && (lTypeId != rTypeId || !TypeInfo::isRealId(lTypeId))) {
+    if (op.isFloatOnly() && (lTypeId != rTypeId || !TypeInfo::isFPId(lTypeId))) {
       MPSL_PROPAGATE(implicitCast(node, left , kTypeDouble | (lTypeInfo & ~kTypeIdMask)));
       MPSL_PROPAGATE(implicitCast(node, right, kTypeDouble | (rTypeInfo & ~kTypeIdMask)));
       continue;
     }
 
-    // Bit shift/rotation operator does never change the left operand type,
-    // unless it's a `__bool`, which would be implicitly casted to `int`.
+    // Bit shift/rotation operator does never change the left operand type.
     if (op.isBitShift()) {
-      if (TypeInfo::isBoolId(lTypeId)) {
-        lTypeId = kTypeInt;
-        lTypeInfo = kTypeInt | (lTypeInfo & ~kTypeIdMask);
-      }
-
       if (!TypeInfo::isIntId(lTypeId))
         return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
           "Bitwise operation '%s' can't be performed on type '%{Type}'.", op.name, lTypeId);
@@ -369,10 +365,9 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
       return invalidCast(node->_position, "Invalid implicit cast", rTypeInfo, lTypeInfo);
     }
 
-    // Result of a conditional is `__bool32` or `__bool64`.
-    if (op.isCondition()) {
-      uint32_t size = TypeInfo::getSize(lTypeId & kTypeIdMask);
-      result = (size == 4 ? kTypeBool32 : kTypeBool64) | kTypeRead;
+    if (op.isConditional()) {
+      // Result of a conditional is a boolean.
+      result = TypeInfo::boolIdByTypeId(lTypeId & kTypeIdMask) | kTypeRead;
     }
     else {
       // Results in a new temporary, clear the reference/write flags.
@@ -506,12 +501,12 @@ uint32_t AstAnalysis::boolCast(AstNode* node, AstNode* child) noexcept {
   uint32_t size = mpTypeInfo[child->getTypeInfo() & kTypeIdMask].size;
 
   switch (size) {
-    case 4: return implicitCast(node, child, kTypeBool32);
-    case 8: return implicitCast(node, child, kTypeBool64);
+    case 4: return implicitCast(node, child, kTypeBool);
+    case 8: return implicitCast(node, child, kTypeQBool);
 
     default:
       return _errorReporter->onError(kErrorInvalidProgram, node->_position,
-        "%s from '%{Type}' to '__bool'.", "Invalid bool cast", child->getTypeInfo());
+        "%s from '%{Type}' to 'bool'.", "Invalid boolean cast", child->getTypeInfo());
   }
 }
 

@@ -4,8 +4,9 @@ MPSL
 Shader-Like Mathematical Expression JIT Engine for C++.
 
   * [Official Repository (kobalicek/mpsl)](https://github.com/kobalicek/mpsl)
-  * [Official Chat (Gitter)](https://gitter.im/kobalicek/mpsl)
-  * [Zlib Licensed](http://www.opensource.org/licenses/zlib-license.php)
+  * [Official Blog (asmbits)] (https://asmbits.blogspot.com/ncr)
+  * [Official Chat (gitter)](https://gitter.im/kobalicek/mpsl)
+  * [Permissive ZLIB license](./LICENSE.md)
 
 Disclaimer
 ----------
@@ -37,8 +38,8 @@ MPSL is a shader-like mathematical expression parser and JIT compiler for C++. I
 
 Check out a working [mp_tutorial.cpp](./src/app/mp_tutorial.cpp) to see how MPSL APIs are designed and how MPSL engine is embedded and used within an application.
 
-Language Types
---------------
+MPSL Types
+----------
 
 MPSL is a statically typed language where variables have to be declared before they are used like in any other C-like language. Variables can be declared anywhere and can shadow other variables and/or function arguments. 
 
@@ -47,43 +48,48 @@ Available types:
   * `int` - 32-bit signed integer
   * `float` - 32-bit (single-precision) floating point
   * `double` - 64-bit (double-precision) floating point
-  * `__bool32` - Internal 32-bit boolean type (implicitly castable to 32-bit types)
-  * `__bool64` - Internal 64-bit boolean type (implicitly castable to 64-bit types)
-  * vector types up to 4 elements, like `int2`, `float3`, and `double4`
+  * `bool` - 32-bit boolean type (implicitly castable to any type)
+  * `__qbool` - 64-bit boolean type (implicitly castable to any type)
+  * All types can form a vector up to 4 elements, like `int2`, `float3`, and `double4`
+  * 32-bit types can additionally form a vector of 8 elements, like `bool8`, `int8`, and `float8`
 
 Constants are parsed in the following way:
 
-  * If the number doesn't have any of fraction and exponent parts and it's in range [-2147483648, 2147483647] it's parsed as a 32-bit integer, otherwise it's parsed as `double` by default
+  * If the number doesn't have any of fraction and exponent parts and it's in range [-2147483648, 2147483647] it's parsed as a 32-bit integer, otherwise it's parsed as `double`
   * If the number contains "f" suffix it's parsed as `float`
   * If the number contains "d" suffix it's parsed as `double`
+  * TODO: MSPL should allow to customize which floating type is preferred (if `float` or `double`).
 
-Language Constructs
--------------------
+MPSL Features
+-------------
 
   * Variables have to be declared before they are used:
     * `[const] type var [= value];`
+    * Variables declared as `const` have to be assigned immediately and cannot be changed
+    * Expressions like `int x = x;` are not allowed (unlike C), unless `x` shadows another `x` from outer scope
+    * TODO: Reading a variable that was not assigned yet is undefined, should be defined
 
   * Typedef (aka type alias)
     * `typedef type newtype`
 
   * If-Else:
-    * `if (cond) { taken-body } [else { not-taken-body }]`
+    * `if (cond) { taken-body; } [else { not-taken-body; }]`
 
   * Implicit and explicit casts:
     * `(type)expression` is an explicit cast
     * Integer and float can implicitly cast to double
-    * `__bool32` and `__bool64` can implicitly cast to 32-bit or 64-bit type, respectively
+    * Boolean types can implicitly or explicitly cast to any 32-bit or 64-bit type, converting `true` value to `1` and `false` value to `0`
     * Scalar is implicitly promoted to vector if used with a vector type
 
   * Loops:
     * `for (init; cond; iter) { body; }`
     * `do { body } while(cond);`
-    * `while(cond) { body }`
+    * `while(cond) { body; }`
 
   * Functions:
     * `ret-type func([arg-type arg-name [, ...]]) { body; }`
     * Functions can call other functions, but they can't recurse
-    * Each MPSL program contains a `main()` entry-point
+    * Each MPSL program contains a `main() { ... }` entry-point
 
   * Arithmetic operators:
     * Negation `-(x)`
@@ -188,8 +194,24 @@ Language Constructs
     * sqrt(2)    `M_SQRT2`    = `1.4142135623730950488`
     * 1/sqrt(2)  `M_SQRT1_2`  = `0.707106781186547524401`
 
-Embedding
----------
+MPSL Program
+------------
+
+A typical MPSL program has an entry-point called `main()` and uses input and output variables provided by the embedder. If `a` and `b` variables of type `float4` are provided then we can write a simple shader that returns their sum:
+
+```c++
+// Shader's entry-point - can have return value, but has no arguments.
+float4 main() {
+  // In case the embedder provides two arguments `a` and `b` of `float4` type.
+  return a + b;
+}
+```
+
+Where `a`, `b`, and a hidden return variable is provided by the embedder (including their types). This means that the same MPSL program is able to use different data layouts and different number of data arguments passed to the compiled shader.
+
+
+MPSL C++ API 
+------------
 
 MPSL is written in C++ and provides C++ APIs for embedders. To use MPSL from your C++ code you must first include `mpsl/mpsl.h` to make all public APIs available within `mpsl` namespace. The following concepts are provided:
 
@@ -255,7 +277,7 @@ int main(int argc, char* argv[]) {
       printf("Execution failed: ERROR 0x%0.8X\n", static_cast<unsigned int>(err));
   }
   else {
-    printf("Compilation failed: 0x%0.8X\n", err);
+    printf("Compilation failed: 0x%0.8X\n", static_cast<unsigned int>(err));
   }
 
   // RAII - `Isolate` and `Program` are ref-counted and will

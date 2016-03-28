@@ -28,6 +28,7 @@ using asmjit::X86GpVar;
 using asmjit::X86MmVar;
 using asmjit::X86XmmVar;
 using asmjit::X86Mem;
+using asmjit::X86Util;
 
 using asmjit::kConstScopeLocal;
 using asmjit::kConstScopeGlobal;
@@ -65,9 +66,7 @@ struct JitCompiler {
   MPSL_NOAPI Error compileConsecutiveBlocks(IRBlock* block);
   MPSL_NOAPI Error compileBasicBlock(IRBlock* block, IRBlock* next);
 
-  MPSL_INLINE void emit2_Any(uint32_t instId, const Operand& o0, const Operand& o1) {
-    _c->emit(instId, o0, o1);
-  }
+  MPSL_INLINE void emit2_Any(uint32_t instId, const Operand& o0, const Operand& o1) { _c->emit(instId, o0, o1); }
 
   MPSL_NOAPI void emit3_I32(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
   MPSL_NOAPI void emit3_F32(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
@@ -93,6 +92,9 @@ struct JitCompiler {
   asmjit::ConstPool _constPool;
   Label _constLabel;
   X86GpVar _constPtr;
+
+  X86XmmVar _tmpXmm0;
+  X86XmmVar _tmpXmm1;
 
   bool _enableSSE4_1;
 };

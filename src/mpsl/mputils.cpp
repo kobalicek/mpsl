@@ -202,40 +202,72 @@ StringBuilder& Utils::formatValue(StringBuilder& sb, uint32_t type, const Value*
   uint32_t id = type & kTypeIdMask;
   uint32_t vec = type & kTypeVecMask;
 
+  uint32_t i = 0;
+  const uint8_t* value = reinterpret_cast<const uint8_t*>(value_);
+
   if (vec > 1)
     sb.appendChar('{');
 
-  const uint8_t* value = reinterpret_cast<const uint8_t*>(value_);
-  uint32_t i = 0;
-
   for (;;) {
     switch (id) {
-      case kTypeVoid:
-        sb.appendString("(void)", 6);
+      case kTypeVoid: {
+        sb.appendString("(void)");
         break;
-      case kTypeInt:
+      }
+
+      case kTypeBool: {
+        uint32_t mask = reinterpret_cast<const uint32_t*>(value)[0];
+        if (mask <= 1) {
+          sb.appendString(mask == 0 ? "false" : "true");
+        }
+        else {
+          sb.appendString("0x");
+          sb.appendUInt(mask, 16, 8);
+        }
+        value += 4;
+        break;
+      }
+
+      case kTypeQBool: {
+        uint64_t mask = reinterpret_cast<const uint64_t*>(value)[0];
+        if (mask <= 1) {
+          sb.appendString(mask == 0 ? "false" : "true");
+        }
+        else {
+          sb.appendString("0x");
+          sb.appendUInt(mask, 16, 16);
+        }
+        value += 8;
+        break;
+      }
+
+      case kTypeInt: {
         sb.appendInt(reinterpret_cast<const int32_t*>(value)[0]);
-        value += sizeof(int32_t);
+        value += 4;
         break;
+      }
+
       case kTypeFloat:
-        sb.appendFormat("%f", reinterpret_cast<const float*>(value)[0]);
-        value += sizeof(float);
+      case kTypeDouble: {
+        double dVal;
+
+        if (id == kTypeFloat) {
+          dVal = reinterpret_cast<const float*>(value)[0];
+          value += 4;
+        }
+        else {
+          dVal = reinterpret_cast<const double*>(value)[0];
+          value += 8;
+        }
+
+        sb.appendFormat("%g", dVal);
         break;
-      case kTypeDouble:
-        sb.appendFormat("%f", reinterpret_cast<const double*>(value)[0]);
-        value += sizeof(double);
+      }
+
+      case kTypePtr: {
+        sb.appendString("__ptr");
         break;
-      case kTypeBool32:
-        sb.appendString(reinterpret_cast<const int32_t*>(value)[0] ? "true32" : "false32");
-        value += sizeof(int32_t);
-        break;
-      case kTypeBool64:
-        sb.appendString(reinterpret_cast<const int64_t*>(value)[0] ? "true64" : "false64");
-        value += sizeof(int32_t);
-        break;
-      case kTypeObject:
-        sb.appendString("__object");
-        break;
+      }
     }
 
     if (++i >= vec)

@@ -75,7 +75,7 @@ enum ErrorCode {
   //! Return type of "main()" function doesn't match the output object's return
   //! type.
   kErrorReturnMismatch,
-  //! The program has no entry point defined ("main()" function).
+  //! The program has no entry point defined - no "main()" function.
   kErrorNoEntryPoint,
 
   //! Just-in-time compilation failed (asmjit failed).
@@ -124,66 +124,100 @@ enum ErrorCode {
 // ============================================================================
 
 enum TypeIdFlags {
-  //! Id mask.
+  //! Type-id mask.
   kTypeIdMask = 0x000000FF,
-  //! Vector/attributes mask.
+  //! Type-attributes mask.
   kTypeAttrMask = 0x7FFFFF00,
 
+  // --------------------------------------------------------------------------
+  // [Type-ID]
+  // --------------------------------------------------------------------------
+
   //! Void.
-  kTypeVoid = 0x00000000,
+  kTypeVoid = 0,
+  //! 32-bit boolean value or mask.
+  kTypeBool = 1,
+  //! 64-bit boolean value or mask (used mostly internally, but provided).
+  kTypeQBool = 2,
   //! 32-bit integer.
-  kTypeInt = 0x00000001,
+  kTypeInt = 3,
   //! 32-bit single-precision floating point.
-  kTypeFloat = 0x00000002,
+  kTypeFloat = 4,
   //! 64-bit double-precision floating point.
-  kTypeDouble = 0x00000003,
-  //! 32-bit boolean (internal, never used externally).
-  kTypeBool32 = 0x00000004,
-  //! 64-bit boolean (internal, never used externally).
-  kTypeBool64 = 0x00000005,
-  //! Layout (internal).
-  kTypeObject = 0x00000006,
-
+  kTypeDouble = 5,
+  //! Pointer (internal).
+  kTypePtr = 6,
   //! Number of built-in types.
-  kTypeCount = 0x00000007,
+  kTypeCount = 7,
 
-  //! Scalar.
-  kTypeVec1 = 0x00000100,
-  //! 2 elements.
-  kTypeVec2 = 0x00000200,
-  //! 3 elements.
-  kTypeVec3 = 0x00000300,
-  //! 4 elements.
-  kTypeVec4 = 0x00000400,
+  // --------------------------------------------------------------------------
+  // [Type-Vector]
+  // --------------------------------------------------------------------------
 
-  //! Number of elements mask.
-  kTypeVecMask = 0x00000F00,
   //! How many bits to shift typeId to get the number of vector elements.
   kTypeVecShift = 8,
+  //! Type-vector mask.
+  kTypeVecMask = 0xF << kTypeVecShift,
 
-#define MPSL_DEFINE_VECTOR_TYPE_ID(_Type_) \
-  _Type_##_1 = _Type_ | kTypeVec1, \
-  _Type_##_2 = _Type_ | kTypeVec2, \
-  _Type_##_3 = _Type_ | kTypeVec3, \
-  _Type_##_4 = _Type_ | kTypeVec4
-  MPSL_DEFINE_VECTOR_TYPE_ID(kTypeInt),
-  MPSL_DEFINE_VECTOR_TYPE_ID(kTypeFloat),
-  MPSL_DEFINE_VECTOR_TYPE_ID(kTypeDouble),
-#undef MPSL_DEFINE_VECTOR_TYPE_ID
+  //! Scalar type.
+  //!
+  //! NOTE: Embedders do not have to mark type as scalar when passing a type
+  //! information to the public MPSL API. However, MPSL always marks all scalar
+  //! types to simplify its internals.
+  kTypeVec1 = 1 << kTypeVecShift,
+  //! Vector of 2 elements (available to all 32-bit and 64-bit types).
+  kTypeVec2 = 2 << kTypeVecShift,
+  //! Vector of 3 elements (available to all 32-bit and 64-bit types).
+  kTypeVec3 = 3 << kTypeVecShift,
+  //! Vector of 4 elements (available to all 32-bit and 64-bit types).
+  kTypeVec4 = 4 << kTypeVecShift,
+  //! Vector of 8 elements (only 32-bit types can form 8-element vectors).
+  kTypeVec8 = 8 << kTypeVecShift,
+
+#define MPSL_DEFINE_TYPEID_VEC_4(typeId) \
+  typeId##1 = typeId | kTypeVec1, \
+  typeId##2 = typeId | kTypeVec2, \
+  typeId##3 = typeId | kTypeVec3, \
+  typeId##4 = typeId | kTypeVec4
+#define MPSL_DEFINE_TYPEID_VEC_8(typeId) \
+  typeId##8 = typeId | kTypeVec8
+
+
+  MPSL_DEFINE_TYPEID_VEC_4(kTypeBool),
+  MPSL_DEFINE_TYPEID_VEC_8(kTypeBool),
+  MPSL_DEFINE_TYPEID_VEC_4(kTypeInt),
+  MPSL_DEFINE_TYPEID_VEC_8(kTypeInt),
+  MPSL_DEFINE_TYPEID_VEC_4(kTypeFloat),
+  MPSL_DEFINE_TYPEID_VEC_8(kTypeFloat),
+
+  MPSL_DEFINE_TYPEID_VEC_4(kTypeQBool),
+  MPSL_DEFINE_TYPEID_VEC_4(kTypeDouble),
+
+#undef MPSL_DEFINE_TYPEID_VEC_8
+#undef MPSL_DEFINE_TYPEID_VEC_4
+
+  // --------------------------------------------------------------------------
+  // [Type-Flags]
+  // --------------------------------------------------------------------------
 
   //! Variable is a reference (&).
-  kTypeRef = 0x00010000,
+  kTypeRef = 0x00020000,
+
   //! Variable is denested into a global scope (only used to define a `Layout`,
   //! not used internally). If the `Layout` is anonymous then `kTypeDenest` is
   //! implied for all members, however, if the `Layout` is not anonymous, every
   //! member that should be visible in a global scope has to be marked as
   //! `kTypeDenest`.
-  kTypeDenest = 0x00020000,
+  kTypeDenest = 0x00040000,
 
-  //! The content of the variable can be read.
-  kTypeRead = 0x00040000,
-  //! The content of the variable can be written.
-  kTypeWrite = 0x00080000,
+  // --------------------------------------------------------------------------
+  // [Type-RW]
+  // --------------------------------------------------------------------------
+
+  //! The variable can be read.
+  kTypeRead = 0x00100000,
+  //! The variable can be written.
+  kTypeWrite = 0x00200000,
 
   //! Convenience - used in `Layout::add()` to define read-only variable/member.
   kTypeRO = kTypeRead,
@@ -246,7 +280,7 @@ enum Limits {
   //! Maximum length of an identifier.
   kMaxIdentifierLength = 64,
   //! Maximum number of members of one data `Layout`.
-  kMaxMembersCount = 128
+  kMaxMembersCount = 512
 };
 
 } // Globals namespace
@@ -258,7 +292,7 @@ enum Limits {
 //! MPSL error value, alias to `uint32_t`.
 typedef uint32_t Error;
 
-#define MPSL_DEFINE_VECTOR_TYPE(name, type) \
+#define MPSL_DEFINE_TYPE_VEC_4(name, type) \
   union name##2 { \
     struct { type x, y; }; \
     struct { type data[2]; }; \
@@ -330,21 +364,59 @@ typedef uint32_t Error;
     } \
   };
 
-MPSL_DEFINE_VECTOR_TYPE(Int, int)
-MPSL_DEFINE_VECTOR_TYPE(Float, float)
-MPSL_DEFINE_VECTOR_TYPE(Double, double)
+#define MPSL_DEFINE_TYPE_VEC_8(name, type) \
+  union name##8 { \
+    struct { type x, y, z, w, i, j, k, l; }; \
+    struct { type r, g, b, a; }; \
+    struct { type data[8]; }; \
+    \
+    MPSL_INLINE void set(type value) MPSL_NOEXCEPT { \
+      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++) \
+        data[i] = value; \
+    } \
+    \
+    MPSL_INLINE void set(type v0, type v1, type v2, type v3, type v4, type v5, type v6, type v7) MPSL_NOEXCEPT { \
+      data[0] = v0; \
+      data[1] = v1; \
+      data[2] = v2; \
+      data[3] = v3; \
+      data[4] = v4; \
+      data[5] = v5; \
+      data[6] = v6; \
+      data[7] = v7; \
+    } \
+    \
+    MPSL_INLINE type& operator[](size_t i) MPSL_NOEXCEPT { \
+      return data[i]; \
+    } \
+    MPSL_INLINE const type& operator[](size_t i) const MPSL_NOEXCEPT { \
+      return data[i]; \
+    } \
+  };
 
-#undef MPSL_DEFINE_VECTOR_TYPE
+MPSL_DEFINE_TYPE_VEC_4(Bool, uint32_t)
+MPSL_DEFINE_TYPE_VEC_8(Bool, uint32_t)
+MPSL_DEFINE_TYPE_VEC_4(Int, int32_t)
+MPSL_DEFINE_TYPE_VEC_8(Int, int32_t)
+MPSL_DEFINE_TYPE_VEC_4(Float, float)
+MPSL_DEFINE_TYPE_VEC_8(Float, float)
+
+MPSL_DEFINE_TYPE_VEC_4(QBool, uint64_t)
+MPSL_DEFINE_TYPE_VEC_4(Double, double)
+
+#undef MPSL_DEFINE_TYPE_VEC_8
+#undef MPSL_DEFINE_TYPE_VEC_4
 
 //! Packed value that can hold MPSL variable of any type.
 union Value {
-  Int4 i;
-  Float4 f;
+  Bool8 b;
+  Int8 i;
+  Float8 f;
+
+  QBool4 q;
   Double4 d;
 
-  // Used internally.
-  uint32_t u[4];
-  uint64_t q[4];
+  uint32_t u[8];
 };
 
 // ============================================================================

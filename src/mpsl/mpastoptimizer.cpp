@@ -21,7 +21,7 @@ namespace mpsl {
 // ============================================================================
 
 AstOptimizer::AstOptimizer(AstBuilder* ast, ErrorReporter* errorReporter) noexcept
-  : AstVisitor(ast),
+  : AstVisitor<AstOptimizer>(ast),
     _errorReporter(errorReporter),
     _currentRet(nullptr),
     _unreachable(false),
@@ -33,19 +33,19 @@ AstOptimizer::~AstOptimizer() noexcept {}
 // [mpsl::AstOptimizer - Utilities]
 // ============================================================================
 
-static MPSL_INLINE bool mpBoolXXToBool(const Value* src, uint32_t typeId) noexcept {
-  return typeId == kTypeBool32 ? src->u[0] != 0 : src->q[0] != 0;
+static MPSL_INLINE bool mpGetBooleanValue(const Value* src, uint32_t typeId) noexcept {
+  return mpTypeInfo[typeId].size == 4 ? src->u[0] != 0 : src->q[0] != 0;
 }
 
 static bool mpValueAsScalarDouble(double* dst, const Value* src, uint32_t typeInfo) noexcept {
   uint32_t typeId = typeInfo & kTypeIdMask;
-  uint32_t i, count = TypeInfo::getVectorSize(typeInfo);
+  uint32_t count = TypeInfo::elementsOf(typeInfo);
 
-  // Expand scalar to vector.
+  // Check whether all vectors are equivalent before converting to scalar.
   switch (mpTypeInfo[typeId].size) {
     case 4: {
       uint32_t v = src->u[0];
-      for (i = 1; i < count; i++)
+      for (uint32_t i = 1; i < count; i++)
         if (src->u[i] != v)
           return false;
       break;
@@ -53,7 +53,7 @@ static bool mpValueAsScalarDouble(double* dst, const Value* src, uint32_t typeIn
 
     case 8: {
       uint64_t v = src->q[0];
-      for (i = 1; i < count; i++)
+      for (uint32_t i = 1; i < count; i++)
         if (src->q[i] != v)
           return false;
       break;
@@ -62,11 +62,11 @@ static bool mpValueAsScalarDouble(double* dst, const Value* src, uint32_t typeIn
 
   double v;
   switch (typeId) {
-    case kTypeInt   : v = static_cast<double>(src->i[0]); break;
-    case kTypeFloat : v = static_cast<double>(src->f[0]); break;
-    case kTypeDouble: v = src->d[0]; break;
-    case kTypeBool32: v = src->u[0] ? 1.0 : 0.0; break;
-    case kTypeBool64: v = src->q[0] ? 1.0 : 0.0; break;
+    case kTypeBool   : v = src->u[0] ? 1.0 : 0.0; break;
+    case kTypeQBool  : v = src->q[0] ? 1.0 : 0.0; break;
+    case kTypeInt    : v = static_cast<double>(src->i[0]); break;
+    case kTypeFloat  : v = static_cast<double>(src->f[0]); break;
+    case kTypeDouble : v = src->d[0]; break;
 
     default:
       return false;
@@ -79,6 +79,10 @@ static bool mpValueAsScalarDouble(double* dst, const Value* src, uint32_t typeIn
 // ============================================================================
 // [mpsl::AstOptimizer - OnNode]
 // ============================================================================
+
+Error AstOptimizer::onProgram(AstProgram* node) noexcept {
+  return onBlock(node);
+}
 
 Error AstOptimizer::onFunction(AstFunction* node) noexcept {
   AstSymbol* ret = node->getRet();
@@ -156,12 +160,9 @@ Error AstOptimizer::onBranch(AstBranch* node) noexcept {
     }
     else {
       uint32_t typeId = exp->getTypeInfo() & kTypeIdMask;
-      if (!TypeInfo::isBoolId(typeId))
-        return MPSL_TRACE_ERROR(kErrorInvalidState);
-
       if (exp->isImm()) {
         AstImm* imm = static_cast<AstImm*>(exp);
-        alwaysTaken = mpBoolXXToBool(&imm->_value, typeId);
+        alwaysTaken = mpGetBooleanValue(&imm->_value, typeId);
 
         if (!alwaysTaken) {
           // Never taken - just remove this branch and keep others.
@@ -266,7 +267,7 @@ Error AstOptimizer::onVarMemb(AstVarMemb* node) noexcept {
   uint32_t typeInfo = child->getTypeInfo();
   uint32_t typeId = typeInfo & kTypeIdMask;
 
-  if (TypeInfo::isObjectId(typeId)) {
+  if (TypeInfo::isPtrId(typeId)) {
     if (child->getNodeType() != kAstNodeVar)
       return MPSL_TRACE_ERROR(kErrorInvalidState);
 
@@ -365,7 +366,7 @@ Error AstOptimizer::onUnaryOp(AstUnaryOp* node) noexcept {
 
         MPSL_PROPAGATE(foldUnaryOp(node->getPosition(), &sym->_value, &sym->_value, typeInfo, op.type));
 
-        // Only "(.)++" and "(.)--"" operators keep the previous value.
+        // Only `(.)++` and `(.)--` operators keep the previous value.
         if (!(op.flags & kOpFlagAssignPost))
           newValue = sym->getValue();
 
@@ -405,16 +406,16 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
   // Support minimal evaluation of `&&` and `||` operators.
   if (left->isImm() && op.isLogical()) {
     AstImm* lVal = static_cast<AstImm*>(left);
-    bool imm = mpBoolXXToBool(&lVal->_value, lVal->getTypeInfo() & kTypeIdMask);
     AstNode* result = nullptr;
 
-    if ((op.type == kOpLogAnd &&  imm) || // Fold `true  && x` -> `x`.
-        (op.type == kOpLogOr  && !imm)) { // Fold `false || x` -> `x`.
+    bool b = mpGetBooleanValue(&lVal->_value, lVal->getTypeInfo() & kTypeIdMask);
+    if ((op.type == kOpLogAnd &&  b) || // Fold `true  && x` -> `x`.
+        (op.type == kOpLogOr  && !b)) { // Fold `false || x` -> `x`.
       result = node->unlinkRight();
     }
     else if (
-        (op.type == kOpLogAnd &&  imm) || // Fold `false && x` -> `false`.
-        (op.type == kOpLogOr  && !imm)) { // Fold `true  || x` -> `true`.
+        (op.type == kOpLogAnd &&  b) || // Fold `false && x` -> `false`.
+        (op.type == kOpLogOr  && !b)) { // Fold `true  || x` -> `true`.
       result = node->unlinkLeft();
     }
 
@@ -456,7 +457,7 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
       AstImm* lNode = static_cast<AstImm*>(left);
       double val;
 
-      if (TypeInfo::isIntOrRealType(typeInfo) && mpValueAsScalarDouble(&val, &lNode->_value, left->getTypeInfo())) {
+      if (TypeInfo::isIntOrFPType(typeInfo) && mpValueAsScalarDouble(&val, &lNode->_value, left->getTypeInfo())) {
         if ((val == 0.0 && (op.flags & kOpFlagNopIfLZero)) ||
             (val == 1.0 && (op.flags & kOpFlagNopIfLOne))) {
           node->unlinkRight();
@@ -491,7 +492,7 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
       }
       else {
         double val;
-        if (TypeInfo::isIntOrRealType(typeInfo) && mpValueAsScalarDouble(&val, &rNode->_value, right->getTypeInfo())) {
+        if (TypeInfo::isIntOrFPType(typeInfo) && mpValueAsScalarDouble(&val, &rNode->_value, right->getTypeInfo())) {
           if ((val == 0.0 && (op.flags & kOpFlagNopIfRZero)) ||
               (val == 1.0 && (op.flags & kOpFlagNopIfROne))) {
             node->unlinkLeft();
@@ -523,8 +524,9 @@ Error AstOptimizer::onCall(AstCall* node) noexcept {
 
 #define COMB_DST_SRC(dstTypeId, srcTypeId) (((dstTypeId) << 4) | (srcTypeId))
 
-Error AstOptimizer::foldCast(uint32_t position, Value* dVal,
-  uint32_t dTypeInfo, const Value* sVal, uint32_t sTypeInfo) noexcept {
+Error AstOptimizer::foldCast(uint32_t position,
+  Value* dVal, uint32_t dTypeInfo,
+  const Value* sVal, uint32_t sTypeInfo) noexcept {
 
   Value tVal;
   if (dVal == sVal)
@@ -533,14 +535,14 @@ Error AstOptimizer::foldCast(uint32_t position, Value* dVal,
   uint32_t dTypeId = dTypeInfo & kTypeIdMask;
   uint32_t sTypeId = sTypeInfo & kTypeIdMask;
 
-  uint32_t dVecSize = TypeInfo::getVectorSize(dTypeInfo);
-  uint32_t sVecSize = TypeInfo::getVectorSize(sTypeInfo);
+  uint32_t dVecSize = TypeInfo::elementsOf(dTypeInfo);
+  uint32_t sVecSize = TypeInfo::elementsOf(sTypeInfo);
 
   uint32_t i = 0;
   uint32_t count = dVecSize;
   uint32_t fetchDouble = 0;
 
-  if (count != sVecSize) {
+  if (dVecSize != sVecSize) {
     if (sVecSize == 1 && count > 1)
       count = 1;
     else
@@ -550,33 +552,33 @@ Error AstOptimizer::foldCast(uint32_t position, Value* dVal,
   do {
     switch (COMB_DST_SRC(dTypeId, sTypeId)) {
       // 32-bit copy.
-      case COMB_DST_SRC(kTypeBool32, kTypeBool32):
+      case COMB_DST_SRC(kTypeBool  , kTypeBool  ):
       case COMB_DST_SRC(kTypeInt   , kTypeInt   ):
       case COMB_DST_SRC(kTypeFloat , kTypeFloat ): dVal->u[i] = sVal->u[i]; break;
 
       // 64-bit copy.
-      case COMB_DST_SRC(kTypeBool64, kTypeBool64):
+      case COMB_DST_SRC(kTypeQBool , kTypeQBool):
       case COMB_DST_SRC(kTypeDouble, kTypeDouble): dVal->q[i] = sVal->q[i]; break;
 
-      // bool cast
-      case COMB_DST_SRC(kTypeBool32, kTypeBool64): dVal->u[i] = sVal->q[i] ? kB32_1 : kB32_0; break;
-      case COMB_DST_SRC(kTypeBool64, kTypeBool32): dVal->u[i] = sVal->u[i] ? kB64_1 : kB64_0; break;
+      // Cast to a boolean.
+      case COMB_DST_SRC(kTypeBool  , kTypeQBool ): dVal->u[i] = sVal->q[i] ? kB32_1 : kB32_0; break;
+      case COMB_DST_SRC(kTypeQBool , kTypeBool  ): dVal->u[i] = sVal->u[i] ? kB64_1 : kB64_0; break;
 
-      // int cast.
-      case COMB_DST_SRC(kTypeInt   , kTypeBool32): dVal->i[i] = sVal->u[i] ? 1 : 0; break;
-      case COMB_DST_SRC(kTypeInt   , kTypeBool64): dVal->i[i] = sVal->q[i] ? 1 : 0; break;
+      // Cast to an integer.
+      case COMB_DST_SRC(kTypeInt   , kTypeBool  ): dVal->i[i] = sVal->u[i] ? 1 : 0; break;
+      case COMB_DST_SRC(kTypeInt   , kTypeQBool ): dVal->i[i] = sVal->q[i] ? 1 : 0; break;
       case COMB_DST_SRC(kTypeInt   , kTypeFloat ): dVal->i[i] = static_cast<int>(sVal->f[i]); break;
       case COMB_DST_SRC(kTypeInt   , kTypeDouble): dVal->i[i] = static_cast<int>(sVal->d[i]); break;
 
-      // float cast.
-      case COMB_DST_SRC(kTypeFloat , kTypeBool32): dVal->f[i] = sVal->u[i] ? 1.0f : 0.0f; break;
-      case COMB_DST_SRC(kTypeFloat , kTypeBool64): dVal->f[i] = sVal->q[i] ? 1.0f : 0.0f; break;
+      // Cast to float.
+      case COMB_DST_SRC(kTypeFloat , kTypeBool  ): dVal->f[i] = sVal->u[i] ? 1.0f : 0.0f; break;
+      case COMB_DST_SRC(kTypeFloat , kTypeQBool ): dVal->f[i] = sVal->q[i] ? 1.0f : 0.0f; break;
       case COMB_DST_SRC(kTypeFloat , kTypeInt   ): dVal->f[i] = static_cast<float>(sVal->i[i]); break;
       case COMB_DST_SRC(kTypeFloat , kTypeDouble): dVal->f[i] = static_cast<float>(sVal->d[i]); break;
 
-      // double cast.
-      case COMB_DST_SRC(kTypeDouble, kTypeBool32): dVal->d[i] = sVal->u[i] ? 1.0 : 0.0; break;
-      case COMB_DST_SRC(kTypeDouble, kTypeBool64): dVal->d[i] = sVal->q[i] ? 1.0 : 0.0; break;
+      // Cast to double.
+      case COMB_DST_SRC(kTypeDouble, kTypeBool  ): dVal->d[i] = sVal->u[i] ? 1.0 : 0.0; break;
+      case COMB_DST_SRC(kTypeDouble, kTypeQBool ): dVal->d[i] = sVal->q[i] ? 1.0 : 0.0; break;
       case COMB_DST_SRC(kTypeDouble, kTypeInt   ): dVal->d[i] = static_cast<double>(sVal->i[i]); break;
       case COMB_DST_SRC(kTypeDouble, kTypeFloat ): dVal->d[i] = static_cast<double>(sVal->f[i]); break;
 
@@ -612,11 +614,11 @@ Error AstOptimizer::foldUnaryOp(uint32_t position, Value* dVal,
   uint32_t typeId = typeInfo & kTypeIdMask;
 
   uint32_t i = 0;
-  uint32_t count = TypeInfo::getVectorSize(typeInfo);
+  uint32_t count = TypeInfo::elementsOf(typeInfo);
 
-  // Convert to `__bool` if the operator is not '!'.
+  // The result bool if the operator is '!'.
   if (op == kOpNot) {
-    typeId = TypeInfo::getSize(typeId) == 4 ? kTypeBool32 : kTypeBool64;
+    typeId = TypeInfo::sizeOf(typeId) == 4 ? kTypeBool : kTypeQBool;
     foldCast(position, &tVal, typeId | (typeInfo & ~kTypeIdMask), sVal, typeInfo);
 
     sVal = &tVal;
@@ -637,20 +639,20 @@ Error AstOptimizer::foldUnaryOp(uint32_t position, Value* dVal,
     case COMB_SPEC(kOpPreDec   , kTypeDouble):
     case COMB_SPEC(kOpPostDec  , kTypeDouble): COMB_PROC({ dVal->d[i] = sVal->d[i] - static_cast<double>(1); });
 
+    case COMB_SPEC(kOpBitNeg   , kTypeBool  ):
     case COMB_SPEC(kOpBitNeg   , kTypeInt   ):
-    case COMB_SPEC(kOpBitNeg   , kTypeFloat ):
-    case COMB_SPEC(kOpBitNeg   , kTypeBool32): COMB_PROC({ dVal->u[i] = ~sVal->u[i]; });
-    case COMB_SPEC(kOpBitNeg   , kTypeDouble):
-    case COMB_SPEC(kOpBitNeg   , kTypeBool64): COMB_PROC({ dVal->q[i] = ~sVal->q[i]; });
+    case COMB_SPEC(kOpBitNeg   , kTypeFloat ): COMB_PROC({ dVal->u[i] = ~sVal->u[i]; });
+    case COMB_SPEC(kOpBitNeg   , kTypeQBool ):
+    case COMB_SPEC(kOpBitNeg   , kTypeDouble): COMB_PROC({ dVal->q[i] = ~sVal->q[i]; });
 
     case COMB_SPEC(kOpNeg      , kTypeInt   ): COMB_PROC({ dVal->i[i] = -sVal->i[i]; });
     case COMB_SPEC(kOpNeg      , kTypeFloat ): COMB_PROC({ dVal->f[i] = -sVal->f[i]; });
     case COMB_SPEC(kOpNeg      , kTypeDouble): COMB_PROC({ dVal->d[i] = -sVal->d[i]; });
 
-    case COMB_SPEC(kOpNot      , kTypeBool32):
-    case COMB_SPEC(kOpNeg      , kTypeBool32): COMB_PROC({ dVal->i[i] = sVal->u[i] ^ kB32_1; });
-    case COMB_SPEC(kOpNot      , kTypeBool64):
-    case COMB_SPEC(kOpNeg      , kTypeBool64): COMB_PROC({ dVal->q[i] = sVal->q[i] ^ kB64_1; });
+    case COMB_SPEC(kOpNot      , kTypeBool  ):
+    case COMB_SPEC(kOpNeg      , kTypeBool  ): COMB_PROC({ dVal->i[i] = sVal->u[i] ^ kB32_1; });
+    case COMB_SPEC(kOpNot      , kTypeQBool ):
+    case COMB_SPEC(kOpNeg      , kTypeQBool ): COMB_PROC({ dVal->q[i] = sVal->q[i] ^ kB64_1; });
 
     case COMB_SPEC(kOpIsNan    , kTypeFloat ): COMB_PROC({ dVal->u[i] = mpIsNanF(sVal->f[i]) ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpIsNan    , kTypeDouble): COMB_PROC({ dVal->q[i] = mpIsNanD(sVal->d[i]) ? kB64_1 : kB64_0; });
@@ -726,31 +728,30 @@ Error AstOptimizer::foldBinaryOp(uint32_t position, Value* dst,
   const Value* rVal, uint32_t rTypeInfo, uint32_t op) noexcept {
 
   uint32_t typeId = lTypeInfo & kTypeIdMask;
-
   uint32_t i = 0;
-  uint32_t count = TypeInfo::getVectorSize(rTypeInfo);
+  uint32_t count = TypeInfo::elementsOf(rTypeInfo);
 
   // Keep only operator identifier without `Assign` part (except for `=`).
   op = OpInfo::get(op).altType;
 
   switch (COMB_SPEC(op, typeId)) {
+    case COMB_SPEC(kOpAssign  , kTypeBool  ):
     case COMB_SPEC(kOpAssign  , kTypeInt   ):
-    case COMB_SPEC(kOpAssign  , kTypeBool32):
     case COMB_SPEC(kOpAssign  , kTypeFloat ): COMB_PROC({ dst->u[i] = rVal->u[i];  });
-    case COMB_SPEC(kOpAssign  , kTypeBool64):
+    case COMB_SPEC(kOpAssign  , kTypeQBool ):
     case COMB_SPEC(kOpAssign  , kTypeDouble): COMB_PROC({ dst->q[i] = rVal->q[i];  });
 
+    case COMB_SPEC(kOpEq      , kTypeBool  ):
     case COMB_SPEC(kOpEq      , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] == rVal->u[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpEq      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] == rVal->f[i] ? kB32_1 : kB32_0; });
+    case COMB_SPEC(kOpEq      , kTypeQBool ): COMB_PROC({ dst->q[i] = lVal->q[i] == rVal->q[i] ? kB64_1 : kB64_0; });
     case COMB_SPEC(kOpEq      , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->d[i] == rVal->d[i] ? kB64_1 : kB64_0; });
-    case COMB_SPEC(kOpEq      , kTypeBool32): COMB_PROC({ dst->u[i] = lVal->u[i] == rVal->u[i] ? kB32_1 : kB32_0; });
-    case COMB_SPEC(kOpEq      , kTypeBool64): COMB_PROC({ dst->q[i] = lVal->q[i] == rVal->q[i] ? kB64_1 : kB64_0; });
 
+    case COMB_SPEC(kOpNe      , kTypeBool  ):
     case COMB_SPEC(kOpNe      , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] != rVal->u[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpNe      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] != rVal->f[i] ? kB32_1 : kB32_0; });
+    case COMB_SPEC(kOpNe      , kTypeQBool ): COMB_PROC({ dst->q[i] = lVal->q[i] != rVal->q[i] ? kB64_1 : kB64_0; });
     case COMB_SPEC(kOpNe      , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->d[i] != rVal->d[i] ? kB64_1 : kB64_0; });
-    case COMB_SPEC(kOpNe      , kTypeBool32): COMB_PROC({ dst->u[i] = lVal->u[i] != rVal->u[i] ? kB32_1 : kB32_0; });
-    case COMB_SPEC(kOpNe      , kTypeBool64): COMB_PROC({ dst->q[i] = lVal->q[i] != rVal->q[i] ? kB64_1 : kB64_0; });
 
     case COMB_SPEC(kOpLt      , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->i[i] <  rVal->i[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpLt      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] <  rVal->f[i] ? kB32_1 : kB32_0; });
@@ -788,29 +789,27 @@ Error AstOptimizer::foldBinaryOp(uint32_t position, Value* dst,
     case COMB_SPEC(kOpMod     , kTypeFloat ): COMB_PROC({ dst->f[i] = mpModF(lVal->f[i], rVal->f[i]); });
     case COMB_SPEC(kOpMod     , kTypeDouble): COMB_PROC({ dst->d[i] = mpModD(lVal->d[i], rVal->d[i]); });
 
+    case COMB_SPEC(kOpBitAnd  , kTypeBool  ):
+    case COMB_SPEC(kOpLogAnd  , kTypeBool  ):
     case COMB_SPEC(kOpBitAnd  , kTypeInt   ):
-    case COMB_SPEC(kOpBitAnd  , kTypeFloat ):
-    case COMB_SPEC(kOpLogAnd  , kTypeBool32):
-    case COMB_SPEC(kOpBitAnd  , kTypeBool32): COMB_PROC({ dst->u[i] = lVal->u[i] & rVal->u[i]; });
+    case COMB_SPEC(kOpBitAnd  , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->u[i] & rVal->u[i]; });
+    case COMB_SPEC(kOpBitAnd  , kTypeQBool ):
+    case COMB_SPEC(kOpLogAnd  , kTypeQBool ):
+    case COMB_SPEC(kOpBitAnd  , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->q[i] & rVal->q[i]; });
 
-    case COMB_SPEC(kOpBitAnd  , kTypeDouble):
-    case COMB_SPEC(kOpLogAnd  , kTypeBool64):
-    case COMB_SPEC(kOpBitAnd  , kTypeBool64): COMB_PROC({ dst->q[i] = lVal->q[i] & rVal->q[i]; });
-
+    case COMB_SPEC(kOpBitOr   , kTypeBool  ):
+    case COMB_SPEC(kOpLogOr   , kTypeBool  ):
     case COMB_SPEC(kOpBitOr   , kTypeInt   ):
-    case COMB_SPEC(kOpBitOr   , kTypeFloat ):
-    case COMB_SPEC(kOpLogOr   , kTypeBool32):
-    case COMB_SPEC(kOpBitOr   , kTypeBool32): COMB_PROC({ dst->u[i] = lVal->u[i] | rVal->u[i]; });
+    case COMB_SPEC(kOpBitOr   , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->u[i] | rVal->u[i]; });
+    case COMB_SPEC(kOpBitOr   , kTypeQBool ):
+    case COMB_SPEC(kOpLogOr   , kTypeQBool ):
+    case COMB_SPEC(kOpBitOr   , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->q[i] | rVal->q[i]; });
 
-    case COMB_SPEC(kOpBitOr   , kTypeDouble):
-    case COMB_SPEC(kOpLogOr   , kTypeBool64):
-    case COMB_SPEC(kOpBitOr   , kTypeBool64): COMB_PROC({ dst->q[i] = lVal->q[i] | rVal->q[i]; });
-
+    case COMB_SPEC(kOpBitXor  , kTypeBool  ):
     case COMB_SPEC(kOpBitXor  , kTypeInt   ):
-    case COMB_SPEC(kOpBitXor  , kTypeFloat ):
-    case COMB_SPEC(kOpBitXor  , kTypeBool32): COMB_PROC({ dst->u[i] = lVal->u[i] ^ rVal->u[i]; });
-    case COMB_SPEC(kOpBitXor  , kTypeDouble):
-    case COMB_SPEC(kOpBitXor  , kTypeBool64): COMB_PROC({ dst->q[i] = lVal->q[i] ^ rVal->q[i]; });
+    case COMB_SPEC(kOpBitXor  , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->u[i] ^ rVal->u[i]; });
+    case COMB_SPEC(kOpBitXor  , kTypeQBool ):
+    case COMB_SPEC(kOpBitXor  , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->q[i] ^ rVal->q[i]; });
 
     case COMB_SPEC(kOpBitSar  , kTypeInt   ): COMB_PROC({ dst->i[i] = lVal->i[i] >> (rVal->i[i] & 0x1F); });
     case COMB_SPEC(kOpBitShr  , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] >> (rVal->u[i] & 0x1F); });

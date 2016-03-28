@@ -20,15 +20,39 @@ namespace mpsl {
 // [mpsl::AstAnalysis]
 // ============================================================================
 
-struct AstAnalysis : public AstVisitor {
+//! \internal
+//!
+//! Visitor that does semantic analysis.
+struct AstAnalysis : public AstVisitor<AstAnalysis> {
   MPSL_NO_COPY(AstAnalysis)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  AstAnalysis(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
-  virtual ~AstAnalysis() noexcept;
+  MPSL_NOAPI AstAnalysis(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
+  MPSL_NOAPI ~AstAnalysis() noexcept;
+
+  // --------------------------------------------------------------------------
+  // [OnNode]
+  // --------------------------------------------------------------------------
+
+  MPSL_NOAPI Error onProgram(AstProgram* node) noexcept;
+  MPSL_NOAPI Error onFunction(AstFunction* node) noexcept;
+  MPSL_NOAPI Error onBlock(AstBlock* node) noexcept;
+  MPSL_NOAPI Error onBranch(AstBranch* node) noexcept;
+  MPSL_NOAPI Error onCondition(AstCondition* node) noexcept;
+  MPSL_NOAPI Error onLoop(AstLoop* node) noexcept;
+  MPSL_NOAPI Error onBreak(AstBreak* node) noexcept;
+  MPSL_NOAPI Error onContinue(AstContinue* node) noexcept;
+  MPSL_NOAPI Error onReturn(AstReturn* node) noexcept;
+  MPSL_NOAPI Error onVarDecl(AstVarDecl* node) noexcept;
+  MPSL_NOAPI Error onVarMemb(AstVarMemb* node) noexcept;
+  MPSL_NOAPI Error onVar(AstVar* node) noexcept;
+  MPSL_NOAPI Error onImm(AstImm* node) noexcept;
+  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node) noexcept;
+  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node) noexcept;
+  MPSL_NOAPI Error onCall(AstCall* node) noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -38,44 +62,24 @@ struct AstAnalysis : public AstVisitor {
   MPSL_INLINE bool isUnreachable() const noexcept { return _unreachable; }
 
   // --------------------------------------------------------------------------
-  // [OnNode]
-  // --------------------------------------------------------------------------
-
-  virtual Error onFunction(AstFunction* node) noexcept override;
-  virtual Error onBlock(AstBlock* node) noexcept override;
-  virtual Error onBranch(AstBranch* node) noexcept override;
-  virtual Error onCondition(AstCondition* node) noexcept override;
-  virtual Error onLoop(AstLoop* node) noexcept override;
-  virtual Error onBreak(AstBreak* node) noexcept override;
-  virtual Error onContinue(AstContinue* node) noexcept override;
-  virtual Error onReturn(AstReturn* node) noexcept override;
-  virtual Error onVarDecl(AstVarDecl* node) noexcept override;
-  virtual Error onVarMemb(AstVarMemb* node) noexcept override;
-  virtual Error onVar(AstVar* node) noexcept override;
-  virtual Error onImm(AstImm* node) noexcept override;
-  virtual Error onUnaryOp(AstUnaryOp* node) noexcept override;
-  virtual Error onBinaryOp(AstBinaryOp* node) noexcept override;
-  virtual Error onCall(AstCall* node) noexcept override;
-
-  // --------------------------------------------------------------------------
   // [CheckAssignment]
   // --------------------------------------------------------------------------
 
-  Error checkAssignment(AstNode* node, uint32_t op) noexcept;
+  MPSL_NOAPI Error checkAssignment(AstNode* node, uint32_t op) noexcept;
 
   // --------------------------------------------------------------------------
   // [Cast]
   // --------------------------------------------------------------------------
 
   //! Perform an implicit cast.
-  uint32_t implicitCast(AstNode* node, AstNode* child, uint32_t type) noexcept;
+  MPSL_NOAPI uint32_t implicitCast(AstNode* node, AstNode* child, uint32_t type) noexcept;
 
-  //! Perform an internal cast to `__bool32` or `__bool64`.
-  uint32_t boolCast(AstNode* node, AstNode* child) noexcept;
+  //! Perform an internal cast to `bool` or `__qbool`.
+  MPSL_NOAPI uint32_t boolCast(AstNode* node, AstNode* child) noexcept;
 
   // TODO: Move to `AstBuilder::onInvalidCast()`.
   //! Report an invalid implicit or explicit cast.
-  Error invalidCast(uint32_t position, const char* msg, uint32_t fromTypeInfo, uint32_t toTypeInfo) noexcept;
+  MPSL_NOAPI Error invalidCast(uint32_t position, const char* msg, uint32_t fromTypeInfo, uint32_t toTypeInfo) noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]

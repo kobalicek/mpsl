@@ -1233,15 +1233,16 @@ struct AstCall : public AstBlock {
 // [mpsl::AstVisitor]
 // ============================================================================
 
+template<typename Impl>
 struct AstVisitor {
-  MPSL_NO_COPY(AstVisitor)
+  MPSL_NO_COPY(AstVisitor<Impl>)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  AstVisitor(AstBuilder* ast) noexcept;
-  virtual ~AstVisitor() noexcept;
+  MPSL_INLINE AstVisitor(AstBuilder* ast) noexcept : _ast(ast) {}
+  MPSL_INLINE ~AstVisitor() noexcept {}
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -1253,24 +1254,89 @@ struct AstVisitor {
   // [OnNode]
   // --------------------------------------------------------------------------
 
-  virtual Error onNode(AstNode* node) noexcept;
-  virtual Error onProgram(AstProgram* node) noexcept;
+  MPSL_NOINLINE Error onNode(AstNode* node) noexcept {
+    switch (node->getNodeType()) {
+      case kAstNodeProgram  : return static_cast<Impl*>(this)->onProgram  (static_cast<AstProgram*  >(node));
+      case kAstNodeFunction : return static_cast<Impl*>(this)->onFunction (static_cast<AstFunction* >(node));
+      case kAstNodeBlock    : return static_cast<Impl*>(this)->onBlock    (static_cast<AstBlock*    >(node));
+      case kAstNodeBranch   : return static_cast<Impl*>(this)->onBranch   (static_cast<AstBranch*   >(node));
+      case kAstNodeCondition: return static_cast<Impl*>(this)->onCondition(static_cast<AstCondition*>(node));
+      case kAstNodeFor      :
+      case kAstNodeWhile    :
+      case kAstNodeDoWhile  : return static_cast<Impl*>(this)->onLoop     (static_cast<AstLoop*     >(node));
+      case kAstNodeBreak    : return static_cast<Impl*>(this)->onBreak    (static_cast<AstBreak*    >(node));
+      case kAstNodeContinue : return static_cast<Impl*>(this)->onContinue (static_cast<AstContinue* >(node));
+      case kAstNodeReturn   : return static_cast<Impl*>(this)->onReturn   (static_cast<AstReturn*   >(node));
+      case kAstNodeVarDecl  : return static_cast<Impl*>(this)->onVarDecl  (static_cast<AstVarDecl*  >(node));
+      case kAstNodeVarMemb  : return static_cast<Impl*>(this)->onVarMemb  (static_cast<AstVarMemb*  >(node));
+      case kAstNodeVar      : return static_cast<Impl*>(this)->onVar      (static_cast<AstVar*      >(node));
+      case kAstNodeImm      : return static_cast<Impl*>(this)->onImm      (static_cast<AstImm*      >(node));
+      case kAstNodeUnaryOp  : return static_cast<Impl*>(this)->onUnaryOp  (static_cast<AstUnaryOp*  >(node));
+      case kAstNodeBinaryOp : return static_cast<Impl*>(this)->onBinaryOp (static_cast<AstBinaryOp* >(node));
+      case kAstNodeCall     : return static_cast<Impl*>(this)->onCall     (static_cast<AstCall*     >(node));
 
-  virtual Error onFunction(AstFunction* node) noexcept = 0;
-  virtual Error onBlock(AstBlock* node) noexcept = 0;
-  virtual Error onBranch(AstBranch* node) noexcept = 0;
-  virtual Error onCondition(AstCondition* node) noexcept = 0;
-  virtual Error onLoop(AstLoop* node) noexcept = 0;
-  virtual Error onBreak(AstBreak* node) noexcept = 0;
-  virtual Error onContinue(AstContinue* node) noexcept = 0;
-  virtual Error onReturn(AstReturn* node) noexcept = 0;
-  virtual Error onVarDecl(AstVarDecl* node) noexcept = 0;
-  virtual Error onVarMemb(AstVarMemb* node) noexcept = 0;
-  virtual Error onVar(AstVar* node) noexcept = 0;
-  virtual Error onImm(AstImm* node) noexcept = 0;
-  virtual Error onUnaryOp(AstUnaryOp* node) noexcept = 0;
-  virtual Error onBinaryOp(AstBinaryOp* node) noexcept = 0;
-  virtual Error onCall(AstCall* node) noexcept = 0;
+      default:
+        return MPSL_TRACE_ERROR(kErrorInvalidState);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // [Members]
+  // --------------------------------------------------------------------------
+
+  AstBuilder* _ast;
+};
+
+// ============================================================================
+// [mpsl::AstVisitorWithData]
+// ============================================================================
+
+template<typename Impl, typename Args>
+struct AstVisitorWithArgs {
+  MPSL_NO_COPY(AstVisitorWithArgs<Impl, Args>)
+
+  // --------------------------------------------------------------------------
+  // [Construction / Destruction]
+  // --------------------------------------------------------------------------
+
+  MPSL_INLINE AstVisitorWithArgs(AstBuilder* ast) noexcept : _ast(ast) {}
+  MPSL_INLINE ~AstVisitorWithArgs() noexcept {}
+
+  // --------------------------------------------------------------------------
+  // [Accessors]
+  // --------------------------------------------------------------------------
+
+  MPSL_INLINE AstBuilder* getAst() const noexcept { return _ast; }
+
+  // --------------------------------------------------------------------------
+  // [OnNode]
+  // --------------------------------------------------------------------------
+
+  MPSL_NOINLINE Error onNode(AstNode* node, Args args) noexcept {
+    switch (node->getNodeType()) {
+      case kAstNodeProgram  : return static_cast<Impl*>(this)->onProgram  (static_cast<AstProgram*  >(node), args);
+      case kAstNodeFunction : return static_cast<Impl*>(this)->onFunction (static_cast<AstFunction* >(node), args);
+      case kAstNodeBlock    : return static_cast<Impl*>(this)->onBlock    (static_cast<AstBlock*    >(node), args);
+      case kAstNodeBranch   : return static_cast<Impl*>(this)->onBranch   (static_cast<AstBranch*   >(node), args);
+      case kAstNodeCondition: return static_cast<Impl*>(this)->onCondition(static_cast<AstCondition*>(node), args);
+      case kAstNodeFor      :
+      case kAstNodeWhile    :
+      case kAstNodeDoWhile  : return static_cast<Impl*>(this)->onLoop     (static_cast<AstLoop*     >(node), args);
+      case kAstNodeBreak    : return static_cast<Impl*>(this)->onBreak    (static_cast<AstBreak*    >(node), args);
+      case kAstNodeContinue : return static_cast<Impl*>(this)->onContinue (static_cast<AstContinue* >(node), args);
+      case kAstNodeReturn   : return static_cast<Impl*>(this)->onReturn   (static_cast<AstReturn*   >(node), args);
+      case kAstNodeVarDecl  : return static_cast<Impl*>(this)->onVarDecl  (static_cast<AstVarDecl*  >(node), args);
+      case kAstNodeVarMemb  : return static_cast<Impl*>(this)->onVarMemb  (static_cast<AstVarMemb*  >(node), args);
+      case kAstNodeVar      : return static_cast<Impl*>(this)->onVar      (static_cast<AstVar*      >(node), args);
+      case kAstNodeImm      : return static_cast<Impl*>(this)->onImm      (static_cast<AstImm*      >(node), args);
+      case kAstNodeUnaryOp  : return static_cast<Impl*>(this)->onUnaryOp  (static_cast<AstUnaryOp*  >(node), args);
+      case kAstNodeBinaryOp : return static_cast<Impl*>(this)->onBinaryOp (static_cast<AstBinaryOp* >(node), args);
+      case kAstNodeCall     : return static_cast<Impl*>(this)->onCall     (static_cast<AstCall*     >(node), args);
+
+      default:
+        return MPSL_TRACE_ERROR(kErrorInvalidState);
+    }
+  }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -1283,43 +1349,47 @@ struct AstVisitor {
 // [mpsl::AstDump]
 // ============================================================================
 
-struct AstDump : public AstVisitor {
+struct AstDump : public AstVisitor<AstDump> {
   MPSL_NO_COPY(AstDump)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  AstDump(AstBuilder* ast, StringBuilder& sb) noexcept;
-  virtual ~AstDump() noexcept;
+  MPSL_INLINE AstDump(AstBuilder* ast, StringBuilder& sb) noexcept
+    : AstVisitor<AstDump>(ast),
+      _sb(sb),
+      _level(0) {}
+  MPSL_INLINE ~AstDump() noexcept {}
 
   // --------------------------------------------------------------------------
   // [OnNode]
   // --------------------------------------------------------------------------
 
-  virtual Error onFunction(AstFunction* node) noexcept override;
-  virtual Error onBlock(AstBlock* node) noexcept override;
-  virtual Error onBranch(AstBranch* node) noexcept override;
-  virtual Error onCondition(AstCondition* node) noexcept override;
-  virtual Error onLoop(AstLoop* node) noexcept override;
-  virtual Error onBreak(AstBreak* node) noexcept override;
-  virtual Error onContinue(AstContinue* node) noexcept override;
-  virtual Error onReturn(AstReturn* node) noexcept override;
-  virtual Error onVarDecl(AstVarDecl* node) noexcept override;
-  virtual Error onVarMemb(AstVarMemb* node) noexcept override;
-  virtual Error onVar(AstVar* node) noexcept override;
-  virtual Error onImm(AstImm* node) noexcept override;
-  virtual Error onUnaryOp(AstUnaryOp* node) noexcept override;
-  virtual Error onBinaryOp(AstBinaryOp* node) noexcept override;
-  virtual Error onCall(AstCall* node) noexcept override;
+  MPSL_NOAPI Error onProgram(AstProgram* node) noexcept;
+  MPSL_NOAPI Error onFunction(AstFunction* node) noexcept;
+  MPSL_NOAPI Error onBlock(AstBlock* node) noexcept;
+  MPSL_NOAPI Error onBranch(AstBranch* node) noexcept;
+  MPSL_NOAPI Error onCondition(AstCondition* node) noexcept;
+  MPSL_NOAPI Error onLoop(AstLoop* node) noexcept;
+  MPSL_NOAPI Error onBreak(AstBreak* node) noexcept;
+  MPSL_NOAPI Error onContinue(AstContinue* node) noexcept;
+  MPSL_NOAPI Error onReturn(AstReturn* node) noexcept;
+  MPSL_NOAPI Error onVarDecl(AstVarDecl* node) noexcept;
+  MPSL_NOAPI Error onVarMemb(AstVarMemb* node) noexcept;
+  MPSL_NOAPI Error onVar(AstVar* node) noexcept;
+  MPSL_NOAPI Error onImm(AstImm* node) noexcept;
+  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node) noexcept;
+  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node) noexcept;
+  MPSL_NOAPI Error onCall(AstCall* node) noexcept;
 
   // --------------------------------------------------------------------------
   // [Helpers]
   // --------------------------------------------------------------------------
 
-  Error info(const char* fmt, ...) noexcept;
-  Error nest(const char* fmt, ...) noexcept;
-  Error denest() noexcept;
+  MPSL_NOAPI Error info(const char* fmt, ...) noexcept;
+  MPSL_NOAPI Error nest(const char* fmt, ...) noexcept;
+  MPSL_NOAPI Error denest() noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]

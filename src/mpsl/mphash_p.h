@@ -259,6 +259,20 @@ struct Map {
   // [Ops]
   // --------------------------------------------------------------------------
 
+  MPSL_INLINE bool has(const Key& key) const noexcept {
+    uint32_t hVal = HashUtils::hashPointer(key);
+    uint32_t hMod = hVal % _hash._bucketsCount;
+    Node* node = static_cast<Node*>(_hash._data[hMod]);
+
+    while (node != nullptr) {
+      if (node->eq(key))
+        return true;
+      node = static_cast<Node*>(node->_next);
+    }
+
+    return false;
+  }
+
   MPSL_INLINE Value get(const Key& key) const noexcept {
     uint32_t hVal = HashUtils::hashPointer(key);
     uint32_t hMod = hVal % _hash._bucketsCount;
@@ -270,7 +284,7 @@ struct Map {
       node = static_cast<Node*>(node->_next);
     }
 
-    return nullptr;
+    return Value();
   }
 
   MPSL_INLINE Error put(const Key& key, const Value& value) noexcept {

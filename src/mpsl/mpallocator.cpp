@@ -155,7 +155,7 @@ void* Allocator::_alloc(size_t size, size_t& allocatedSize) noexcept {
     void* p = ::malloc(size + overhead);
     if (MPSL_UNLIKELY(p == nullptr)) {
       allocatedSize = 0;
-      return NULL;
+      return nullptr;
     }
 
     // Link as first in `_dynamicBlocks` double-linked list.

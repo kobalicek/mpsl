@@ -173,7 +173,7 @@ Error AstBuilder::addBuiltInTypes(const TypeInfo* data, size_t count) noexcept {
 
   for (uint32_t i = 0; i < kTypeCount; i++) {
     const TypeInfo& typeInfo = mpTypeInfo[i];
-    uint32_t id = typeInfo.id;
+    uint32_t id = typeInfo.typeId;
 
     // 'void' is considered a keyword, skipped from registration.
     if (id == kTypeVoid)
@@ -189,14 +189,17 @@ Error AstBuilder::addBuiltInTypes(const TypeInfo* data, size_t count) noexcept {
 
     // Only register vector types if the type is not object.
     uint32_t j = 1;
-    uint32_t jMax = (typeInfo.flags & kTypeFlagObject) ? 1 : 4;
+    uint32_t jMax = typeInfo.maxElements;
 
     do {
-      uint32_t ti = id;
+      // Ban 5-7 element vectors, even if the vector supports up to 8.
+      if (j >= 5 && j <= 7)
+        continue;
 
       // Vector type suffix.
+      uint32_t typeInfo = id;
       if (j > 1) {
-        ti |= j << kTypeVecShift;
+        typeInfo |= j << kTypeVecShift;
         buffer[nLen] = static_cast<char>(j + '0');
         name._length = nLen + 1;
       }
@@ -206,7 +209,7 @@ Error AstBuilder::addBuiltInTypes(const TypeInfo* data, size_t count) noexcept {
       MPSL_NULLCHECK(symbol);
 
       symbol->setDeclared();
-      symbol->setTypeInfo(ti);
+      symbol->setTypeInfo(typeInfo);
 
       scope->putSymbol(symbol);
     } while (++j <= jMax);
@@ -299,7 +302,7 @@ Error AstBuilder::addBuiltInObject(uint32_t slot, const Layout* layout, AstSymbo
   MPSL_NULLCHECK(symbol);
 
   symbol->setDeclared();
-  symbol->setTypeInfo(kTypeObject | kTypeRef);
+  symbol->setTypeInfo(kTypePtr);
   symbol->setDataSlot(slot);
   symbol->setLayout(layout);
   scope->putSymbol(symbol);
@@ -329,9 +332,9 @@ Error AstBuilder::addBuiltInObject(uint32_t slot, const Layout* layout, AstSymbo
       symbol = newSymbol(name, hVal, kAstSymbolVariable, kAstScopeGlobal);
       MPSL_NULLCHECK(symbol);
 
-      // NOTE: Denested symbols don't have a data layout as there are not
-      // objects, they act as variables. However, denested variables need
-      // data offset, as it's then used to access memory of its data slot.
+      // NOTE: Denested symbols don't have a data layout as they don't act
+      // as objects, but variables. However, denested variables need data
+      // offset, as it's then used to access memory of its data slot.
       symbol->setDeclared();
       symbol->setTypeInfo(m->typeInfo & kTypeInfoFilter);
       symbol->setDataSlot(slot);
@@ -586,60 +589,12 @@ AstLoop* AstFlow::getLoop() const noexcept {
 }
 
 // ============================================================================
-// [mpsl::AstVisitor - Construction / Destruction]
-// ============================================================================
-
-AstVisitor::AstVisitor(AstBuilder* ast) noexcept
-  : _ast(ast) {}
-AstVisitor::~AstVisitor() noexcept {}
-
-// ============================================================================
-// [mpsl::AstVisitor - OnNode]
-// ============================================================================
-
-Error AstVisitor::onNode(AstNode* node) noexcept {
-  switch (node->getNodeType()) {
-    case kAstNodeProgram  : return onProgram  (static_cast<AstProgram*  >(node));
-    case kAstNodeFunction : return onFunction (static_cast<AstFunction* >(node));
-    case kAstNodeBlock    : return onBlock    (static_cast<AstBlock*    >(node));
-    case kAstNodeBranch   : return onBranch   (static_cast<AstBranch*   >(node));
-    case kAstNodeCondition: return onCondition(static_cast<AstCondition*>(node));
-    case kAstNodeFor      :
-    case kAstNodeWhile    :
-    case kAstNodeDoWhile  : return onLoop     (static_cast<AstLoop*     >(node));
-    case kAstNodeBreak    : return onBreak    (static_cast<AstBreak*    >(node));
-    case kAstNodeContinue : return onContinue (static_cast<AstContinue* >(node));
-    case kAstNodeReturn   : return onReturn   (static_cast<AstReturn*   >(node));
-    case kAstNodeVarDecl  : return onVarDecl  (static_cast<AstVarDecl*  >(node));
-    case kAstNodeVarMemb  : return onVarMemb  (static_cast<AstVarMemb*  >(node));
-    case kAstNodeVar      : return onVar      (static_cast<AstVar*      >(node));
-    case kAstNodeImm      : return onImm      (static_cast<AstImm*      >(node));
-    case kAstNodeUnaryOp  : return onUnaryOp  (static_cast<AstUnaryOp*  >(node));
-    case kAstNodeBinaryOp : return onBinaryOp (static_cast<AstBinaryOp* >(node));
-    case kAstNodeCall     : return onCall     (static_cast<AstCall*     >(node));
-
-    default:
-      return MPSL_TRACE_ERROR(kErrorInvalidState);
-  }
-}
-
-Error AstVisitor::onProgram(AstProgram* node) noexcept {
-  return onBlock(node);
-}
-
-// ============================================================================
-// [mpsl::AstDump - Construction / Destruction]
-// ============================================================================
-
-AstDump::AstDump(AstBuilder* ast, StringBuilder& sb) noexcept
-  : AstVisitor(ast),
-    _sb(sb),
-    _level(0) {}
-AstDump::~AstDump() noexcept {}
-
-// ============================================================================
 // [mpsl::AstDump - OnNode]
 // ============================================================================
+
+Error AstDump::onProgram(AstProgram* node) noexcept {
+  return onBlock(node);
+}
 
 Error AstDump::onFunction(AstFunction* node) noexcept {
   AstSymbol* funcSumbol = node->getFunc();

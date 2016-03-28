@@ -20,15 +20,37 @@ namespace mpsl {
 // [mpsl::AstOptimizer]
 // ============================================================================
 
-struct AstOptimizer : public AstVisitor {
+//! \internal
+struct AstOptimizer : public AstVisitor<AstOptimizer> {
   MPSL_NO_COPY(AstOptimizer)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  AstOptimizer(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
-  virtual ~AstOptimizer() noexcept;
+  MPSL_NOAPI AstOptimizer(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
+  MPSL_NOAPI ~AstOptimizer() noexcept;
+
+  // --------------------------------------------------------------------------
+  // [OnNode]
+  // --------------------------------------------------------------------------
+
+  MPSL_NOAPI Error onProgram(AstProgram* node) noexcept;
+  MPSL_NOAPI Error onFunction(AstFunction* node) noexcept;
+  MPSL_NOAPI Error onBlock(AstBlock* node) noexcept;
+  MPSL_NOAPI Error onBranch(AstBranch* node) noexcept;
+  MPSL_NOAPI Error onCondition(AstCondition* node) noexcept;
+  MPSL_NOAPI Error onLoop(AstLoop* node) noexcept;
+  MPSL_NOAPI Error onBreak(AstBreak* node) noexcept;
+  MPSL_NOAPI Error onContinue(AstContinue* node) noexcept;
+  MPSL_NOAPI Error onReturn(AstReturn* node) noexcept;
+  MPSL_NOAPI Error onVarDecl(AstVarDecl* node) noexcept;
+  MPSL_NOAPI Error onVarMemb(AstVarMemb* node) noexcept;
+  MPSL_NOAPI Error onVar(AstVar* node) noexcept;
+  MPSL_NOAPI Error onImm(AstImm* node) noexcept;
+  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node) noexcept;
+  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node) noexcept;
+  MPSL_NOAPI Error onCall(AstCall* node) noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -40,36 +62,17 @@ struct AstOptimizer : public AstVisitor {
   MPSL_INLINE uint8_t isLocalScope() const noexcept { return _isLocalScope; }
 
   // --------------------------------------------------------------------------
-  // [OnNode]
-  // --------------------------------------------------------------------------
-
-  virtual Error onFunction(AstFunction* node) noexcept override;
-  virtual Error onBlock(AstBlock* node) noexcept override;
-  virtual Error onBranch(AstBranch* node) noexcept override;
-  virtual Error onCondition(AstCondition* node) noexcept override;
-  virtual Error onLoop(AstLoop* node) noexcept override;
-  virtual Error onBreak(AstBreak* node) noexcept override;
-  virtual Error onContinue(AstContinue* node) noexcept override;
-  virtual Error onReturn(AstReturn* node) noexcept override;
-  virtual Error onVarDecl(AstVarDecl* node) noexcept override;
-  virtual Error onVarMemb(AstVarMemb* node) noexcept override;
-  virtual Error onVar(AstVar* node) noexcept override;
-  virtual Error onImm(AstImm* node) noexcept override;
-  virtual Error onUnaryOp(AstUnaryOp* node) noexcept override;
-  virtual Error onBinaryOp(AstBinaryOp* node) noexcept override;
-  virtual Error onCall(AstCall* node) noexcept override;
-
-  // --------------------------------------------------------------------------
   // [Utilities]
   // --------------------------------------------------------------------------
 
-  Error foldCast(uint32_t position, Value* dVal, uint32_t dTypeInfo,
+  MPSL_NOAPI Error foldCast(uint32_t position,
+    Value* dVal, uint32_t dTypeInfo,
     const Value* sVal, uint32_t sTypeInfo) noexcept;
 
-  Error foldUnaryOp(uint32_t position, Value* dVal,
+  MPSL_NOAPI Error foldUnaryOp(uint32_t position, Value* dVal,
     const Value* sVal, uint32_t typeInfo, uint32_t op) noexcept;
 
-  Error foldBinaryOp(uint32_t position, Value* dst,
+  MPSL_NOAPI Error foldBinaryOp(uint32_t position, Value* dst,
     const Value* lVal, uint32_t lTypeInfo,
     const Value* rVal, uint32_t rTypeInfo, uint32_t op) noexcept;
 

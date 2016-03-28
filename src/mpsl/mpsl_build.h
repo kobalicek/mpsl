@@ -731,10 +731,10 @@ typedef unsigned __int64 uint64_t;
 // [mpsl::Build - MPSL-Specific]
 // ============================================================================
 
-#define MPSL_NO_COPY(type) \
+#define MPSL_NO_COPY(...) \
 private: \
-  MPSL_INLINE type(const type& other); \
-  MPSL_INLINE type& operator=(const type& other); \
+  MPSL_INLINE __VA_ARGS__(const __VA_ARGS__& other) MPSL_NOEXCEPT; \
+  MPSL_INLINE __VA_ARGS__& operator=(const __VA_ARGS__& other) MPSL_NOEXCEPT; \
 public:
 
 // ============================================================================

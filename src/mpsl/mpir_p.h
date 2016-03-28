@@ -74,12 +74,12 @@ enum IRBlockType {
 enum IRRegType {
   //! Invalid register (not used).
   kIRRegNone = 0,
-  //! GP register (32-bit scalar int or pointer).
-  kIRRegGP,
+  //! General purpose register (32-bit scalar int or pointer).
+  kIRRegGP = 1,
   //! SIMD register (128-bit or 256-bit).
-  kIRRegSIMD,
+  kIRRegSIMD = 2,
   //! Count of register types
-  kIRRegCount
+  kIRRegCount = 3
 };
 
 // ============================================================================
@@ -88,212 +88,250 @@ enum IRRegType {
 
 //! \internal
 //!
-//! IR instruction code.
+//! IR instruction code and meta-data.
 enum IRInstCode {
+  // --------------------------------------------------------------------------
+  // [Instruction-ID]
+  // --------------------------------------------------------------------------
+
   //! Not used.
-  kIRInstMask = 0x0FFF,
-  kIRInstNone = 0,
+  kIRInstIdMask = 0x00003FFF,
+  kIRInstIdNone = 0,
 
-  kIRInstJmp,
-  kIRInstJcc,
-  kIRInstCall,
-  kIRInstRet,
+  kIRInstIdJmp,
+  kIRInstIdJcc,
+  kIRInstIdCall,
+  kIRInstIdRet,
 
-  kIRInstMov32,
-  kIRInstMov64,
-  kIRInstMov128,
-  kIRInstMov256,
+  kIRInstIdFetch32,
+  kIRInstIdFetch64,
+  kIRInstIdFetch96,
+  kIRInstIdFetch128,
+  kIRInstIdFetch192,
+  kIRInstIdFetch256,
 
-  kIRInstMovI32,
-  kIRInstMovF32,
-  kIRInstMovF64,
+  kIRInstIdStore32,
+  kIRInstIdStore64,
+  kIRInstIdStore96,
+  kIRInstIdStore128,
+  kIRInstIdStore192,
+  kIRInstIdStore256,
 
-  kIRInstFetch32,
-  kIRInstFetch64,
-  kIRInstFetch128,
-  kIRInstFetch256,
+  kIRInstIdMov32,
+  kIRInstIdMov64,
+  kIRInstIdMov128,
+  kIRInstIdMov256,
 
-  kIRInstStore32,
-  kIRInstStore64,
-  kIRInstStore128,
-  kIRInstStore256,
+  kIRInstIdInsert32,
+  kIRInstIdInsert64,
 
-  kIRInstInsert32,
-  kIRInstInsert64,
+  kIRInstIdExtract32,
+  kIRInstIdExtract64,
 
-  kIRInstExtract32,
-  kIRInstExtract64,
+  kIRInstIdCvtI32ToF32,
+  kIRInstIdCvtI32ToF64,
 
-  kIRInstCvtI32ToF32,
-  kIRInstCvtI32ToF64,
+  kIRInstIdCvtF32ToI32,
+  kIRInstIdCvtF32ToF64,
 
-  kIRInstCvtF32ToI32,
-  kIRInstCvtF32ToF64,
+  kIRInstIdCvtF64ToI32,
+  kIRInstIdCvtF64ToF32,
 
-  kIRInstCvtF64ToI32,
-  kIRInstCvtF64ToF32,
+  kIRInstIdCmpEqI32,
+  kIRInstIdCmpEqF32,
+  kIRInstIdCmpEqF64,
 
-  kIRInstCmpEqI32,
-  kIRInstCmpEqF32,
-  kIRInstCmpEqF64,
+  kIRInstIdCmpNeI32,
+  kIRInstIdCmpNeF32,
+  kIRInstIdCmpNeF64,
 
-  kIRInstCmpNeI32,
-  kIRInstCmpNeF32,
-  kIRInstCmpNeF64,
+  kIRInstIdCmpLtI32,
+  kIRInstIdCmpLtF32,
+  kIRInstIdCmpLtF64,
 
-  kIRInstCmpLtI32,
-  kIRInstCmpLtF32,
-  kIRInstCmpLtF64,
+  kIRInstIdCmpLeI32,
+  kIRInstIdCmpLeF32,
+  kIRInstIdCmpLeF64,
 
-  kIRInstCmpLeI32,
-  kIRInstCmpLeF32,
-  kIRInstCmpLeF64,
+  kIRInstIdCmpGtI32,
+  kIRInstIdCmpGtF32,
+  kIRInstIdCmpGtF64,
 
-  kIRInstCmpGtI32,
-  kIRInstCmpGtF32,
-  kIRInstCmpGtF64,
+  kIRInstIdCmpGeI32,
+  kIRInstIdCmpGeF32,
+  kIRInstIdCmpGeF64,
 
-  kIRInstCmpGeI32,
-  kIRInstCmpGeF32,
-  kIRInstCmpGeF64,
+  kIRInstIdBitNegI32,
+  kIRInstIdBitNegF32,
+  kIRInstIdBitNegF64,
 
-  kIRInstBitNegI32,
-  kIRInstBitNegF32,
-  kIRInstBitNegF64,
+  kIRInstIdNegI32,
+  kIRInstIdNegF32,
+  kIRInstIdNegF64,
 
-  kIRInstNegI32,
-  kIRInstNegF32,
-  kIRInstNegF64,
+  kIRInstIdNotI32,
+  kIRInstIdNotF32,
+  kIRInstIdNotF64,
 
-  kIRInstNotI32,
-  kIRInstNotF32,
-  kIRInstNotF64,
+  kIRInstIdAddI32,
+  kIRInstIdAddF32,
+  kIRInstIdAddF64,
 
-  kIRInstAddI32,
-  kIRInstAddF32,
-  kIRInstAddF64,
+  kIRInstIdSubI32,
+  kIRInstIdSubF32,
+  kIRInstIdSubF64,
 
-  kIRInstSubI32,
-  kIRInstSubF32,
-  kIRInstSubF64,
+  kIRInstIdMulI32,
+  kIRInstIdMulF32,
+  kIRInstIdMulF64,
 
-  kIRInstMulI32,
-  kIRInstMulF32,
-  kIRInstMulF64,
+  kIRInstIdDivI32,
+  kIRInstIdDivF32,
+  kIRInstIdDivF64,
 
-  kIRInstDivI32,
-  kIRInstDivF32,
-  kIRInstDivF64,
+  kIRInstIdModI32,
+  kIRInstIdModF32,
+  kIRInstIdModF64,
 
-  kIRInstModI32,
-  kIRInstModF32,
-  kIRInstModF64,
+  kIRInstIdAndI32,
+  kIRInstIdAndF32,
+  kIRInstIdAndF64,
 
-  kIRInstAndI32,
-  kIRInstAndF32,
-  kIRInstAndF64,
+  kIRInstIdOrI32,
+  kIRInstIdOrF32,
+  kIRInstIdOrF64,
 
-  kIRInstOrI32,
-  kIRInstOrF32,
-  kIRInstOrF64,
+  kIRInstIdXorI32,
+  kIRInstIdXorF32,
+  kIRInstIdXorF64,
 
-  kIRInstXorI32,
-  kIRInstXorF32,
-  kIRInstXorF64,
+  kIRInstIdSarI32,
+  kIRInstIdShrI32,
+  kIRInstIdShlI32,
+  kIRInstIdRorI32,
+  kIRInstIdRolI32,
 
-  kIRInstSarI32,
-  kIRInstShrI32,
-  kIRInstShlI32,
-  kIRInstRorI32,
-  kIRInstRolI32,
+  kIRInstIdMinI32,
+  kIRInstIdMinF32,
+  kIRInstIdMinF64,
 
-  kIRInstMinI32,
-  kIRInstMinF32,
-  kIRInstMinF64,
+  kIRInstIdMaxI32,
+  kIRInstIdMaxF32,
+  kIRInstIdMaxF64,
 
-  kIRInstMaxI32,
-  kIRInstMaxF32,
-  kIRInstMaxF64,
+  kIRInstIdIsNanF32,
+  kIRInstIdIsNanF64,
 
-  kIRInstIsNanF32,
-  kIRInstIsNanF64,
+  kIRInstIdIsInfF32,
+  kIRInstIdIsInfF64,
 
-  kIRInstIsInfF32,
-  kIRInstIsInfF64,
+  kIRInstIdIsFiniteF32,
+  kIRInstIdIsFiniteF64,
 
-  kIRInstIsFiniteF32,
-  kIRInstIsFiniteF64,
+  kIRInstIdSignBitI32,
+  kIRInstIdSignBitF32,
+  kIRInstIdSignBitF64,
 
-  kIRInstSignBitI32,
-  kIRInstSignBitF32,
-  kIRInstSignBitF64,
+  kIRInstIdTruncF32,
+  kIRInstIdTruncF64,
 
-  kIRInstTruncF32,
-  kIRInstTruncF64,
+  kIRInstIdFloorF32,
+  kIRInstIdFloorF64,
 
-  kIRInstFloorF32,
-  kIRInstFloorF64,
+  kIRInstIdRoundF32,
+  kIRInstIdRoundF64,
 
-  kIRInstRoundF32,
-  kIRInstRoundF64,
+  kIRInstIdRoundEvenF32,
+  kIRInstIdRoundEvenF64,
 
-  kIRInstRoundEvenF32,
-  kIRInstRoundEvenF64,
+  kIRInstIdCeilF32,
+  kIRInstIdCeilF64,
 
-  kIRInstCeilF32,
-  kIRInstCeilF64,
+  kIRInstIdAbsI32,
+  kIRInstIdAbsF32,
+  kIRInstIdAbsF64,
 
-  kIRInstAbsI32,
-  kIRInstAbsF32,
-  kIRInstAbsF64,
+  kIRInstIdExpF32,
+  kIRInstIdExpF64,
 
-  kIRInstExpF32,
-  kIRInstExpF64,
+  kIRInstIdLogF32,
+  kIRInstIdLogF64,
 
-  kIRInstLogF32,
-  kIRInstLogF64,
+  kIRInstIdLog2F32,
+  kIRInstIdLog2F64,
 
-  kIRInstLog2F32,
-  kIRInstLog2F64,
+  kIRInstIdLog10F32,
+  kIRInstIdLog10F64,
 
-  kIRInstLog10F32,
-  kIRInstLog10F64,
+  kIRInstIdSqrtF32,
+  kIRInstIdSqrtF64,
 
-  kIRInstSqrtF32,
-  kIRInstSqrtF64,
+  kIRInstIdSinF32,
+  kIRInstIdSinF64,
 
-  kIRInstSinF32,
-  kIRInstSinF64,
+  kIRInstIdCosF32,
+  kIRInstIdCosF64,
 
-  kIRInstCosF32,
-  kIRInstCosF64,
+  kIRInstIdTanF32,
+  kIRInstIdTanF64,
 
-  kIRInstTanF32,
-  kIRInstTanF64,
+  kIRInstIdAsinF32,
+  kIRInstIdAsinF64,
 
-  kIRInstAsinF32,
-  kIRInstAsinF64,
+  kIRInstIdAcosF32,
+  kIRInstIdAcosF64,
 
-  kIRInstAcosF32,
-  kIRInstAcosF64,
+  kIRInstIdAtanF32,
+  kIRInstIdAtanF64,
 
-  kIRInstAtanF32,
-  kIRInstAtanF64,
+  kIRInstIdPowF32,
+  kIRInstIdPowF64,
 
-  kIRInstPowF32,
-  kIRInstPowF64,
+  kIRInstIdAtan2F32,
+  kIRInstIdAtan2F64,
 
-  kIRInstAtan2F32,
-  kIRInstAtan2F64,
+  kIRInstIdCopySignF32,
+  kIRInstIdCopySignF64,
 
-  kIRInstCopySignF32,
-  kIRInstCopySignF64,
+  kIRInstIdCount,
 
-  kIRInstCount,
+  // --------------------------------------------------------------------------
+  // [Vector]
+  // --------------------------------------------------------------------------
 
-  kIRInstVecMask = 0xF000,
-  kIRInstVec128 = 0x1000,
-  kIRInstVec256 = 0x2000
+  // Part of the instruction. Specifies how wide the operation is, maps well to
+  // current architectures (SSE/AVX).
+
+  kIRInstVMask = 0x0000C000,
+  //! The operation is scalar.
+  kIRInstV0    = 0x00000000,
+  //! The operation is 128-bit wide.
+  kIRInstV128  = 0x00004000,
+  //! The operation is 256-bit wide.
+  kIRInstV256  = 0x00008000,
+
+  // --------------------------------------------------------------------------
+  // [Use]
+  // --------------------------------------------------------------------------
+
+  // TODO: Not implemented.
+
+  // Use flags are not part of the IR instruction itself, however, they provide
+  // some useful hints for code-generator and IR lowering phases. For example
+  // when MPSL doesn't use the full width of the SIMD register it annotates it
+  // to make certain optimizations possible and to prevent emitting code which
+  // result won't be used (for example it's easier to multiply int2 vector than
+  // int4 vector on pure SSE2 target - i.e. without using SSE4.1).
+
+  kIRInstUseMask = 0x00FF0000,
+  kIRInstUse32_0 = 0x00010000,
+  kIRInstUse32_1 = 0x00020000,
+  kIRInstUse32_2 = 0x00040000,
+  kIRInstUse32_3 = 0x00080000,
+  kIRInstUse32_4 = 0x00100000,
+  kIRInstUse32_5 = 0x00200000,
+  kIRInstUse32_6 = 0x00400000,
+  kIRInstUse32_7 = 0x00800000
 };
 
 // ============================================================================
@@ -301,17 +339,18 @@ enum IRInstCode {
 // ============================================================================
 
 enum IRInstFlags {
-  kIRInstFlagI32     = 0x0001,
-  kIRInstFlagF32     = 0x0002,
-  kIRInstFlagF64     = 0x0004,
-  kIRInstFlagMov     = 0x0010,
-  kIRInstFlagCvt     = 0x0020,
-  kIRInstFlagFetch   = 0x0040,
-  kIRInstFlagStore   = 0x0080,
-  kIRInstFlagJxx     = 0x0100,
-  kIRInstFlagRet     = 0x0200,
-  kIRInstFlagCall    = 0x0400,
-  kIRInstFlagComplex = 0x8000
+  kIRInstInfoI32     = 0x0001, //! Works with I32 operand(s).
+  kIRInstInfoF32     = 0x0002, //! Works with F32 operand(s).
+  kIRInstInfoF64     = 0x0004, //! Works with D32 operand(s).
+  kIRInstInfoSIMD    = 0x0008,
+  kIRInstInfoFetch   = 0x0010,
+  kIRInstInfoStore   = 0x0020,
+  kIRInstInfoMov     = 0x0040,
+  kIRInstInfoCvt     = 0x0080,
+  kIRInstInfoJxx     = 0x0100,
+  kIRInstInfoRet     = 0x0200,
+  kIRInstInfoCall    = 0x0400,
+  kIRInstInfoComplex = 0x8000
 };
 
 // ============================================================================
@@ -323,18 +362,18 @@ struct IRInstInfo {
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE bool isI32() const noexcept { return flags & kIRInstFlagI32; }
-  MPSL_INLINE bool isF32() const noexcept { return flags & kIRInstFlagF32; }
-  MPSL_INLINE bool isF64() const noexcept { return flags & kIRInstFlagF64; }
-  MPSL_INLINE bool isCvt() const noexcept { return flags & kIRInstFlagCvt; }
+  MPSL_INLINE bool isI32() const noexcept { return flags & kIRInstInfoI32; }
+  MPSL_INLINE bool isF32() const noexcept { return flags & kIRInstInfoF32; }
+  MPSL_INLINE bool isF64() const noexcept { return flags & kIRInstInfoF64; }
+  MPSL_INLINE bool isCvt() const noexcept { return flags & kIRInstInfoCvt; }
 
-  MPSL_INLINE bool isFetch() const noexcept { return flags & kIRInstFlagFetch; }
-  MPSL_INLINE bool isStore() const noexcept { return flags & kIRInstFlagStore; }
+  MPSL_INLINE bool isFetch() const noexcept { return flags & kIRInstInfoFetch; }
+  MPSL_INLINE bool isStore() const noexcept { return flags & kIRInstInfoStore; }
 
-  MPSL_INLINE bool isJxx() const noexcept { return flags & kIRInstFlagJxx; }
-  MPSL_INLINE bool isRet() const noexcept { return flags & kIRInstFlagRet; }
-  MPSL_INLINE bool isCall() const noexcept { return flags & kIRInstFlagCall; }
-  MPSL_INLINE bool isComplex() const noexcept { return flags & kIRInstFlagComplex; }
+  MPSL_INLINE bool isJxx() const noexcept { return flags & kIRInstInfoJxx; }
+  MPSL_INLINE bool isRet() const noexcept { return flags & kIRInstInfoRet; }
+  MPSL_INLINE bool isCall() const noexcept { return flags & kIRInstInfoCall; }
+  MPSL_INLINE bool isComplex() const noexcept { return flags & kIRInstInfoComplex; }
 
   MPSL_INLINE bool getNumOps() const noexcept { return numOps; }
   MPSL_INLINE const char* getName() const noexcept { return name; }
@@ -347,7 +386,7 @@ struct IRInstInfo {
   uint8_t numOps;
   char name[13];
 };
-extern const IRInstInfo mpInstInfo[kIRInstCount];
+extern const IRInstInfo mpInstInfo[kIRInstIdCount];
 
 // ============================================================================
 // [mpsl::IRObject]
@@ -793,7 +832,8 @@ struct IRBuilder {
 
 #define MPSL_ALLOC_IR_OBJECT(_Size_) \
   void* obj = _allocator->alloc(_Size_); \
-  if (obj == nullptr) return nullptr
+  if (MPSL_UNLIKELY(obj == nullptr)) \
+    return nullptr
 
   template<typename T>
   MPSL_INLINE T* newObject() noexcept {

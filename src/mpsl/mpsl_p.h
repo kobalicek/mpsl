@@ -127,10 +127,14 @@ static const uint64_t kB64_1 = MPSL_UINT64_C(0xFFFFFFFFFFFFFFFF);
 //!
 //! Type flags.
 enum TypeFlags {
-  kTypeFlagBool     = 0x01,
-  kTypeFlagInt      = 0x02,
-  kTypeFlagReal     = 0x08,
-  kTypeFlagObject   = 0x10
+  //! Type is a boolean.
+  kTypeFlagBool = 0x01,
+  //! Type is an integer.
+  kTypeFlagInt = 0x02,
+  //! Type is a floating point (either `float` or `double`).
+  kTypeFlagFP = 0x04,
+  //! Type is a pointer.
+  kTypeFlagPtr = 0x08
 };
 
 // ============================================================================
@@ -251,13 +255,17 @@ enum OpFlags {
   kOpFlagAssignPost    = 0x00000020,
 
   //! The operator performs an arithmetic operation.
-  kOpFlagArithmetic    = 0x00000100,
+  kOpFlagArithmetic    = 0x00000040,
   //! The operator performs a logical operation - `&&` and `||`.
-  kOpFlagLogical       = 0x00000200,
-  //! The operator performs a conditional operation (the result is a `__bool`).
-  kOpFlagCondition     = 0x00000400,
+  kOpFlagLogical       = 0x00000080,
+  //! The operator performs a conditional operation.
+  kOpFlagConditional   = 0x00000100,
+  //! The operator performs a floating-point rounding (float-only)
+  kOpFlagRounding      = 0x00000200,
+  //! The operator calculates a trigonometric function (float-only)
+  kOpFlagTrigonometric = 0x00000400,
 
-  //! The operator performs bit masking (integer-only).
+  //! The operator performs bit masking.
   kOpFlagBitMask       = 0x00001000,
   //! The operator performs bit shifting/rotation (integer-only).
   kOpFlagBitShift      = 0x00002000,
@@ -265,11 +273,19 @@ enum OpFlags {
   kOpFlagBitwise       = 0x00003000,
 
   //! The operator works with floating-point only.
-  kOpFlagFloatOnly     = 0x00010000,
-  //! The operator performs a floating-point rounding (float-only)
-  kOpFlagRounding      = 0x00020000,
-  //! The operator calculates a trigonometric function (float-only)
-  kOpFlagTrigonometric = 0x00040000,
+  kOpFlagFloatOnly     = 0x00080000,
+
+  // TODO:
+  /*
+  //! The operator performs a bitwise operation.
+  kOpFlagBitwise       = 0x00000400,
+  //! The operator is defined for `int` operands.
+  kOpFlagIntOp         = 0x0,
+  //! The operator is defined for `float` operands.
+  kOpFlagFloatOp       = 0x0,
+  //! The operator is defined for operands in boolean mode.
+  kOpFlagBoolOp        = 0x0,
+  */
 
   kOpFlagNopIfLZero    = 0x10000000,
   kOpFlagNopIfRZero    = 0x20000000,
@@ -321,32 +337,43 @@ struct TypeInfo {
   // [Statics]
   // --------------------------------------------------------------------------
 
-  static MPSL_INLINE const TypeInfo& get(uint32_t id) noexcept;
-  static MPSL_INLINE uint32_t getSize(uint32_t id) noexcept { return get(id).size; }
+  static MPSL_INLINE const TypeInfo& get(uint32_t typeId) noexcept;
 
-  static MPSL_INLINE bool isBoolId(uint32_t id) noexcept { return (get(id).flags & kTypeFlagBool) != 0; }
+  static MPSL_INLINE uint32_t sizeOf(uint32_t typeId) noexcept { return get(typeId).size; }
+
+  static MPSL_INLINE uint32_t elementsOf(uint32_t typeInfo) noexcept {
+    uint32_t size = (typeInfo & kTypeVecMask) >> kTypeVecShift;
+    return size < 1 ? 1 : size;
+  }
+  static MPSL_INLINE uint32_t widthOf(uint32_t typeInfo) noexcept {
+    return sizeOf(typeInfo & kTypeIdMask) * elementsOf(typeInfo);
+  }
+
+  static MPSL_INLINE bool isBoolId(uint32_t typeId) noexcept { return (get(typeId).flags & kTypeFlagBool) != 0; }
   static MPSL_INLINE bool isBoolType(uint32_t ti) noexcept { return isBoolId(ti & kTypeIdMask); }
 
-  static MPSL_INLINE bool isIntId(uint32_t id) noexcept { return (get(id).flags & kTypeFlagInt) != 0; }
+  static MPSL_INLINE bool isIntId(uint32_t typeId) noexcept { return (get(typeId).flags & kTypeFlagInt) != 0; }
   static MPSL_INLINE bool isIntType(uint32_t ti) noexcept { return isIntId(ti & kTypeIdMask); }
 
-  static MPSL_INLINE bool isRealId(uint32_t id) noexcept { return (get(id).flags & kTypeFlagReal) != 0; }
-  static MPSL_INLINE bool isRealType(uint32_t ti) noexcept { return isRealId(ti & kTypeIdMask); }
+  static MPSL_INLINE bool isFPId(uint32_t typeId) noexcept { return (get(typeId).flags & kTypeFlagFP) != 0; }
+  static MPSL_INLINE bool isFPType(uint32_t ti) noexcept { return isFPId(ti & kTypeIdMask); }
 
-  static MPSL_INLINE bool isObjectId(uint32_t id) noexcept { return (get(id).flags & (kTypeFlagObject)) != 0; }
-  static MPSL_INLINE bool isObjectType(uint32_t ti) noexcept { return isObjectId(ti & kTypeIdMask); }
+  static MPSL_INLINE bool isPtrId(uint32_t typeId) noexcept { return (get(typeId).flags & (kTypeFlagPtr)) != 0; }
+  static MPSL_INLINE bool isPtrType(uint32_t ti) noexcept { return isPtrId(ti & kTypeIdMask); }
 
-  static MPSL_INLINE bool isIntOrBoolId(uint32_t id) noexcept { return (get(id).flags & (kTypeFlagInt | kTypeFlagBool)) != 0; }
+  static MPSL_INLINE bool isIntOrBoolId(uint32_t typeId) noexcept { return (get(typeId).flags & (kTypeFlagInt | kTypeFlagBool)) != 0; }
   static MPSL_INLINE bool isIntOrBoolType(uint32_t ti) noexcept { return isIntOrBoolId(ti & kTypeIdMask); }
 
-  static MPSL_INLINE bool isIntOrRealId(uint32_t id) noexcept { return (get(id).flags & (kTypeFlagInt | kTypeFlagReal)) != 0; }
-  static MPSL_INLINE bool isIntOrRealType(uint32_t ti) noexcept { return isIntOrRealId(ti & kTypeIdMask); }
+  static MPSL_INLINE bool isIntOrFPId(uint32_t typeId) noexcept { return (get(typeId).flags & (kTypeFlagInt | kTypeFlagFP)) != 0; }
+  static MPSL_INLINE bool isIntOrFPType(uint32_t ti) noexcept { return isIntOrFPId(ti & kTypeIdMask); }
 
-  static MPSL_INLINE bool isVectorType(uint32_t ti) noexcept { return getVectorSize(ti) >= 2; }
+  static MPSL_INLINE bool isVectorType(uint32_t ti) noexcept { return elementsOf(ti) >= 2; }
 
-  static MPSL_INLINE uint32_t getVectorSize(uint32_t ti) noexcept {
-    uint32_t size = (ti & kTypeVecMask) >> kTypeVecShift;
-    return size < 1 ? 1 : size;
+  static MPSL_INLINE uint32_t boolIdBySize(uint32_t size) noexcept {
+    return size <= 4 ? kTypeBool : kTypeQBool;
+  }
+  static MPSL_INLINE uint32_t boolIdByTypeId(uint32_t typeId) noexcept {
+    return boolIdBySize(sizeOf(typeId));
   }
 
   // --------------------------------------------------------------------------
@@ -354,15 +381,17 @@ struct TypeInfo {
   // --------------------------------------------------------------------------
 
   //! Type id.
-  uint8_t id;
+  uint8_t typeId;
   //! Type flags.
   uint8_t flags;
   //! Type size (0 if object / array).
   uint8_t size;
+  //! Maximum number of vector elements the type supports (1, 4, or 8).
+  uint8_t maxElements;
   //! Type name length (without a NULL terminator).
   uint8_t nameLength;
   //! Type name.
-  char name[12];
+  char name[11];
 };
 extern const TypeInfo mpTypeInfo[kTypeCount];
 extern const uint32_t mpImplicitCast[kTypeCount];
@@ -372,12 +401,24 @@ MPSL_INLINE const TypeInfo& TypeInfo::get(uint32_t typeId) noexcept {
   return mpTypeInfo[typeId];
 }
 
-static MPSL_INLINE bool mpCanImplicitCast(uint32_t toId, uint32_t fromId) noexcept {
-  MPSL_ASSERT(toId < kTypeCount);
-  MPSL_ASSERT(fromId < kTypeCount);
+static MPSL_INLINE bool mpCanImplicitCast(uint32_t dTypeId, uint32_t sTypeId) noexcept {
+  MPSL_ASSERT(dTypeId < kTypeCount);
+  MPSL_ASSERT(sTypeId < kTypeCount);
 
-  return (mpImplicitCast[toId] & (1 << fromId)) != 0;
+  return (mpImplicitCast[dTypeId] & (1 << sTypeId)) != 0;
 }
+
+// ============================================================================
+// [mpsl::VectorIdentifiers]
+// ============================================================================
+
+//! Identifiers of vector elements.
+struct VectorIdentifiers {
+  //! Letters used to name up to 8 vector elements. Starts from the most
+  //! significant element.
+  char letters[8];
+};
+extern const VectorIdentifiers mpVectorIdentifiers[2];
 
 // ============================================================================
 // [mpsl::ConstInfo]
@@ -391,18 +432,6 @@ struct ConstInfo {
   double value;
 };
 extern const ConstInfo mpConstInfo[13];
-
-// ============================================================================
-// [mpsl::ElementNames]
-// ============================================================================
-
-//! Names of vector elements (letters).
-struct ElementNames {
-  //! 8 letters used to name 8 vector elements, starts from the most significant
-  //! element.
-  char names[8];
-};
-extern const ElementNames mpElementNames[2];
 
 // ============================================================================
 // [mpsl::OpInfo]
@@ -422,7 +451,7 @@ struct OpInfo {
 
   MPSL_INLINE bool isUnary() const noexcept { return (flags & kOpFlagUnary) != 0; }
   MPSL_INLINE bool isBinary() const noexcept { return (flags & kOpFlagBinary) != 0; }
-  MPSL_INLINE uint32_t getOpCount() const noexcept { return 1 + ((flags & kOpFlagBinary) != 0); }
+  MPSL_INLINE uint32_t getOpCount() const noexcept { return opCount; }
 
   MPSL_INLINE bool isCast() const noexcept { return type == kOpCast; }
   MPSL_INLINE bool isIntrinsic() const noexcept { return (flags & kOpFlagIntrinsic) != 0; }
@@ -433,7 +462,7 @@ struct OpInfo {
   MPSL_INLINE bool isAssignment() const noexcept { return (flags & kOpFlagAssign) != 0; }
   MPSL_INLINE bool isArithmetic() const noexcept { return (flags & kOpFlagArithmetic) != 0; }
   MPSL_INLINE bool isLogical() const noexcept { return (flags & kOpFlagLogical) != 0; }
-  MPSL_INLINE bool isCondition() const noexcept { return (flags & kOpFlagCondition) != 0; }
+  MPSL_INLINE bool isConditional() const noexcept { return (flags & kOpFlagConditional) != 0; }
 
   MPSL_INLINE bool isBitMask() const noexcept { return (flags & kOpFlagBitMask) != 0; }
   MPSL_INLINE bool isBitShift() const noexcept { return (flags & kOpFlagBitShift) != 0; }
@@ -453,8 +482,8 @@ struct OpInfo {
 
   uint8_t type;
   uint8_t altType;
+  uint8_t opCount;
   uint8_t precedence;
-  uint8_t reserved;
   uint32_t flags;
   char name[12];
 };

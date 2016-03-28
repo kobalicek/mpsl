@@ -27,33 +27,44 @@ namespace mpsl {
 // ============================================================================
 
 const TypeInfo mpTypeInfo[kTypeCount] = {
-  { kTypeVoid    , 0                 , 0, 4, "void"     },
-  { kTypeInt     , kTypeFlagInt      , 4, 3, "int"      },
-  { kTypeFloat   , kTypeFlagReal     , 4, 5, "float"    },
-  { kTypeDouble  , kTypeFlagReal     , 8, 6, "double"   },
-  { kTypeBool32  , kTypeFlagBool     , 4, 6, "__bool32" },
-  { kTypeBool64  , kTypeFlagBool     , 4, 6, "__bool64" },
-  { kTypeObject  , kTypeFlagObject   , 0, 8, "__object" }
+  { kTypeVoid    , 0                 , 0, 0, 4, "void"     },
+  { kTypeBool    , kTypeFlagBool     , 4, 8, 4, "bool"     },
+  { kTypeQBool   , kTypeFlagBool     , 8, 4, 7, "__qbool"  },
+  { kTypeInt     , kTypeFlagInt      , 4, 8, 3, "int"      },
+  { kTypeFloat   , kTypeFlagFP       , 4, 8, 5, "float"    },
+  { kTypeDouble  , kTypeFlagFP       , 8, 4, 6, "double"   },
+  { kTypePtr     , kTypeFlagPtr      , 0, 1, 5, "__ptr"    }
 };
 
-// 1. Nothing can be casted to `float` except `__boolXX`. This prevents from
-//    losing precision accidentaly. Use explicit cast to cast to the float
-//    type.
-//
-// 2. Only `__boolXX`, `int`, and `float` can be implicitly casted to `double`,
-//    otherwise an explicit cast is required.
+// Implicit cast rules. Basically any type can implicitly cast to `double`, but
+// nothing can implicitly cast to `float` and to `int`. This rules map is here
+// in case more types with more casting options are added to MPSL.
 #define T(id) (1 << kType##id)
 const uint32_t mpImplicitCast[kTypeCount] = {
-  /* void     */ 0,
-
-  /* int      */ T(Bool32) | T(Bool64) | 0      | 0        | 0,
-  /* float    */ T(Bool32) | T(Bool64) | 0      | 0        | 0,
-  /* double   */ T(Bool32) | T(Bool64) | T(Int) | T(Float) | 0,
-  /* __bool32 */ 0         | T(Bool64) | T(Int) | T(Float) | T(Double),
-  /* __bool64 */ 0         | T(Bool64) | T(Int) | T(Float) | T(Double),
-  /* __object */ 0         | 0         | 0      | 0        | 0
+  /* +--------------+---------+----------+---------+----------+--------- */
+  /* | Type         | bool    | __qbool  | int     | float    | double   */
+  /* +--------------+---------+----------+---------+----------+--------- */
+  /* | void     <- */ 0       | 0        | 0       | 0        | 0,
+  /* | bool     <- */ 0       | T(QBool) | T(Int)  | T(Float) | T(Double),
+  /* | __qbool  <- */ T(Bool) | 0        | T(Int)  | T(Float) | T(Double),
+  /* | int      <- */ T(Bool) | T(QBool) | 0       | 0        | 0,
+  /* | float    <- */ T(Bool) | T(QBool) | 0       | 0        | 0,
+  /* | double   <- */ T(Bool) | T(QBool) | T(Int)  | T(Float) | 0,
+  /* | __ptr    <- */ 0       | 0        | 0       | 0        | 0
 };
 #undef T
+
+// ============================================================================
+// [mpsl::mpVectorIdentifiers]
+// ============================================================================
+
+// NOTE: Each letter can only be used at a specific index. Letters can repeat
+// in multiple `VectorIdentifiers` records, but cannot change their index once
+// assigned.
+const VectorIdentifiers mpVectorIdentifiers[2] = {
+  { 'x', 'y', 'z', 'w', 'i', 'j', 'k', 'l' }, // xyzwijkl.
+  { 'r', 'g', 'b', 'a', 'i', 'j', 'k', 'l' }  // rgbaijkl.
+};
 
 // ============================================================================
 // [mpsl::mpConstInfo]
@@ -76,17 +87,6 @@ const ConstInfo mpConstInfo[13] = {
 };
 
 // ============================================================================
-// [mpsl::mpElementNamnes]
-// ============================================================================
-
-// NOTE: Each letter can only be used at a specific index - indexes can repeat,
-// in multiple `ElementNames` records, but cannot change once assigned.
-const ElementNames mpElementNames[2] = {
-  { 'x', 'y', 'z', 'w', 'i', 'j', 'k', 'l' }, // xyzwijkl.
-  { 'r', 'g', 'b', 'a', 'i', 'j', 'k', 'l' }  // rgbaijkl.
-};
-
-// ============================================================================
 // [mpsl::mpOpInfo]
 // ============================================================================
 
@@ -94,17 +94,17 @@ const ElementNames mpElementNames[2] = {
 // on the C-language standard, but also adjusted to support MPSL specific
 // operators and rules. However, the associativity and precedence should be
 // fully compatible with C.
-#define ROW(opType, altType, params, precedence, assignment, intrinsic, flags, name) \
+#define ROW(opType, altType, opCount, precedence, assignment, intrinsic, flags, name) \
   { \
     static_cast<uint8_t>(kOp##opType), \
     static_cast<uint8_t>(kOp##altType), \
+    static_cast<uint8_t>(opCount), \
     static_cast<uint8_t>(precedence), \
-    0, \
     static_cast<uint32_t>( \
       flags | (assignment ==-1 ? kOpFlagAssign : \
                assignment == 1 ? kOpFlagAssign | kOpFlagAssignPost : 0) \
-            | (params     == 1 ? kOpFlagUnary : \
-               params     == 2 ? kOpFlagBinary : 0) \
+            | (opCount    == 1 ? kOpFlagUnary : \
+               opCount    == 2 ? kOpFlagBinary : 0) \
             | (intrinsic  == 1 ? kOpFlagIntrinsic : 0)), \
     name \
   }
@@ -123,11 +123,11 @@ const OpInfo mpOpInfo[kOpCount] = {
   ROW(PostDec      , PostDec  , 1, 2, 1, 0, LTR | F(Arithmetic)                      , "(.)--"    ),
   ROW(BitNeg       , BitNeg   , 1, 3, 0, 0, RTL | F(BitMask)                         , "~"        ),
   ROW(Neg          , Neg      , 1, 3, 0, 0, RTL | F(Arithmetic)                      , "-"        ),
-  ROW(Not          , Not      , 1, 3, 0, 0, RTL | F(Condition)                       , "!"        ),
-  ROW(IsNan        , IsNan    , 1, 0, 0, 1, LTR | F(Condition)     | F(FloatOnly)    , "isnan"    ),
-  ROW(IsInf        , IsInf    , 1, 0, 0, 1, LTR | F(Condition)     | F(FloatOnly)    , "isinf"    ),
-  ROW(IsFinite     , IsFinite , 1, 0, 0, 1, LTR | F(Condition)     | F(FloatOnly)    , "isfinite" ),
-  ROW(SignBit      , SignBit  , 1, 0, 0, 1, LTR | F(Condition)                       , "signbit"  ),
+  ROW(Not          , Not      , 1, 3, 0, 0, RTL | F(Conditional)                     , "!"        ),
+  ROW(IsNan        , IsNan    , 1, 0, 0, 1, LTR | F(Conditional)   | F(FloatOnly)    , "isnan"    ),
+  ROW(IsInf        , IsInf    , 1, 0, 0, 1, LTR | F(Conditional)   | F(FloatOnly)    , "isinf"    ),
+  ROW(IsFinite     , IsFinite , 1, 0, 0, 1, LTR | F(Conditional)   | F(FloatOnly)    , "isfinite" ),
+  ROW(SignBit      , SignBit  , 1, 0, 0, 1, LTR | F(Conditional)                     , "signbit"  ),
   ROW(Round        , Round    , 1, 0, 0, 1, LTR | F(Rounding)      | F(FloatOnly)    , "round"    ),
   ROW(RoundEven    , RoundEven, 1, 0, 0, 1, LTR | F(Rounding)      | F(FloatOnly)    , "roundeven"),
   ROW(Trunc        , Trunc    , 1, 0, 0, 1, LTR | F(Rounding)      | F(FloatOnly)    , "trunc"    ),
@@ -158,14 +158,14 @@ const OpInfo mpOpInfo[kOpCount] = {
   ROW(AssignBitSar , BitSar   , 2,15,-1, 0, RTL | F(BitShift)      | F(NopIfRZero)   , ">>="      ),
   ROW(AssignBitShr , BitShr   , 2,15,-1, 0, RTL | F(BitShift)      | F(NopIfRZero)   , ">>>="     ),
   ROW(AssignBitShl , BitShl   , 2,15,-1, 0, RTL | F(BitShift)      | F(NopIfRZero)   , "<<="      ),
-  ROW(Eq           , Eq       , 2, 9, 0, 0, LTR | F(Condition)                       , "=="       ),
-  ROW(Ne           , Ne       , 2, 9, 0, 0, LTR | F(Condition)                       , "!="       ),
-  ROW(Lt           , Lt       , 2, 8, 0, 0, LTR | F(Condition)                       , "<"        ),
-  ROW(Le           , Le       , 2, 8, 0, 0, LTR | F(Condition)                       , "<="       ),
-  ROW(Gt           , Gt       , 2, 8, 0, 0, LTR | F(Condition)                       , ">"        ),
-  ROW(Ge           , Ge       , 2, 8, 0, 0, LTR | F(Condition)                       , ">="       ),
-  ROW(LogAnd       , LogAnd   , 2,13, 0, 0, LTR | F(Condition)     | F(Logical)      , "&&"       ),
-  ROW(LogOr        , LogOr    , 2,14, 0, 0, LTR | F(Condition)     | F(Logical)      , "||"       ),
+  ROW(Eq           , Eq       , 2, 9, 0, 0, LTR | F(Conditional)                     , "=="       ),
+  ROW(Ne           , Ne       , 2, 9, 0, 0, LTR | F(Conditional)                     , "!="       ),
+  ROW(Lt           , Lt       , 2, 8, 0, 0, LTR | F(Conditional)                     , "<"        ),
+  ROW(Le           , Le       , 2, 8, 0, 0, LTR | F(Conditional)                     , "<="       ),
+  ROW(Gt           , Gt       , 2, 8, 0, 0, LTR | F(Conditional)                     , ">"        ),
+  ROW(Ge           , Ge       , 2, 8, 0, 0, LTR | F(Conditional)                     , ">="       ),
+  ROW(LogAnd       , LogAnd   , 2,13, 0, 0, LTR | F(Conditional)   | F(Logical)      , "&&"       ),
+  ROW(LogOr        , LogOr    , 2,14, 0, 0, LTR | F(Conditional)   | F(Logical)      , "||"       ),
   ROW(Add          , Add      , 2, 6, 0, 0, LTR | F(Arithmetic)    | F(NopIfZero)    , "+"        ),
   ROW(Sub          , Sub      , 2, 6, 0, 0, LTR | F(Arithmetic)    | F(NopIfZero)    , "-"        ),
   ROW(Mul          , Mul      , 2, 5, 0, 0, LTR | F(Arithmetic)    | F(NopIfOne)     , "*"        ),
@@ -316,7 +316,7 @@ static MPSL_INLINE Error mpLayoutPrepareAdd(Layout* self, size_t n) noexcept {
   size_t remainingSize = mpLayoutGetRemainingSize(self);
   if (remainingSize < n) {
     uint32_t newSize = self->_dataSize;
-    // Prevent another reallocation if old size wasn't enough.
+    // Make sure we reserve much more than the current size if it wasn't enough.
     if (newSize <= 128)
       newSize = 512;
     else
@@ -497,7 +497,7 @@ Error Isolate::freeze() noexcept {
 
 #define MPSL_PROPAGATE_AND_HANDLE_COLLISION(...) \
   do { \
-    AstSymbol* collidedSymbol = NULL; \
+    AstSymbol* collidedSymbol = nullptr; \
     ::mpsl::Error _errorValue = __VA_ARGS__; \
     \
     if (MPSL_UNLIKELY(_errorValue != ::mpsl::kErrorOk)) { \
@@ -590,7 +590,10 @@ Error Isolate::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   // --------------------------------------------------------------------------
 
   // Translate AST to IR.
-  { MPSL_PROPAGATE(AstToIR(&ast, &ir).onProgram(ast.getProgramNode())); }
+  {
+    AstToIR::Args unused(false);
+    MPSL_PROPAGATE(AstToIR(&ast, &ir).onProgram(ast.getProgramNode(), unused));
+  }
 
   if (options & kOptionDebugIR) {
     ir.dump(sbTmp);

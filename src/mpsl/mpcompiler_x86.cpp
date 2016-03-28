@@ -30,6 +30,9 @@ JitCompiler::JitCompiler(Allocator* allocator, X86Compiler* c)
     _functionBody(nullptr),
     _constPool(&c->_constAllocator) {
 
+  _tmpXmm0 = _c->newXmm("tmpXmm0");
+  _tmpXmm1 = _c->newXmm("tmpXmm1");
+
   const asmjit::CpuInfo& cpu = c->getRuntime()->getCpuInfo();
   _enableSSE4_1 = cpu.hasFeature(asmjit::CpuInfo::kX86FeatureSSE4_1);
 }
@@ -145,11 +148,11 @@ Error JitCompiler::compileConsecutiveBlocks(IRBlock* block) {
     IRBlock* next = nullptr;
 
     if (inst != nullptr) {
-      if (inst->getInstCode() == kIRInstJmp) {
+      if (inst->getInstCode() == kIRInstIdJmp) {
         next = static_cast<IRBlock*>(inst->getOperand(0));
         if (next->isAssembled()) next = nullptr;
       }
-      else if (inst->getInstCode() == kIRInstJcc) {
+      else if (inst->getInstCode() == kIRInstIdJcc) {
         next = static_cast<IRBlock*>(inst->getOperand(1));
         if (next->isAssembled()) {
           next = static_cast<IRBlock*>(inst->getOperand(2));
@@ -173,7 +176,7 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
     IRObject** irOpArray = inst->getOpArray();
     uint32_t i, count = inst->getOpCount();
 
-    const IRInstInfo& info = mpInstInfo[inst->getInstCode() & kIRInstMask];
+    const IRInstInfo& info = mpInstInfo[inst->getInstCode() & kIRInstIdMask];
 
     for (i = 0; i < count; i++) {
       IRObject* irOp = irOpArray[i];
@@ -217,9 +220,12 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
       }
     }
 
+#define OP_1(id) (kIRInstId##id | kIRInstV0)
+#define OP_X(id) (kIRInstId##id | kIRInstV128)
+#define OP_Y(id) (kIRInstId##id | kIRInstV256)
     switch (inst->getInstCode()) {
-      case kIRInstFetch32:
-      case kIRInstStore32:
+      case OP_1(Fetch32):
+      case OP_1(Store32):
         if ((mpIsGp(asmOp[0]) && (asmOp[1].isMem() || mpIsGp(asmOp[1]))) ||
             (mpIsGp(asmOp[1]) && (asmOp[0].isMem())))
           _c->emit(asmjit::kX86InstIdMov, asmOp[0], asmOp[1]);
@@ -227,124 +233,146 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
           _c->emit(asmjit::kX86InstIdMovd, asmOp[0], asmOp[1]);
         break;
 
-      case kIRInstFetch64:
-      case kIRInstStore64:
+      case OP_1(Fetch64):
+      case OP_1(Store64):
         _c->emit(asmjit::kX86InstIdMovq, asmOp[0], asmOp[1]);
         break;
 
-      case kIRInstFetch128:
-      case kIRInstStore128:
+      case OP_1(Fetch96): {
+        X86Mem mem = static_cast<X86Mem&>(asmOp[1]);
+        _c->emit(asmjit::kX86InstIdMovq, asmOp[0], mem);
+        mem.adjust(8);
+        _c->emit(asmjit::kX86InstIdMovd, _tmpXmm0, mem);
+        _c->emit(asmjit::kX86InstIdPunpcklqdq, asmOp[0], _tmpXmm0);
+        break;
+      }
+
+      case OP_1(Store96): {
+        X86Mem mem = static_cast<X86Mem&>(asmOp[0]);
+        _c->emit(asmjit::kX86InstIdMovq, mem, asmOp[1]);
+        _c->emit(asmjit::kX86InstIdPshufd, _tmpXmm0, asmOp[1], X86Util::shuffle(1, 0, 3, 2));
+        mem.adjust(8);
+        _c->emit(asmjit::kX86InstIdMovd, mem, _tmpXmm0);
+        break;
+      }
+
+      case OP_1(Fetch128):
+      case OP_1(Store128):
         _c->emit(asmjit::kX86InstIdMovups, asmOp[0], asmOp[1]);
         break;
 
-      case kIRInstFetch256:
-      case kIRInstStore256:
-        break;
+      case OP_1(Mov32): emit2_Any(asmjit::kX86InstIdMovd, asmOp[0], asmOp[1]); break;
+      case OP_1(Mov64): emit2_Any(asmjit::kX86InstIdMovq, asmOp[0], asmOp[1]); break;
+      case OP_1(Mov128): emit2_Any(asmjit::kX86InstIdMovaps, asmOp[0], asmOp[1]); break;
 
-      case kIRInstMov32                     : emit2_Any(asmjit::kX86InstIdMovd     , asmOp[0], asmOp[1]); break;
-      case kIRInstMov64                     : emit2_Any(asmjit::kX86InstIdMovq     , asmOp[0], asmOp[1]); break;
-      case kIRInstMov128                    : emit2_Any(asmjit::kX86InstIdMovaps   , asmOp[0], asmOp[1]); break;
-      case kIRInstMov256                    : emit2_Any(asmjit::kX86InstIdVmovaps  , asmOp[0], asmOp[1]); break;
+      case OP_1(CvtI32ToF32): emit2_Any(asmjit::kX86InstIdCvtsi2ss, asmOp[0], asmOp[1]); break;
+      case OP_1(CvtI32ToF64): emit2_Any(asmjit::kX86InstIdCvtsi2sd, asmOp[0], asmOp[1]); break;
 
-      case kIRInstCvtI32ToF32               : emit2_Any(asmjit::kX86InstIdCvtsi2ss , asmOp[0], asmOp[1]); break;
-      case kIRInstCvtI32ToF64               : emit2_Any(asmjit::kX86InstIdCvtsi2sd , asmOp[0], asmOp[1]); break;
+      case OP_1(CvtF32ToI32): emit2_Any(asmjit::kX86InstIdCvttss2si, asmOp[0], asmOp[1]); break;
+      case OP_1(CvtF32ToF64): emit2_Any(asmjit::kX86InstIdCvtss2sd, asmOp[0], asmOp[1]); break;
 
-      case kIRInstCvtF32ToI32               : emit2_Any(asmjit::kX86InstIdCvttss2si, asmOp[0], asmOp[1]); break;
-      case kIRInstCvtF32ToF64               : emit2_Any(asmjit::kX86InstIdCvtss2sd , asmOp[0], asmOp[1]); break;
+      case OP_1(CvtF64ToI32): emit2_Any(asmjit::kX86InstIdCvttsd2si, asmOp[0], asmOp[1]); break;
+      case OP_1(CvtF64ToF32): emit2_Any(asmjit::kX86InstIdCvtsd2ss, asmOp[0], asmOp[1]); break;
 
-      case kIRInstCvtF64ToI32               : emit2_Any(asmjit::kX86InstIdCvttsd2si, asmOp[0], asmOp[1]); break;
-      case kIRInstCvtF64ToF32               : emit2_Any(asmjit::kX86InstIdCvtsd2ss , asmOp[0], asmOp[1]); break;
+      case OP_1(CmpEqF32): emit3_F32(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
+      case OP_X(CmpEqF32): emit3_F32(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
+      case OP_1(CmpEqF64): emit3_F64(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
+      case OP_X(CmpEqF64): emit3_F64(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
 
-      case kIRInstCmpEqF32                  : emit3_F32(asmjit::kX86InstIdCmpss    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
-      case kIRInstCmpEqF32   | kIRInstVec128: emit3_F32(asmjit::kX86InstIdCmpps    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
-      case kIRInstCmpEqF64                  : emit3_F64(asmjit::kX86InstIdCmpsd    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
-      case kIRInstCmpEqF64   | kIRInstVec128: emit3_F64(asmjit::kX86InstIdCmppd    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
+      case OP_1(CmpNeF32): emit3_F32(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
+      case OP_X(CmpNeF32): emit3_F32(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
+      case OP_1(CmpNeF64): emit3_F64(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
+      case OP_X(CmpNeF64): emit3_F64(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
 
-      case kIRInstCmpNeF32                  : emit3_F32(asmjit::kX86InstIdCmpss    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
-      case kIRInstCmpNeF32   | kIRInstVec128: emit3_F32(asmjit::kX86InstIdCmpps    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
-      case kIRInstCmpNeF64                  : emit3_F64(asmjit::kX86InstIdCmpsd    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
-      case kIRInstCmpNeF64   | kIRInstVec128: emit3_F64(asmjit::kX86InstIdCmppd    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
+      case OP_1(CmpLtF32): emit3_F32(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
+      case OP_X(CmpLtF32): emit3_F32(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
+      case OP_1(CmpLtF64): emit3_F64(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
+      case OP_X(CmpLtF64): emit3_F64(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
 
-      case kIRInstCmpLtF32                  : emit3_F32(asmjit::kX86InstIdCmpss    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
-      case kIRInstCmpLtF32   | kIRInstVec128: emit3_F32(asmjit::kX86InstIdCmpps    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
-      case kIRInstCmpLtF64                  : emit3_F64(asmjit::kX86InstIdCmpsd    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
-      case kIRInstCmpLtF64   | kIRInstVec128: emit3_F64(asmjit::kX86InstIdCmppd    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
+      case OP_1(CmpLeF32): emit3_F32(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
+      case OP_X(CmpLeF32): emit3_F32(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
+      case OP_1(CmpLeF64): emit3_F64(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
+      case OP_X(CmpLeF64): emit3_F64(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
 
-      case kIRInstCmpLeF32                  : emit3_F32(asmjit::kX86InstIdCmpss    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
-      case kIRInstCmpLeF32   | kIRInstVec128: emit3_F32(asmjit::kX86InstIdCmpps    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
-      case kIRInstCmpLeF64                  : emit3_F64(asmjit::kX86InstIdCmpsd    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
-      case kIRInstCmpLeF64   | kIRInstVec128: emit3_F64(asmjit::kX86InstIdCmppd    , asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
+      case OP_1(CmpGtF32): emit3_F32(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
+      case OP_X(CmpGtF32): emit3_F32(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
+      case OP_1(CmpGtF64): emit3_F64(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
+      case OP_X(CmpGtF64): emit3_F64(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
 
-      case kIRInstCmpGtF32                  : emit3_F32(asmjit::kX86InstIdCmpss    , asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
-      case kIRInstCmpGtF32   | kIRInstVec128: emit3_F32(asmjit::kX86InstIdCmpps    , asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
-      case kIRInstCmpGtF64                  : emit3_F64(asmjit::kX86InstIdCmpsd    , asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
-      case kIRInstCmpGtF64   | kIRInstVec128: emit3_F64(asmjit::kX86InstIdCmppd    , asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
+      case OP_1(CmpGeF32): emit3_F32(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
+      case OP_X(CmpGeF32): emit3_F32(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
+      case OP_1(CmpGeF64): emit3_F64(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
+      case OP_X(CmpGeF64): emit3_F64(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
 
-      case kIRInstCmpGeF32                  : emit3_F32(asmjit::kX86InstIdCmpss    , asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
-      case kIRInstCmpGeF32   | kIRInstVec128: emit3_F32(asmjit::kX86InstIdCmpps    , asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
-      case kIRInstCmpGeF64                  : emit3_F64(asmjit::kX86InstIdCmpsd    , asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
-      case kIRInstCmpGeF64   | kIRInstVec128: emit3_F64(asmjit::kX86InstIdCmppd    , asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
+      case OP_1(AddI32): emit3_I32(asmjit::kX86InstIdAdd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(AddI32): emit3_I32(asmjit::kX86InstIdPaddd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(AddF32): emit3_F32(asmjit::kX86InstIdAddss, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(AddF32): emit3_F32(asmjit::kX86InstIdAddps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(AddF64): emit3_F64(asmjit::kX86InstIdAddsd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(AddF64): emit3_F64(asmjit::kX86InstIdAddpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstAddI32                    : emit3_I32(asmjit::kX86InstIdAdd      , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstAddF32                    : emit3_F32(asmjit::kX86InstIdAddss    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstAddF32     | kIRInstVec128: emit3_F32(asmjit::kX86InstIdAddps    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstAddF64                    : emit3_F64(asmjit::kX86InstIdAddsd    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstAddF64     | kIRInstVec128: emit3_F64(asmjit::kX86InstIdAddpd    , asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(SubI32): emit3_I32(asmjit::kX86InstIdSub, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(SubI32): emit3_I32(asmjit::kX86InstIdPsubd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(SubF32): emit3_F32(asmjit::kX86InstIdSubss, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(SubF32): emit3_F32(asmjit::kX86InstIdSubps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(SubF64): emit3_F64(asmjit::kX86InstIdSubsd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(SubF64): emit3_F64(asmjit::kX86InstIdSubpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstSubI32                    : emit3_I32(asmjit::kX86InstIdSub      , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstSubF32                    : emit3_F32(asmjit::kX86InstIdSubss    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstSubF32     | kIRInstVec128: emit3_F32(asmjit::kX86InstIdSubps    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstSubF64                    : emit3_F64(asmjit::kX86InstIdSubsd    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstSubF64     | kIRInstVec128: emit3_F64(asmjit::kX86InstIdSubpd    , asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(MulI32): emit3_I32(asmjit::kX86InstIdImul, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(MulI32): emit3_I32(asmjit::kX86InstIdPmulld, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(MulF32): emit3_F32(asmjit::kX86InstIdMulss, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(MulF32): emit3_F32(asmjit::kX86InstIdMulps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(MulF64): emit3_F64(asmjit::kX86InstIdMulsd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(MulF64): emit3_F64(asmjit::kX86InstIdMulpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstMulI32                    : emit3_I32(asmjit::kX86InstIdImul     , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMulF32                    : emit3_F32(asmjit::kX86InstIdMulss    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMulF32     | kIRInstVec128: emit3_F32(asmjit::kX86InstIdMulps    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMulF64                    : emit3_F64(asmjit::kX86InstIdMulsd    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMulF64     | kIRInstVec128: emit3_F64(asmjit::kX86InstIdMulpd    , asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(DivF32): emit3_F32(asmjit::kX86InstIdDivss, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(DivF32): emit3_F32(asmjit::kX86InstIdDivps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(DivF64): emit3_F64(asmjit::kX86InstIdDivsd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(DivF64): emit3_F64(asmjit::kX86InstIdDivpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstDivF32                    : emit3_F32(asmjit::kX86InstIdDivss    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstDivF32     | kIRInstVec128: emit3_F32(asmjit::kX86InstIdDivps    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstDivF64                    : emit3_F64(asmjit::kX86InstIdDivsd    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstDivF64     | kIRInstVec128: emit3_F64(asmjit::kX86InstIdDivpd    , asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(AndI32): emit3_I32(asmjit::kX86InstIdAnd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(AndI32): emit3_I32(asmjit::kX86InstIdPand, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(AndF32):
+      case OP_X(AndF32): emit3_F32(asmjit::kX86InstIdAndps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(AndF64):
+      case OP_X(AndF64): emit3_F64(asmjit::kX86InstIdAndpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstAndI32                    : emit3_I32(asmjit::kX86InstIdAnd      , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstAndF32                    :
-      case kIRInstAndF32     | kIRInstVec128: emit3_F32(asmjit::kX86InstIdAndps    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstAndF64                    :
-      case kIRInstAndF64     | kIRInstVec128: emit3_F64(asmjit::kX86InstIdAndpd    , asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(OrI32): emit3_I32(asmjit::kX86InstIdOr, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(OrI32): emit3_I32(asmjit::kX86InstIdPor, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(OrF32):
+      case OP_X(OrF32): emit3_F32(asmjit::kX86InstIdOrps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(OrF64):
+      case OP_X(OrF64): emit3_F64(asmjit::kX86InstIdOrpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstOrI32                     : emit3_I32(asmjit::kX86InstIdOr       , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstOrF32                     :
-      case kIRInstOrF32      | kIRInstVec128: emit3_F32(asmjit::kX86InstIdOrps     , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstOrF64                     :
-      case kIRInstOrF64      | kIRInstVec128: emit3_F64(asmjit::kX86InstIdOrpd     , asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(XorI32): emit3_I32(asmjit::kX86InstIdXor, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(XorI32): emit3_I32(asmjit::kX86InstIdPxor, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(XorF32):
+      case OP_X(XorF32): emit3_F32(asmjit::kX86InstIdXorps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(XorF64):
+      case OP_X(XorF64): emit3_F64(asmjit::kX86InstIdXorpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstXorI32                    : emit3_I32(asmjit::kX86InstIdXor      , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstXorF32                    :
-      case kIRInstXorF32     | kIRInstVec128: emit3_F32(asmjit::kX86InstIdXorps    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstXorF64                    :
-      case kIRInstXorF64     | kIRInstVec128: emit3_F64(asmjit::kX86InstIdXorpd    , asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(MinF32): emit3_F32(asmjit::kX86InstIdMinss, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(MinF32): emit3_F32(asmjit::kX86InstIdMinps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(MinF64): emit3_F64(asmjit::kX86InstIdMinsd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(MinF64): emit3_F64(asmjit::kX86InstIdMinpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstMinF32                    : emit3_F32(asmjit::kX86InstIdMinss    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMinF32     | kIRInstVec128: emit3_F32(asmjit::kX86InstIdMinps    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMinF64                    : emit3_F64(asmjit::kX86InstIdMinsd    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMinF64     | kIRInstVec128: emit3_F64(asmjit::kX86InstIdMinpd    , asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(MaxF32): emit3_F32(asmjit::kX86InstIdMaxss, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(MaxF32): emit3_F32(asmjit::kX86InstIdMaxps, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(MaxF64): emit3_F64(asmjit::kX86InstIdMaxsd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(MaxF64): emit3_F64(asmjit::kX86InstIdMaxpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case kIRInstMaxF32                    : emit3_F32(asmjit::kX86InstIdMaxss    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMaxF32     | kIRInstVec128: emit3_F32(asmjit::kX86InstIdMaxps    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMaxF64                    : emit3_F64(asmjit::kX86InstIdMaxsd    , asmOp[0], asmOp[1], asmOp[2]); break;
-      case kIRInstMaxF64     | kIRInstVec128: emit3_F64(asmjit::kX86InstIdMaxpd    , asmOp[0], asmOp[1], asmOp[2]); break;
-
-      case kIRInstSqrtF32                   : emit2_Any(asmjit::kX86InstIdSqrtss   , asmOp[0], asmOp[1]); break;
-      case kIRInstSqrtF32    | kIRInstVec128: emit2_Any(asmjit::kX86InstIdSqrtps   , asmOp[0], asmOp[1]); break;
-      case kIRInstSqrtF64                   : emit2_Any(asmjit::kX86InstIdSqrtsd   , asmOp[0], asmOp[1]); break;
-      case kIRInstSqrtF64    | kIRInstVec128: emit2_Any(asmjit::kX86InstIdSqrtpd   , asmOp[0], asmOp[1]); break;
+      case OP_1(SqrtF32): emit2_Any(asmjit::kX86InstIdSqrtss, asmOp[0], asmOp[1]); break;
+      case OP_X(SqrtF32): emit2_Any(asmjit::kX86InstIdSqrtps, asmOp[0], asmOp[1]); break;
+      case OP_1(SqrtF64): emit2_Any(asmjit::kX86InstIdSqrtsd, asmOp[0], asmOp[1]); break;
+      case OP_X(SqrtF64): emit2_Any(asmjit::kX86InstIdSqrtpd, asmOp[0], asmOp[1]); break;
 
       default:
         // TODO:
         MPSL_ASSERT(!"Implemented");
     }
+#undef OP_Y
+#undef OP_X
+#undef OP_1
 
     inst = inst->getNext();
   }
@@ -354,8 +382,34 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
 }
 
 void JitCompiler::emit3_I32(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2) {
-  if (o0.getId() != o1.getId())
-    _c->emit(asmjit::kX86InstIdMov, o0, o1);
+  // Intercept instructions that are disabled for the current target and
+  // substitute them with a sequential code that is compatible. It's easier
+  // to deal with it here than dealing with it in `compileBasicBlock()`.
+  switch (instId) {
+    case asmjit::kX86InstIdPmulld: {
+      if (_enableSSE4_1)
+        break;
+
+      if (o0.getId() != o1.getId())
+        _c->emit(asmjit::kX86InstIdMovaps, o0, o1);
+
+      _c->emit(asmjit::kX86InstIdPshufd, _tmpXmm0, o1, X86Util::shuffle(2, 3, 0, 1));
+      _c->emit(asmjit::kX86InstIdPshufd, _tmpXmm1, o2, X86Util::shuffle(2, 3, 0, 1));
+
+      _c->emit(asmjit::kX86InstIdPmuludq, _tmpXmm0, _tmpXmm1);
+      _c->emit(asmjit::kX86InstIdPmuludq, o0, o2);
+      _c->emit(asmjit::kX86InstIdShufps, o0, _tmpXmm0, X86Util::shuffle(0, 2, 0, 2));
+      return;
+    }
+  }
+
+  // Instruction `instId` is emitted as is.
+  if (o0.getId() != o1.getId()) {
+    if (mpIsGp(o0) && mpIsGp(o1))
+      _c->emit(asmjit::kX86InstIdMov, o0, o1);
+    else
+      _c->emit(asmjit::kX86InstIdMovaps, o0, o1);
+  }
   _c->emit(instId, o0, o2);
 }
 

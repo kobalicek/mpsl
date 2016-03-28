@@ -17,16 +17,71 @@
 namespace mpsl {
 
 static uint32_t mpRegSizeFromTypeInfo(uint32_t typeInfo) noexcept {
-  uint32_t size = TypeInfo::getSize(typeInfo & kTypeIdMask);
-  return size * TypeInfo::getVectorSize(typeInfo);
+  uint32_t size = TypeInfo::sizeOf(typeInfo & kTypeIdMask);
+  return size * TypeInfo::elementsOf(typeInfo);
 }
 
 static uint32_t mpGetIRFlags(uint32_t typeId, uint32_t vecLen) noexcept {
   if (vecLen <= 1)
     return 0;
 
-  uint32_t size = TypeInfo::getSize(typeId) * vecLen;
-  return size <= 16 ? kIRInstVec128 : kIRInstVec256;
+  uint32_t size = TypeInfo::sizeOf(typeId) * vecLen;
+  return size <= 16 ? kIRInstV128 : kIRInstV256;
+}
+
+static MPSL_INLINE uint32_t mpGetIRInstFlags(uint32_t typeInfo) noexcept {
+  if ((typeInfo & kTypeVecMask) < kTypeVec2)
+    return 0;
+  else
+    return TypeInfo::widthOf(typeInfo) <= 16 ? kIRInstV128 : kIRInstV256;
+}
+
+static MPSL_INLINE void mpSplitHi(Value& hi, const Value& lo) {
+  hi.q.set(lo.q[2], lo.q[3], 0, 0);
+}
+
+static bool mpSplitTypeInfo(uint32_t& loOut, uint32_t& hiOut, uint32_t typeInfo) noexcept {
+  uint32_t typeId = typeInfo & kTypeIdMask;
+  uint32_t vecCnt = typeInfo & kTypeVecMask;
+
+  switch (typeId) {
+    case kTypeBool:
+    case kTypeInt:
+    case kTypeFloat:
+      if (vecCnt > kTypeVec4) {
+        // MPSL only allows 8 element vectors of 32-bit types, which will always
+        // split into the same LO/HI parts of 4 elements. This code is a bit more
+        // generic than the assumption.
+        uint32_t base = typeInfo & ~kTypeVecMask;
+        loOut = base | (kTypeVec4);
+        hiOut = base | (vecCnt - kTypeVec4);
+        return true;
+      }
+      break;
+
+    case kTypeQBool:
+    case kTypeDouble:
+      if (vecCnt > kTypeVec2) {
+        // MPSL only allows up to 4 element vectors of 64-bit types. It means
+        // that there are basically two possible cases:
+        //   1. Splitting a vector of 4 elements as [2, 2] pair.
+        //   2. Splitting a vector of 4 elements as [2, 1] pair.
+        uint32_t base = typeInfo & ~kTypeVecMask;
+        loOut = base | (kTypeVec2);
+        hiOut = base | (vecCnt - kTypeVec2);
+        return true;
+      }
+      break;
+  }
+
+  // Split not needed.
+  loOut = typeInfo;
+  hiOut = kTypeVoid;
+  return false;
+}
+
+static MPSL_INLINE bool mpIsValueLoHiEqual(const Value& val) noexcept {
+  return (val.q[0] == val.q[2]) && (val.q[1] == val.q[3]);
 }
 
 // ============================================================================
@@ -34,11 +89,12 @@ static uint32_t mpGetIRFlags(uint32_t typeId, uint32_t vecLen) noexcept {
 // ============================================================================
 
 AstToIR::AstToIR(AstBuilder* ast, IRBuilder* ir) noexcept
-  : AstVisitor(ast),
+  : AstVisitorWithArgs<AstToIR, Args&>(ast),
     _ir(ir),
-    _currentBlock(nullptr),
-    _currentValue(nullptr),
+    _retPriv(nullptr),
+    _block(nullptr),
     _blockLevel(0),
+    _hasV256(false),
     _varMap(ir->getAllocator()),
     _memMap(ir->getAllocator()) {
   _retPriv = ast->getGlobalScope()->resolveSymbol(StringRef("@ret", 4));
@@ -49,7 +105,7 @@ AstToIR::~AstToIR() noexcept {}
 // [mpsl::AstToIR - OnNode]
 // ============================================================================
 
-Error AstToIR::onProgram(AstProgram* node) noexcept {
+Error AstToIR::onProgram(AstProgram* node, Args& out) noexcept {
   AstNode** children = node->getChildren();
   uint32_t i, count = node->getLength();
 
@@ -60,9 +116,8 @@ Error AstToIR::onProgram(AstProgram* node) noexcept {
       AstFunction* func = static_cast<AstFunction*>(child);
       if (func->getFunc()->eq("main", 4)) {
         MPSL_PROPAGATE(_ir->initMainBlock());
-        _currentBlock = _ir->getMainBlock();
-
-        return onFunction(func);
+        _block = _ir->getMainBlock();
+        return onFunction(func, out);
       }
     }
   }
@@ -70,525 +125,500 @@ Error AstToIR::onProgram(AstProgram* node) noexcept {
   return MPSL_TRACE_ERROR(kErrorNoEntryPoint);
 }
 
-// NOTE: This is only called once with the "main()" entry point. Other
+// NOTE: This is only called once with "main()" function `node`. Other
 // functions are simply inlined during the AST to IR translation.
-Error AstToIR::onFunction(AstFunction* node) noexcept {
-  AstSymbol* funcSumbol = node->getFunc();
-
+Error AstToIR::onFunction(AstFunction* node, Args& out) noexcept {
   if (node->hasBody())
-    MPSL_PROPAGATE(onNode(node->getBody()));
+    MPSL_PROPAGATE(onNode(node->getBody(), out));
 
   return kErrorOk;
 }
 
-Error AstToIR::onBlock(AstBlock* node) noexcept {
+Error AstToIR::onBlock(AstBlock* node, Args& out) noexcept {
   AstNode** children = node->getChildren();
   uint32_t i, count = node->getLength();
 
   for (i = 0; i < count; i++) {
-    MPSL_PROPAGATE(onNode(children[i]));
-    // Destroy the result as there is no use for it.
-    resetCurrentValue();
+    Args noArgs(false);
+    MPSL_PROPAGATE(onNode(children[i], noArgs));
   }
 
   return kErrorOk;
 }
 
-Error AstToIR::onBranch(AstBranch* node) noexcept {
+Error AstToIR::onBranch(AstBranch* node, Args& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onCondition(AstCondition* node) noexcept {
+Error AstToIR::onCondition(AstCondition* node, Args& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onLoop(AstLoop* node) noexcept {
+Error AstToIR::onLoop(AstLoop* node, Args& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onBreak(AstBreak* node) noexcept {
+Error AstToIR::onBreak(AstBreak* node, Args& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onContinue(AstContinue* node) noexcept {
+Error AstToIR::onContinue(AstContinue* node, Args& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onReturn(AstReturn* node) noexcept {
-  AstNode* retNode = node->getChild();
-  if (retNode != nullptr) {
-    MPSL_PROPAGATE(onNode(retNode));
+Error AstToIR::onReturn(AstReturn* node, Args& out) noexcept {
+  if (node->hasChild()) {
+    Args val(true);
+    MPSL_PROPAGATE(onNode(node->getChild(), val));
 
-    IRVar* retVar = nullptr;
     uint32_t typeInfo = _retPriv->getTypeInfo();
-    MPSL_PROPAGATE(requireVar(&retVar, getCurrentValue(), typeInfo));
+    uint32_t width = TypeInfo::widthOf(typeInfo);
 
-    IRMem* retMem = getIR()->newMem(
-      getIR()->getDataPtr(_retPriv->getDataSlot()), nullptr, _retPriv->getDataOffset());
-    MPSL_NULLCHECK(retMem);
+    IRPair<IRVar> var;
+    MPSL_PROPAGATE(asVar(var, val.result, typeInfo));
 
-    return emitStoreX(retMem, retVar, typeInfo);
+    IRPair<IRMem> mem;
+    MPSL_PROPAGATE(addrOfData(mem, DataSlot(_retPriv->getDataSlot(), _retPriv->getDataOffset()), width));
+    MPSL_PROPAGATE(emitStore(mem, var, typeInfo));
   }
 
   return kErrorOk;
 }
 
-Error AstToIR::onVarDecl(AstVarDecl* node) noexcept {
-  AstSymbol* sym = node->getSymbol();
-  IRVar* var = nullptr;
+Error AstToIR::onVarDecl(AstVarDecl* node, Args& out) noexcept {
+  uint32_t typeInfo = node->getTypeInfo();
+  IRPair<IRVar> var;
 
   if (node->hasChild()) {
-    MPSL_PROPAGATE(onNode(node->getChild()));
-    MPSL_PROPAGATE(requireVar(&var, getCurrentValue(), node->getTypeInfo()));
+    Args exp(true);
+    MPSL_PROPAGATE(onNode(node->getChild(), exp));
+    MPSL_PROPAGATE(asVar(var, exp.result, typeInfo));
   }
   else {
-    var = getIR()->newVarByTypeInfo(sym->getTypeInfo());
-    MPSL_NULLCHECK(var);
+    MPSL_PROPAGATE(newVar(var, typeInfo));
   }
 
-  return mapVarToAst(sym, var);
+  out.result.set(var);
+  return mapVarToAst(node->getSymbol(), var);
 }
 
-Error AstToIR::onVarMemb(AstVarMemb* node) noexcept {
-  if (!node->hasChild() || !node->getChild()->isVar())
+Error AstToIR::onVarMemb(AstVarMemb* node, Args& out) noexcept {
+  AstNode* childNode = node->getChild();
+  if (!childNode || !childNode->isVar())
     return MPSL_TRACE_ERROR(kErrorInvalidState);
+  AstVar* child = static_cast<AstVar*>(childNode);
 
-  AstVar* child = static_cast<AstVar*>(node->getChild());
-  IRVar* base = getIR()->getDataPtr(child->getSymbol()->getDataSlot());
-
-  if (MPSL_UNLIKELY(base == nullptr))
-    return MPSL_TRACE_ERROR(kErrorInvalidState);
-
-  IRMem* mem = getIR()->newMem(base, nullptr, node->getOffset());
-  if (MPSL_UNLIKELY(mem == nullptr))
-    return MPSL_TRACE_ERROR(kErrorNoMemory);
-
-  return setCurrentValue(mem);
+  uint32_t typeInfo = node->getTypeInfo();
+  uint32_t width = TypeInfo::widthOf(typeInfo);
+  return addrOfData(out.result, DataSlot(child->getSymbol()->getDataSlot(), node->getOffset()), width);
 }
 
-Error AstToIR::onVar(AstVar* node) noexcept {
+Error AstToIR::onVar(AstVar* node, Args& out) noexcept {
   AstSymbol* symbol = node->getSymbol();
 
   if (symbol->getDataSlot() != kInvalidDataSlot) {
-    // This is the same as `onVarMemb()`, this variable has been denested.
-    IRVar* base = _ir->getDataPtr(symbol->getDataSlot());
-    if (MPSL_UNLIKELY(base == nullptr))
-      return MPSL_TRACE_ERROR(kErrorInvalidState);
-
-    IRMem* mem = getIR()->newMem(base, nullptr, symbol->getDataOffset());
-    if (MPSL_UNLIKELY(mem == nullptr))
-      return MPSL_TRACE_ERROR(kErrorNoMemory);
-
-    return setCurrentValue(mem);
+    uint32_t typeInfo = node->getTypeInfo();
+    uint32_t width = TypeInfo::widthOf(typeInfo);
+    return addrOfData(out.result, DataSlot(symbol->getDataSlot(), symbol->getDataOffset()), width);
   }
   else {
-    // The variable has to be already mapped if not declared by `onVarDecl()`.
-    IRVar* var = _varMap.get(symbol);
-    if (MPSL_UNLIKELY(var == nullptr))
-      return MPSL_TRACE_ERROR(kErrorInvalidState);
-
-    return setCurrentValue(var);
+    out.result.set(_varMap.get(symbol));
+    // Unmapped variable at this stage is a bug in MPSL.
+    return out.hasValue() ? kErrorOk : MPSL_TRACE_ERROR(kErrorInvalidState);
   }
 }
 
-Error AstToIR::onImm(AstImm* node) noexcept {
-  uint32_t typeInfo = node->getTypeInfo();
-  IRImm* imm = getIR()->newImmByTypeInfo(node->getValue(), node->getTypeInfo());
-
-  MPSL_NULLCHECK(imm);
-  return setCurrentValue(imm);
+Error AstToIR::onImm(AstImm* node, Args& out) noexcept {
+  return newImm(out.result, node->getValue(), node->getTypeInfo());
 }
 
 #define COMBINE_OP_TYPE(op, typeId) (((op) << 8) | ((typeId) << 4))
 #define COMBINE_OP_CAST(toId, fromId) (((toId) << 8) | ((fromId) << 4))
 
-Error AstToIR::onUnaryOp(AstUnaryOp* node) noexcept {
+Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
   if (MPSL_UNLIKELY(!node->hasChild()))
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-  MPSL_PROPAGATE(onNode(node->getChild()));
-  IRObject* value = getCurrentValue();
-  IRBlock* block = getCurrentBlock();
+  Args tmp(true);
+  MPSL_PROPAGATE(onNode(node->getChild(), tmp));
 
+  IRBlock* block = getBlock();
   uint32_t op = node->getOp();
-  uint32_t typeId = node->getTypeInfo() & kTypeIdMask;
-  uint32_t vecLen = TypeInfo::getVectorSize(node->getTypeInfo());
+  uint32_t typeInfo = node->getTypeInfo();
 
-  IRVar* var = nullptr;
-  MPSL_PROPAGATE(requireVar(&var, value, node->getTypeInfo()));
+  IRPair<IRVar> var;
+  MPSL_PROPAGATE(asVar(var, tmp.result, typeInfo));
 
   // Special case for `(x)++` and `++(x)` like operators.
   if (op == kOpPreInc || op == kOpPreDec || op == kOpPostInc || op == kOpPostDec) {
     // If the `value` is in memory then:
-    //   1. Dereference it.
+    //   1. Dereference it (already done).
     //   2. Perform increment or decrement op.
     //   3. Store back in memory.
     bool preOp = false;
-    Value immValue;
-    uint32_t instCode = kIRInstNone;
+    Value immContent;
+    uint32_t instCode = kIRInstIdNone;
 
-    switch (COMBINE_OP_TYPE(op, typeId)) {
+    switch (COMBINE_OP_TYPE(op, typeInfo & kTypeIdMask)) {
       case COMBINE_OP_TYPE(kOpPreInc  , kTypeInt):
         preOp = true;
         MPSL_FALLTHROUGH;
       case COMBINE_OP_TYPE(kOpPostInc , kTypeInt):
-        instCode = kIRInstAddI32;
-        immValue.i.set(1);
+        instCode = kIRInstIdAddI32;
+        immContent.i.set(1);
         break;
 
       case COMBINE_OP_TYPE(kOpPreDec  , kTypeInt):
         preOp = true;
         MPSL_FALLTHROUGH;
       case COMBINE_OP_TYPE(kOpPostDec , kTypeInt):
-        instCode = kIRInstAddI32;
-        immValue.i.set(-1);
+        instCode = kIRInstIdAddI32;
+        immContent.i.set(-1);
         break;
 
       case COMBINE_OP_TYPE(kOpPreInc  , kTypeFloat):
         preOp = true;
         MPSL_FALLTHROUGH;
       case COMBINE_OP_TYPE(kOpPostInc , kTypeFloat):
-        instCode = kIRInstAddF32;
-        immValue.f.set(1.0f);
+        instCode = kIRInstIdAddF32;
+        immContent.f.set(1.0f);
         break;
 
       case COMBINE_OP_TYPE(kOpPreDec  , kTypeFloat):
         preOp = true;
         MPSL_FALLTHROUGH;
       case COMBINE_OP_TYPE(kOpPostDec , kTypeFloat):
-        instCode = kIRInstAddF32;
-        immValue.f.set(-1.0f);
+        instCode = kIRInstIdAddF32;
+        immContent.f.set(-1.0f);
         break;
 
       case COMBINE_OP_TYPE(kOpPreInc  , kTypeDouble):
         preOp = true;
         MPSL_FALLTHROUGH;
       case COMBINE_OP_TYPE(kOpPostInc , kTypeDouble):
-        instCode = kIRInstAddF64;
-        immValue.d.set(1.0);
+        instCode = kIRInstIdAddF64;
+        immContent.d.set(1.0);
         break;
 
       case COMBINE_OP_TYPE(kOpPreDec  , kTypeDouble):
         preOp = true;
         MPSL_FALLTHROUGH;
       case COMBINE_OP_TYPE(kOpPostDec , kTypeDouble):
-        instCode = kIRInstAddF64;
-        immValue.d.set(-1.0);
+        instCode = kIRInstIdAddF64;
+        immContent.d.set(-1.0);
         break;
 
       default:
         return MPSL_TRACE_ERROR(kErrorInvalidState);
     }
 
-    IRImm* immOp = getIR()->newImmByTypeInfo(immValue, node->getTypeInfo());
-    IRVar* result = getIR()->newVarByTypeInfo(node->getTypeInfo());
+    IRPair<IRObject> imm;
+    MPSL_PROPAGATE(newImm(imm, immContent, typeInfo));
+
+    IRPair<IRVar> result;
+    if (out.dependsOnResult)
+      MPSL_PROPAGATE(newVar(result, typeInfo));
 
     if (preOp) {
-      MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetIRFlags(typeId, vecLen), var, var, immOp));
-      MPSL_PROPAGATE(getIR()->emitMove(block, result, var));
-      MPSL_PROPAGATE(storeIfMem(value, var, node->getTypeInfo()));
+      MPSL_PROPAGATE(emitInst3(instCode, var, var, imm, typeInfo));
+      MPSL_PROPAGATE(emitMove(result, var, typeInfo));
+      if (tmp.result.lo->isMem())
+        MPSL_PROPAGATE(emitStore(reinterpret_cast<IRPair<IRMem>&>(tmp.result), var, typeInfo));
     }
     else {
-      MPSL_PROPAGATE(getIR()->emitMove(block, result, var));
-      MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetIRFlags(typeId, vecLen), var, var, immOp));
-      MPSL_PROPAGATE(storeIfMem(value, var, node->getTypeInfo()));
+      MPSL_PROPAGATE(emitMove(result, var, typeInfo));
+      MPSL_PROPAGATE(emitInst3(instCode, var, var, imm, typeInfo));
+      if (tmp.result.lo->isMem())
+        MPSL_PROPAGATE(emitStore(reinterpret_cast<IRPair<IRMem>&>(tmp.result), var, typeInfo));
     }
 
-    setCurrentValue(result);
+    return out.result.set(result);
   }
   else {
-    IRVar* result = getIR()->newVarByTypeInfo(node->getTypeInfo());
-    MPSL_NULLCHECK(result);
-
-    uint32_t instCode = kIRInstNone;
+    uint32_t instCode = kIRInstIdNone;
     if (op == kOpCast) {
       uint32_t fromId = node->getChild()->getTypeInfo() & kTypeIdMask;
-      switch (COMBINE_OP_CAST(typeId, fromId)) {
-        case COMBINE_OP_CAST(kTypeFloat , kTypeDouble): instCode = kIRInstCvtF64ToF32; break;
-        case COMBINE_OP_CAST(kTypeFloat , kTypeInt   ): instCode = kIRInstCvtF64ToI32; break;
-        case COMBINE_OP_CAST(kTypeDouble, kTypeFloat ): instCode = kIRInstCvtF32ToF64; break;
-        case COMBINE_OP_CAST(kTypeDouble, kTypeInt   ): instCode = kIRInstCvtF32ToI32; break;
-        case COMBINE_OP_CAST(kTypeInt   , kTypeFloat ): instCode = kIRInstCvtI32ToF32; break;
-        case COMBINE_OP_CAST(kTypeInt   , kTypeDouble): instCode = kIRInstCvtI32ToF64; break;
+      switch (COMBINE_OP_CAST(typeInfo & kTypeIdMask, fromId)) {
+        case COMBINE_OP_CAST(kTypeFloat , kTypeDouble): instCode = kIRInstIdCvtF64ToF32; break;
+        case COMBINE_OP_CAST(kTypeFloat , kTypeInt   ): instCode = kIRInstIdCvtF64ToI32; break;
+        case COMBINE_OP_CAST(kTypeDouble, kTypeFloat ): instCode = kIRInstIdCvtF32ToF64; break;
+        case COMBINE_OP_CAST(kTypeDouble, kTypeInt   ): instCode = kIRInstIdCvtF32ToI32; break;
+        case COMBINE_OP_CAST(kTypeInt   , kTypeFloat ): instCode = kIRInstIdCvtI32ToF32; break;
+        case COMBINE_OP_CAST(kTypeInt   , kTypeDouble): instCode = kIRInstIdCvtI32ToF64; break;
 
         default:
           return MPSL_TRACE_ERROR(kErrorInvalidState);
       }
     }
     else {
-      switch (COMBINE_OP_TYPE(op, typeId)) {
-        case COMBINE_OP_TYPE(kOpBitNeg  , kTypeInt   ): instCode = kIRInstBitNegI32; break;
-        case COMBINE_OP_TYPE(kOpBitNeg  , kTypeFloat ): instCode = kIRInstBitNegF32; break;
-        case COMBINE_OP_TYPE(kOpBitNeg  , kTypeDouble): instCode = kIRInstBitNegF64; break;
+      switch (COMBINE_OP_TYPE(op, typeInfo & kTypeIdMask)) {
+        case COMBINE_OP_TYPE(kOpBitNeg  , kTypeInt   ): instCode = kIRInstIdBitNegI32; break;
+        case COMBINE_OP_TYPE(kOpBitNeg  , kTypeFloat ): instCode = kIRInstIdBitNegF32; break;
+        case COMBINE_OP_TYPE(kOpBitNeg  , kTypeDouble): instCode = kIRInstIdBitNegF64; break;
 
-        case COMBINE_OP_TYPE(kOpNeg     , kTypeInt   ): instCode = kIRInstNegI32; break;
-        case COMBINE_OP_TYPE(kOpNeg     , kTypeFloat ): instCode = kIRInstNegF32; break;
-        case COMBINE_OP_TYPE(kOpNeg     , kTypeDouble): instCode = kIRInstNegF64; break;
+        case COMBINE_OP_TYPE(kOpNeg     , kTypeInt   ): instCode = kIRInstIdNegI32; break;
+        case COMBINE_OP_TYPE(kOpNeg     , kTypeFloat ): instCode = kIRInstIdNegF32; break;
+        case COMBINE_OP_TYPE(kOpNeg     , kTypeDouble): instCode = kIRInstIdNegF64; break;
 
-        case COMBINE_OP_TYPE(kOpNot     , kTypeInt   ): instCode = kIRInstNotI32; break;
-        case COMBINE_OP_TYPE(kOpNot     , kTypeFloat ): instCode = kIRInstNotF32; break;
-        case COMBINE_OP_TYPE(kOpNot     , kTypeDouble): instCode = kIRInstNotF64; break;
+        case COMBINE_OP_TYPE(kOpNot     , kTypeInt   ): instCode = kIRInstIdNotI32; break;
+        case COMBINE_OP_TYPE(kOpNot     , kTypeFloat ): instCode = kIRInstIdNotF32; break;
+        case COMBINE_OP_TYPE(kOpNot     , kTypeDouble): instCode = kIRInstIdNotF64; break;
 
-        case COMBINE_OP_TYPE(kOpIsNan   , kTypeFloat ): instCode = kIRInstIsNanF32; break;
-        case COMBINE_OP_TYPE(kOpIsNan   , kTypeDouble): instCode = kIRInstIsNanF64; break;
+        case COMBINE_OP_TYPE(kOpIsNan   , kTypeFloat ): instCode = kIRInstIdIsNanF32; break;
+        case COMBINE_OP_TYPE(kOpIsNan   , kTypeDouble): instCode = kIRInstIdIsNanF64; break;
 
-        case COMBINE_OP_TYPE(kOpIsInf   , kTypeFloat ): instCode = kIRInstIsInfF32; break;
-        case COMBINE_OP_TYPE(kOpIsInf   , kTypeDouble): instCode = kIRInstIsInfF64; break;
+        case COMBINE_OP_TYPE(kOpIsInf   , kTypeFloat ): instCode = kIRInstIdIsInfF32; break;
+        case COMBINE_OP_TYPE(kOpIsInf   , kTypeDouble): instCode = kIRInstIdIsInfF64; break;
 
-        case COMBINE_OP_TYPE(kOpIsFinite, kTypeFloat ): instCode = kIRInstIsFiniteF32; break;
-        case COMBINE_OP_TYPE(kOpIsFinite, kTypeDouble): instCode = kIRInstIsFiniteF64; break;
+        case COMBINE_OP_TYPE(kOpIsFinite, kTypeFloat ): instCode = kIRInstIdIsFiniteF32; break;
+        case COMBINE_OP_TYPE(kOpIsFinite, kTypeDouble): instCode = kIRInstIdIsFiniteF64; break;
 
-        case COMBINE_OP_TYPE(kOpSignBit , kTypeFloat ): instCode = kIRInstSignBitF32; break;
-        case COMBINE_OP_TYPE(kOpSignBit , kTypeDouble): instCode = kIRInstSignBitF64; break;
+        case COMBINE_OP_TYPE(kOpSignBit , kTypeFloat ): instCode = kIRInstIdSignBitF32; break;
+        case COMBINE_OP_TYPE(kOpSignBit , kTypeDouble): instCode = kIRInstIdSignBitF64; break;
 
-        case COMBINE_OP_TYPE(kOpFloor   , kTypeFloat ): instCode = kIRInstFloorF32; break;
-        case COMBINE_OP_TYPE(kOpFloor   , kTypeDouble): instCode = kIRInstFloorF64; break;
+        case COMBINE_OP_TYPE(kOpFloor   , kTypeFloat ): instCode = kIRInstIdFloorF32; break;
+        case COMBINE_OP_TYPE(kOpFloor   , kTypeDouble): instCode = kIRInstIdFloorF64; break;
 
-        case COMBINE_OP_TYPE(kOpRound   , kTypeFloat ): instCode = kIRInstRoundF32; break;
-        case COMBINE_OP_TYPE(kOpRound   , kTypeDouble): instCode = kIRInstRoundF64; break;
+        case COMBINE_OP_TYPE(kOpRound   , kTypeFloat ): instCode = kIRInstIdRoundF32; break;
+        case COMBINE_OP_TYPE(kOpRound   , kTypeDouble): instCode = kIRInstIdRoundF64; break;
 
-        case COMBINE_OP_TYPE(kOpCeil    , kTypeFloat ): instCode = kIRInstCeilF32; break;
-        case COMBINE_OP_TYPE(kOpCeil    , kTypeDouble): instCode = kIRInstCeilF64; break;
+        case COMBINE_OP_TYPE(kOpCeil    , kTypeFloat ): instCode = kIRInstIdCeilF32; break;
+        case COMBINE_OP_TYPE(kOpCeil    , kTypeDouble): instCode = kIRInstIdCeilF64; break;
 
-        case COMBINE_OP_TYPE(kOpAbs     , kTypeInt   ): instCode = kIRInstAbsI32; break;
-        case COMBINE_OP_TYPE(kOpAbs     , kTypeFloat ): instCode = kIRInstAbsF32; break;
-        case COMBINE_OP_TYPE(kOpAbs     , kTypeDouble): instCode = kIRInstAbsF64; break;
+        case COMBINE_OP_TYPE(kOpAbs     , kTypeInt   ): instCode = kIRInstIdAbsI32; break;
+        case COMBINE_OP_TYPE(kOpAbs     , kTypeFloat ): instCode = kIRInstIdAbsF32; break;
+        case COMBINE_OP_TYPE(kOpAbs     , kTypeDouble): instCode = kIRInstIdAbsF64; break;
 
-        case COMBINE_OP_TYPE(kOpExp     , kTypeFloat ): instCode = kIRInstExpF32; break;
-        case COMBINE_OP_TYPE(kOpExp     , kTypeDouble): instCode = kIRInstExpF64; break;
+        case COMBINE_OP_TYPE(kOpExp     , kTypeFloat ): instCode = kIRInstIdExpF32; break;
+        case COMBINE_OP_TYPE(kOpExp     , kTypeDouble): instCode = kIRInstIdExpF64; break;
 
-        case COMBINE_OP_TYPE(kOpLog     , kTypeFloat ): instCode = kIRInstLogF32; break;
-        case COMBINE_OP_TYPE(kOpLog     , kTypeDouble): instCode = kIRInstLogF64; break;
+        case COMBINE_OP_TYPE(kOpLog     , kTypeFloat ): instCode = kIRInstIdLogF32; break;
+        case COMBINE_OP_TYPE(kOpLog     , kTypeDouble): instCode = kIRInstIdLogF64; break;
 
-        case COMBINE_OP_TYPE(kOpLog2    , kTypeFloat ): instCode = kIRInstLog2F32; break;
-        case COMBINE_OP_TYPE(kOpLog2    , kTypeDouble): instCode = kIRInstLog2F64; break;
+        case COMBINE_OP_TYPE(kOpLog2    , kTypeFloat ): instCode = kIRInstIdLog2F32; break;
+        case COMBINE_OP_TYPE(kOpLog2    , kTypeDouble): instCode = kIRInstIdLog2F64; break;
 
-        case COMBINE_OP_TYPE(kOpLog10   , kTypeFloat ): instCode = kIRInstLog10F32; break;
-        case COMBINE_OP_TYPE(kOpLog10   , kTypeDouble): instCode = kIRInstLog10F64; break;
+        case COMBINE_OP_TYPE(kOpLog10   , kTypeFloat ): instCode = kIRInstIdLog10F32; break;
+        case COMBINE_OP_TYPE(kOpLog10   , kTypeDouble): instCode = kIRInstIdLog10F64; break;
 
-        case COMBINE_OP_TYPE(kOpSqrt    , kTypeFloat ): instCode = kIRInstSqrtF32; break;
-        case COMBINE_OP_TYPE(kOpSqrt    , kTypeDouble): instCode = kIRInstSqrtF64; break;
+        case COMBINE_OP_TYPE(kOpSqrt    , kTypeFloat ): instCode = kIRInstIdSqrtF32; break;
+        case COMBINE_OP_TYPE(kOpSqrt    , kTypeDouble): instCode = kIRInstIdSqrtF64; break;
 
-        case COMBINE_OP_TYPE(kOpSin     , kTypeFloat ): instCode = kIRInstSinF32; break;
-        case COMBINE_OP_TYPE(kOpSin     , kTypeDouble): instCode = kIRInstSinF64; break;
+        case COMBINE_OP_TYPE(kOpSin     , kTypeFloat ): instCode = kIRInstIdSinF32; break;
+        case COMBINE_OP_TYPE(kOpSin     , kTypeDouble): instCode = kIRInstIdSinF64; break;
 
-        case COMBINE_OP_TYPE(kOpCos     , kTypeFloat ): instCode = kIRInstCosF32; break;
-        case COMBINE_OP_TYPE(kOpCos     , kTypeDouble): instCode = kIRInstCosF64; break;
+        case COMBINE_OP_TYPE(kOpCos     , kTypeFloat ): instCode = kIRInstIdCosF32; break;
+        case COMBINE_OP_TYPE(kOpCos     , kTypeDouble): instCode = kIRInstIdCosF64; break;
 
-        case COMBINE_OP_TYPE(kOpTan     , kTypeFloat ): instCode = kIRInstTanF32; break;
-        case COMBINE_OP_TYPE(kOpTan     , kTypeDouble): instCode = kIRInstTanF64; break;
+        case COMBINE_OP_TYPE(kOpTan     , kTypeFloat ): instCode = kIRInstIdTanF32; break;
+        case COMBINE_OP_TYPE(kOpTan     , kTypeDouble): instCode = kIRInstIdTanF64; break;
 
-        case COMBINE_OP_TYPE(kOpAsin    , kTypeFloat ): instCode = kIRInstAsinF32; break;
-        case COMBINE_OP_TYPE(kOpAsin    , kTypeDouble): instCode = kIRInstAsinF64; break;
+        case COMBINE_OP_TYPE(kOpAsin    , kTypeFloat ): instCode = kIRInstIdAsinF32; break;
+        case COMBINE_OP_TYPE(kOpAsin    , kTypeDouble): instCode = kIRInstIdAsinF64; break;
 
-        case COMBINE_OP_TYPE(kOpAcos    , kTypeFloat ): instCode = kIRInstAcosF32; break;
-        case COMBINE_OP_TYPE(kOpAcos    , kTypeDouble): instCode = kIRInstAcosF64; break;
+        case COMBINE_OP_TYPE(kOpAcos    , kTypeFloat ): instCode = kIRInstIdAcosF32; break;
+        case COMBINE_OP_TYPE(kOpAcos    , kTypeDouble): instCode = kIRInstIdAcosF64; break;
 
-        case COMBINE_OP_TYPE(kOpAtan    , kTypeFloat ): instCode = kIRInstAtanF32; break;
-        case COMBINE_OP_TYPE(kOpAtan    , kTypeDouble): instCode = kIRInstAtanF64; break;
+        case COMBINE_OP_TYPE(kOpAtan    , kTypeFloat ): instCode = kIRInstIdAtanF32; break;
+        case COMBINE_OP_TYPE(kOpAtan    , kTypeDouble): instCode = kIRInstIdAtanF64; break;
 
         default:
           return MPSL_TRACE_ERROR(kErrorInvalidState);
       }
     }
 
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetIRFlags(typeId, vecLen), result, var));
-    setCurrentValue(result);
+    MPSL_PROPAGATE(newVar(out.result, typeInfo));
+    MPSL_PROPAGATE(emitInst2(instCode, out.result, tmp.result, typeInfo));
   }
 
   return kErrorOk;
 }
 
-Error AstToIR::onBinaryOp(AstBinaryOp* node) noexcept {
-  AstNode* lNode = node->getLeft();
-  AstNode* rNode = node->getRight();
-
-  if (MPSL_UNLIKELY(lNode == nullptr || rNode == nullptr))
+Error AstToIR::onBinaryOp(AstBinaryOp* node, Args& out) noexcept {
+  if (MPSL_UNLIKELY(!node->hasLeft() || !node->hasRight()))
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-  MPSL_PROPAGATE(onNode(lNode));
-  IRObject* lValue = getCurrentValue();
+  Args lValue(true);
+  Args rValue(true);
 
-  MPSL_PROPAGATE(onNode(rNode));
-  IRObject* rValue = getCurrentValue();
+  MPSL_PROPAGATE(onNode(node->getLeft(), lValue));
+  MPSL_PROPAGATE(onNode(node->getRight(), rValue));
 
   uint32_t op = node->getOp();
-  uint32_t typeId = node->getTypeInfo() & kTypeIdMask;
-  uint32_t vecLen = TypeInfo::getVectorSize(node->getTypeInfo());
+  uint32_t typeInfo = node->getTypeInfo();
+  uint32_t instCode = kIRInstIdNone;
 
-  uint32_t instCode = kIRInstNone;
-  switch (COMBINE_OP_TYPE(op, typeId)) {
-    case COMBINE_OP_TYPE(kOpEq          , kTypeInt   ): instCode = kIRInstCmpEqI32; break;
-    case COMBINE_OP_TYPE(kOpEq          , kTypeFloat ): instCode = kIRInstCmpEqF32; break;
-    case COMBINE_OP_TYPE(kOpEq          , kTypeDouble): instCode = kIRInstCmpEqF64; break;
+  switch (COMBINE_OP_TYPE(op, typeInfo & kTypeIdMask)) {
+    case COMBINE_OP_TYPE(kOpEq          , kTypeInt   ): instCode = kIRInstIdCmpEqI32; break;
+    case COMBINE_OP_TYPE(kOpEq          , kTypeFloat ): instCode = kIRInstIdCmpEqF32; break;
+    case COMBINE_OP_TYPE(kOpEq          , kTypeDouble): instCode = kIRInstIdCmpEqF64; break;
 
-    case COMBINE_OP_TYPE(kOpNe          , kTypeInt   ): instCode = kIRInstCmpNeI32; break;
-    case COMBINE_OP_TYPE(kOpNe          , kTypeFloat ): instCode = kIRInstCmpNeF32; break;
-    case COMBINE_OP_TYPE(kOpNe          , kTypeDouble): instCode = kIRInstCmpNeF64; break;
+    case COMBINE_OP_TYPE(kOpNe          , kTypeInt   ): instCode = kIRInstIdCmpNeI32; break;
+    case COMBINE_OP_TYPE(kOpNe          , kTypeFloat ): instCode = kIRInstIdCmpNeF32; break;
+    case COMBINE_OP_TYPE(kOpNe          , kTypeDouble): instCode = kIRInstIdCmpNeF64; break;
 
-    case COMBINE_OP_TYPE(kOpLt          , kTypeInt   ): instCode = kIRInstCmpLtI32; break;
-    case COMBINE_OP_TYPE(kOpLt          , kTypeFloat ): instCode = kIRInstCmpLtF32; break;
-    case COMBINE_OP_TYPE(kOpLt          , kTypeDouble): instCode = kIRInstCmpLtF64; break;
+    case COMBINE_OP_TYPE(kOpLt          , kTypeInt   ): instCode = kIRInstIdCmpLtI32; break;
+    case COMBINE_OP_TYPE(kOpLt          , kTypeFloat ): instCode = kIRInstIdCmpLtF32; break;
+    case COMBINE_OP_TYPE(kOpLt          , kTypeDouble): instCode = kIRInstIdCmpLtF64; break;
 
-    case COMBINE_OP_TYPE(kOpLe          , kTypeInt   ): instCode = kIRInstCmpLeI32; break;
-    case COMBINE_OP_TYPE(kOpLe          , kTypeFloat ): instCode = kIRInstCmpLeF32; break;
-    case COMBINE_OP_TYPE(kOpLe          , kTypeDouble): instCode = kIRInstCmpLeF64; break;
+    case COMBINE_OP_TYPE(kOpLe          , kTypeInt   ): instCode = kIRInstIdCmpLeI32; break;
+    case COMBINE_OP_TYPE(kOpLe          , kTypeFloat ): instCode = kIRInstIdCmpLeF32; break;
+    case COMBINE_OP_TYPE(kOpLe          , kTypeDouble): instCode = kIRInstIdCmpLeF64; break;
 
-    case COMBINE_OP_TYPE(kOpGt          , kTypeInt   ): instCode = kIRInstCmpGtI32; break;
-    case COMBINE_OP_TYPE(kOpGt          , kTypeFloat ): instCode = kIRInstCmpGtF32; break;
-    case COMBINE_OP_TYPE(kOpGt          , kTypeDouble): instCode = kIRInstCmpGtF64; break;
+    case COMBINE_OP_TYPE(kOpGt          , kTypeInt   ): instCode = kIRInstIdCmpGtI32; break;
+    case COMBINE_OP_TYPE(kOpGt          , kTypeFloat ): instCode = kIRInstIdCmpGtF32; break;
+    case COMBINE_OP_TYPE(kOpGt          , kTypeDouble): instCode = kIRInstIdCmpGtF64; break;
 
-    case COMBINE_OP_TYPE(kOpGe          , kTypeInt   ): instCode = kIRInstCmpGeI32; break;
-    case COMBINE_OP_TYPE(kOpGe          , kTypeFloat ): instCode = kIRInstCmpGeF32; break;
-    case COMBINE_OP_TYPE(kOpGe          , kTypeDouble): instCode = kIRInstCmpGeF64; break;
+    case COMBINE_OP_TYPE(kOpGe          , kTypeInt   ): instCode = kIRInstIdCmpGeI32; break;
+    case COMBINE_OP_TYPE(kOpGe          , kTypeFloat ): instCode = kIRInstIdCmpGeF32; break;
+    case COMBINE_OP_TYPE(kOpGe          , kTypeDouble): instCode = kIRInstIdCmpGeF64; break;
 
-    case COMBINE_OP_TYPE(kOpAdd         , kTypeInt   ): instCode = kIRInstAddI32; break;
-    case COMBINE_OP_TYPE(kOpAdd         , kTypeFloat ): instCode = kIRInstAddF32; break;
-    case COMBINE_OP_TYPE(kOpAdd         , kTypeDouble): instCode = kIRInstAddF64; break;
+    case COMBINE_OP_TYPE(kOpAdd         , kTypeInt   ): instCode = kIRInstIdAddI32; break;
+    case COMBINE_OP_TYPE(kOpAdd         , kTypeFloat ): instCode = kIRInstIdAddF32; break;
+    case COMBINE_OP_TYPE(kOpAdd         , kTypeDouble): instCode = kIRInstIdAddF64; break;
 
-    case COMBINE_OP_TYPE(kOpSub         , kTypeInt   ): instCode = kIRInstSubI32; break;
-    case COMBINE_OP_TYPE(kOpSub         , kTypeFloat ): instCode = kIRInstSubF32; break;
-    case COMBINE_OP_TYPE(kOpSub         , kTypeDouble): instCode = kIRInstSubF64; break;
+    case COMBINE_OP_TYPE(kOpSub         , kTypeInt   ): instCode = kIRInstIdSubI32; break;
+    case COMBINE_OP_TYPE(kOpSub         , kTypeFloat ): instCode = kIRInstIdSubF32; break;
+    case COMBINE_OP_TYPE(kOpSub         , kTypeDouble): instCode = kIRInstIdSubF64; break;
 
-    case COMBINE_OP_TYPE(kOpMul         , kTypeInt   ): instCode = kIRInstMulI32; break;
-    case COMBINE_OP_TYPE(kOpMul         , kTypeFloat ): instCode = kIRInstMulF32; break;
-    case COMBINE_OP_TYPE(kOpMul         , kTypeDouble): instCode = kIRInstMulF64; break;
+    case COMBINE_OP_TYPE(kOpMul         , kTypeInt   ): instCode = kIRInstIdMulI32; break;
+    case COMBINE_OP_TYPE(kOpMul         , kTypeFloat ): instCode = kIRInstIdMulF32; break;
+    case COMBINE_OP_TYPE(kOpMul         , kTypeDouble): instCode = kIRInstIdMulF64; break;
 
-    case COMBINE_OP_TYPE(kOpDiv         , kTypeInt   ): instCode = kIRInstDivI32; break;
-    case COMBINE_OP_TYPE(kOpDiv         , kTypeFloat ): instCode = kIRInstDivF32; break;
-    case COMBINE_OP_TYPE(kOpDiv         , kTypeDouble): instCode = kIRInstDivF64; break;
+    case COMBINE_OP_TYPE(kOpDiv         , kTypeInt   ): instCode = kIRInstIdDivI32; break;
+    case COMBINE_OP_TYPE(kOpDiv         , kTypeFloat ): instCode = kIRInstIdDivF32; break;
+    case COMBINE_OP_TYPE(kOpDiv         , kTypeDouble): instCode = kIRInstIdDivF64; break;
 
-    case COMBINE_OP_TYPE(kOpMod         , kTypeInt   ): instCode = kIRInstModI32; break;
-    case COMBINE_OP_TYPE(kOpMod         , kTypeFloat ): instCode = kIRInstModF32; break;
-    case COMBINE_OP_TYPE(kOpMod         , kTypeDouble): instCode = kIRInstModF64; break;
+    case COMBINE_OP_TYPE(kOpMod         , kTypeInt   ): instCode = kIRInstIdModI32; break;
+    case COMBINE_OP_TYPE(kOpMod         , kTypeFloat ): instCode = kIRInstIdModF32; break;
+    case COMBINE_OP_TYPE(kOpMod         , kTypeDouble): instCode = kIRInstIdModF64; break;
 
-    case COMBINE_OP_TYPE(kOpBitAnd      , kTypeInt   ): instCode = kIRInstAndI32; break;
-    case COMBINE_OP_TYPE(kOpBitAnd      , kTypeFloat ): instCode = kIRInstAndF32; break;
-    case COMBINE_OP_TYPE(kOpBitAnd      , kTypeDouble): instCode = kIRInstAndF64; break;
+    case COMBINE_OP_TYPE(kOpBitAnd      , kTypeInt   ): instCode = kIRInstIdAndI32; break;
+    case COMBINE_OP_TYPE(kOpBitAnd      , kTypeFloat ): instCode = kIRInstIdAndF32; break;
+    case COMBINE_OP_TYPE(kOpBitAnd      , kTypeDouble): instCode = kIRInstIdAndF64; break;
 
-    case COMBINE_OP_TYPE(kOpBitOr       , kTypeInt   ): instCode = kIRInstOrI32; break;
-    case COMBINE_OP_TYPE(kOpBitOr       , kTypeFloat ): instCode = kIRInstOrF32; break;
-    case COMBINE_OP_TYPE(kOpBitOr       , kTypeDouble): instCode = kIRInstOrF64; break;
+    case COMBINE_OP_TYPE(kOpBitOr       , kTypeInt   ): instCode = kIRInstIdOrI32; break;
+    case COMBINE_OP_TYPE(kOpBitOr       , kTypeFloat ): instCode = kIRInstIdOrF32; break;
+    case COMBINE_OP_TYPE(kOpBitOr       , kTypeDouble): instCode = kIRInstIdOrF64; break;
 
-    case COMBINE_OP_TYPE(kOpBitXor      , kTypeInt   ): instCode = kIRInstXorI32; break;
-    case COMBINE_OP_TYPE(kOpBitXor      , kTypeFloat ): instCode = kIRInstXorF32; break;
-    case COMBINE_OP_TYPE(kOpBitXor      , kTypeDouble): instCode = kIRInstXorF64; break;
+    case COMBINE_OP_TYPE(kOpBitXor      , kTypeInt   ): instCode = kIRInstIdXorI32; break;
+    case COMBINE_OP_TYPE(kOpBitXor      , kTypeFloat ): instCode = kIRInstIdXorF32; break;
+    case COMBINE_OP_TYPE(kOpBitXor      , kTypeDouble): instCode = kIRInstIdXorF64; break;
 
-    case COMBINE_OP_TYPE(kOpBitSar      , kTypeInt   ): instCode = kIRInstSarI32; break;
-    case COMBINE_OP_TYPE(kOpBitShr      , kTypeInt   ): instCode = kIRInstShrI32; break;
-    case COMBINE_OP_TYPE(kOpBitShl      , kTypeInt   ): instCode = kIRInstShlI32; break;
-    case COMBINE_OP_TYPE(kOpBitRor      , kTypeInt   ): instCode = kIRInstRorI32; break;
-    case COMBINE_OP_TYPE(kOpBitRol      , kTypeInt   ): instCode = kIRInstRolI32; break;
+    case COMBINE_OP_TYPE(kOpBitSar      , kTypeInt   ): instCode = kIRInstIdSarI32; break;
+    case COMBINE_OP_TYPE(kOpBitShr      , kTypeInt   ): instCode = kIRInstIdShrI32; break;
+    case COMBINE_OP_TYPE(kOpBitShl      , kTypeInt   ): instCode = kIRInstIdShlI32; break;
+    case COMBINE_OP_TYPE(kOpBitRor      , kTypeInt   ): instCode = kIRInstIdRorI32; break;
+    case COMBINE_OP_TYPE(kOpBitRol      , kTypeInt   ): instCode = kIRInstIdRolI32; break;
 
-    case COMBINE_OP_TYPE(kOpMin         , kTypeInt   ): instCode = kIRInstMinI32; break;
-    case COMBINE_OP_TYPE(kOpMin         , kTypeFloat ): instCode = kIRInstMinF32; break;
-    case COMBINE_OP_TYPE(kOpMin         , kTypeDouble): instCode = kIRInstMinF64; break;
+    case COMBINE_OP_TYPE(kOpMin         , kTypeInt   ): instCode = kIRInstIdMinI32; break;
+    case COMBINE_OP_TYPE(kOpMin         , kTypeFloat ): instCode = kIRInstIdMinF32; break;
+    case COMBINE_OP_TYPE(kOpMin         , kTypeDouble): instCode = kIRInstIdMinF64; break;
 
-    case COMBINE_OP_TYPE(kOpMax         , kTypeInt   ): instCode = kIRInstMaxI32; break;
-    case COMBINE_OP_TYPE(kOpMax         , kTypeFloat ): instCode = kIRInstMaxF32; break;
-    case COMBINE_OP_TYPE(kOpMax         , kTypeDouble): instCode = kIRInstMaxF64; break;
+    case COMBINE_OP_TYPE(kOpMax         , kTypeInt   ): instCode = kIRInstIdMaxI32; break;
+    case COMBINE_OP_TYPE(kOpMax         , kTypeFloat ): instCode = kIRInstIdMaxF32; break;
+    case COMBINE_OP_TYPE(kOpMax         , kTypeDouble): instCode = kIRInstIdMaxF64; break;
 
-    case COMBINE_OP_TYPE(kOpPow         , kTypeFloat ): instCode = kIRInstPowF32; break;
-    case COMBINE_OP_TYPE(kOpPow         , kTypeDouble): instCode = kIRInstPowF64; break;
+    case COMBINE_OP_TYPE(kOpPow         , kTypeFloat ): instCode = kIRInstIdPowF32; break;
+    case COMBINE_OP_TYPE(kOpPow         , kTypeDouble): instCode = kIRInstIdPowF64; break;
 
-    case COMBINE_OP_TYPE(kOpAtan2       , kTypeFloat ): instCode = kIRInstAtan2F32; break;
-    case COMBINE_OP_TYPE(kOpAtan2       , kTypeDouble): instCode = kIRInstAtan2F64; break;
+    case COMBINE_OP_TYPE(kOpAtan2       , kTypeFloat ): instCode = kIRInstIdAtan2F32; break;
+    case COMBINE_OP_TYPE(kOpAtan2       , kTypeDouble): instCode = kIRInstIdAtan2F64; break;
 
-    case COMBINE_OP_TYPE(kOpCopySign    , kTypeFloat ): instCode = kIRInstCopySignF32; break;
-    case COMBINE_OP_TYPE(kOpCopySign    , kTypeDouble): instCode = kIRInstCopySignF64; break;
+    case COMBINE_OP_TYPE(kOpCopySign    , kTypeFloat ): instCode = kIRInstIdCopySignF32; break;
+    case COMBINE_OP_TYPE(kOpCopySign    , kTypeDouble): instCode = kIRInstIdCopySignF64; break;
 
     case COMBINE_OP_TYPE(kOpAssign      , kTypeInt   ): break;
     case COMBINE_OP_TYPE(kOpAssign      , kTypeFloat ): break;
     case COMBINE_OP_TYPE(kOpAssign      , kTypeDouble): break;
 
-    case COMBINE_OP_TYPE(kOpAssignAdd   , kTypeInt   ): instCode = kIRInstAddI32; break;
-    case COMBINE_OP_TYPE(kOpAssignAdd   , kTypeFloat ): instCode = kIRInstAddF32; break;
-    case COMBINE_OP_TYPE(kOpAssignAdd   , kTypeDouble): instCode = kIRInstAddF64; break;
+    case COMBINE_OP_TYPE(kOpAssignAdd   , kTypeInt   ): instCode = kIRInstIdAddI32; break;
+    case COMBINE_OP_TYPE(kOpAssignAdd   , kTypeFloat ): instCode = kIRInstIdAddF32; break;
+    case COMBINE_OP_TYPE(kOpAssignAdd   , kTypeDouble): instCode = kIRInstIdAddF64; break;
 
-    case COMBINE_OP_TYPE(kOpAssignSub   , kTypeInt   ): instCode = kIRInstSubI32; break;
-    case COMBINE_OP_TYPE(kOpAssignSub   , kTypeFloat ): instCode = kIRInstSubF32; break;
-    case COMBINE_OP_TYPE(kOpAssignSub   , kTypeDouble): instCode = kIRInstSubF64; break;
+    case COMBINE_OP_TYPE(kOpAssignSub   , kTypeInt   ): instCode = kIRInstIdSubI32; break;
+    case COMBINE_OP_TYPE(kOpAssignSub   , kTypeFloat ): instCode = kIRInstIdSubF32; break;
+    case COMBINE_OP_TYPE(kOpAssignSub   , kTypeDouble): instCode = kIRInstIdSubF64; break;
 
-    case COMBINE_OP_TYPE(kOpAssignMul   , kTypeInt   ): instCode = kIRInstMulI32; break;
-    case COMBINE_OP_TYPE(kOpAssignMul   , kTypeFloat ): instCode = kIRInstMulF32; break;
-    case COMBINE_OP_TYPE(kOpAssignMul   , kTypeDouble): instCode = kIRInstMulF64; break;
+    case COMBINE_OP_TYPE(kOpAssignMul   , kTypeInt   ): instCode = kIRInstIdMulI32; break;
+    case COMBINE_OP_TYPE(kOpAssignMul   , kTypeFloat ): instCode = kIRInstIdMulF32; break;
+    case COMBINE_OP_TYPE(kOpAssignMul   , kTypeDouble): instCode = kIRInstIdMulF64; break;
 
-    case COMBINE_OP_TYPE(kOpAssignDiv   , kTypeInt   ): instCode = kIRInstDivI32; break;
-    case COMBINE_OP_TYPE(kOpAssignDiv   , kTypeFloat ): instCode = kIRInstDivF32; break;
-    case COMBINE_OP_TYPE(kOpAssignDiv   , kTypeDouble): instCode = kIRInstDivF64; break;
+    case COMBINE_OP_TYPE(kOpAssignDiv   , kTypeInt   ): instCode = kIRInstIdDivI32; break;
+    case COMBINE_OP_TYPE(kOpAssignDiv   , kTypeFloat ): instCode = kIRInstIdDivF32; break;
+    case COMBINE_OP_TYPE(kOpAssignDiv   , kTypeDouble): instCode = kIRInstIdDivF64; break;
 
-    case COMBINE_OP_TYPE(kOpAssignMod   , kTypeInt   ): instCode = kIRInstModI32; break;
-    case COMBINE_OP_TYPE(kOpAssignMod   , kTypeFloat ): instCode = kIRInstModF32; break;
-    case COMBINE_OP_TYPE(kOpAssignMod   , kTypeDouble): instCode = kIRInstModF64; break;
+    case COMBINE_OP_TYPE(kOpAssignMod   , kTypeInt   ): instCode = kIRInstIdModI32; break;
+    case COMBINE_OP_TYPE(kOpAssignMod   , kTypeFloat ): instCode = kIRInstIdModF32; break;
+    case COMBINE_OP_TYPE(kOpAssignMod   , kTypeDouble): instCode = kIRInstIdModF64; break;
 
-    case COMBINE_OP_TYPE(kOpAssignBitAnd, kTypeInt   ): instCode = kIRInstAndI32; break;
-    case COMBINE_OP_TYPE(kOpAssignBitAnd, kTypeFloat ): instCode = kIRInstAndF32; break;
-    case COMBINE_OP_TYPE(kOpAssignBitAnd, kTypeDouble): instCode = kIRInstAndF64; break;
+    case COMBINE_OP_TYPE(kOpAssignBitAnd, kTypeInt   ): instCode = kIRInstIdAndI32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitAnd, kTypeFloat ): instCode = kIRInstIdAndF32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitAnd, kTypeDouble): instCode = kIRInstIdAndF64; break;
 
-    case COMBINE_OP_TYPE(kOpAssignBitOr , kTypeInt   ): instCode = kIRInstOrI32; break;
-    case COMBINE_OP_TYPE(kOpAssignBitOr , kTypeFloat ): instCode = kIRInstOrF32; break;
-    case COMBINE_OP_TYPE(kOpAssignBitOr , kTypeDouble): instCode = kIRInstOrF64; break;
+    case COMBINE_OP_TYPE(kOpAssignBitOr , kTypeInt   ): instCode = kIRInstIdOrI32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitOr , kTypeFloat ): instCode = kIRInstIdOrF32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitOr , kTypeDouble): instCode = kIRInstIdOrF64; break;
 
-    case COMBINE_OP_TYPE(kOpAssignBitXor, kTypeInt   ): instCode = kIRInstXorI32; break;
-    case COMBINE_OP_TYPE(kOpAssignBitXor, kTypeFloat ): instCode = kIRInstXorF32; break;
-    case COMBINE_OP_TYPE(kOpAssignBitXor, kTypeDouble): instCode = kIRInstXorF64; break;
+    case COMBINE_OP_TYPE(kOpAssignBitXor, kTypeInt   ): instCode = kIRInstIdXorI32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitXor, kTypeFloat ): instCode = kIRInstIdXorF32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitXor, kTypeDouble): instCode = kIRInstIdXorF64; break;
 
-    case COMBINE_OP_TYPE(kOpAssignBitSar, kTypeInt   ): instCode = kIRInstSarI32; break;
-    case COMBINE_OP_TYPE(kOpAssignBitShr, kTypeInt   ): instCode = kIRInstShrI32; break;
-    case COMBINE_OP_TYPE(kOpAssignBitShl, kTypeInt   ): instCode = kIRInstShlI32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitSar, kTypeInt   ): instCode = kIRInstIdSarI32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitShr, kTypeInt   ): instCode = kIRInstIdShrI32; break;
+    case COMBINE_OP_TYPE(kOpAssignBitShl, kTypeInt   ): instCode = kIRInstIdShlI32; break;
 
     default:
       return MPSL_TRACE_ERROR(kErrorInvalidState);
   }
 
-  IRVar* result = getIR()->newVarByTypeInfo(node->getTypeInfo());
-  MPSL_NULLCHECK(result);
-
-  IRVar* lVar = nullptr;
-  IRVar* rVar = nullptr;
+  IRPair<IRVar> result, lVar, rVar;
+  MPSL_PROPAGATE(newVar(result, typeInfo));
 
   if (OpInfo::get(op).isAssignment()) {
     if (op == kOpAssign) {
-      MPSL_PROPAGATE(requireVar(&rVar, rValue, node->getTypeInfo()));
+      MPSL_PROPAGATE(asVar(rVar, rValue.result, typeInfo));
 
-      if (lValue->isMem())
-        MPSL_PROPAGATE(emitStoreX(static_cast<IRMem*>(lValue), rVar, node->getTypeInfo()));
+      if (lValue.result.lo->isMem())
+        MPSL_PROPAGATE(emitStore(lValue.result, rVar, typeInfo));
       else
-        MPSL_PROPAGATE(getIR()->emitMove(getCurrentBlock(), lVar, rVar));
+        MPSL_PROPAGATE(emitMove(lVar, rVar, typeInfo));
 
-      MPSL_PROPAGATE(getIR()->emitMove(getCurrentBlock(), result, rVar));
-      setCurrentValue(result);
+      if (out.dependsOnResult) {
+        MPSL_PROPAGATE(emitMove(result, rVar, typeInfo));
+        out.result.set(result);
+      }
     }
     else {
-      MPSL_PROPAGATE(requireVar(&lVar, lValue, node->getTypeInfo()));
-      MPSL_PROPAGATE(requireVar(&rVar, rValue, node->getTypeInfo()));
-      MPSL_PROPAGATE(getIR()->emitInst(getCurrentBlock(), instCode | mpGetIRFlags(typeId, vecLen), lVar, lVar, rVar));
+      MPSL_PROPAGATE(asVar(lVar, lValue.result, typeInfo));
+      MPSL_PROPAGATE(asVar(rVar, rValue.result, typeInfo));
+      MPSL_PROPAGATE(emitInst3(instCode, lVar, lVar, rVar, typeInfo));
 
-      if (lValue->isMem()) {
-        MPSL_PROPAGATE(emitStoreX(static_cast<IRMem*>(lValue), lVar, node->getTypeInfo()));
-        setCurrentValue(lVar);
+      if (lValue.result.lo->isMem()) {
+        MPSL_PROPAGATE(emitStore(lValue.result, lVar, typeInfo));
+        out.result.set(lVar);
       }
       else {
-        MPSL_PROPAGATE(getIR()->emitMove(getCurrentBlock(), result, lVar));
-        setCurrentValue(result);
+        MPSL_PROPAGATE(emitMove(result, lVar, typeInfo));
+        out.result.set(result);
       }
     }
   }
   else {
-    MPSL_PROPAGATE(requireVar(&lVar, lValue, node->getTypeInfo()));
-    MPSL_PROPAGATE(requireVar(&rVar, rValue, node->getTypeInfo()));
-    MPSL_PROPAGATE(getIR()->emitInst(getCurrentBlock(), instCode | mpGetIRFlags(typeId, vecLen), result, lVar, rVar));
-    setCurrentValue(result);
+    MPSL_PROPAGATE(asVar(lVar, lValue.result, typeInfo));
+    MPSL_PROPAGATE(asVar(rVar, rValue.result, typeInfo));
+    MPSL_PROPAGATE(emitInst3(instCode, result, lVar, rVar, typeInfo));
+    out.result.set(result);
   }
 
   return kErrorOk;
@@ -597,7 +627,7 @@ Error AstToIR::onBinaryOp(AstBinaryOp* node) noexcept {
 #undef COMBINE_OP_TYPE
 #undef COMBINE_OP_CAST
 
-Error AstToIR::onCall(AstCall* node) noexcept {
+Error AstToIR::onCall(AstCall* node, Args& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
@@ -607,155 +637,299 @@ Error AstToIR::onCall(AstCall* node) noexcept {
 // [mpsl::AstToIR - Utilities]
 // ============================================================================
 
-Error AstToIR::mapVarToAst(AstSymbol* sym, IRVar* var) noexcept {
-  MPSL_ASSERT(_varMap.get(sym) == nullptr);
+Error AstToIR::mapVarToAst(AstSymbol* sym, IRPair<IRVar> var) noexcept {
+  MPSL_ASSERT(_varMap.has(sym));
   return _varMap.put(sym, var);
 }
 
-Error AstToIR::requireVar(IRVar** varOut, IRObject* any, uint32_t typeInfo) noexcept {
-  switch (any->getObjectType()) {
-    case kIRObjectVar: {
-      *varOut = static_cast<IRVar*>(any);
-      return kErrorOk;
+Error AstToIR::newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept {
+  uint32_t width = TypeInfo::widthOf(typeInfo);
+
+  IRVar* lo = nullptr;
+  IRVar* hi = nullptr;
+
+  if (needSplit(width)) {
+    uint32_t loTI, hiTI;
+    mpSplitTypeInfo(loTI, hiTI, typeInfo);
+
+    lo = getIR()->newVarByTypeInfo(loTI);
+    MPSL_NULLCHECK(lo);
+    hi = getIR()->newVarByTypeInfo(hiTI);
+    MPSL_NULLCHECK(hi);
+  }
+  else {
+    lo = getIR()->newVarByTypeInfo(typeInfo);
+    MPSL_NULLCHECK(lo);
+  }
+
+  return dst.set(lo, hi);
+}
+
+Error AstToIR::newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeInfo) noexcept {
+  uint32_t width = TypeInfo::widthOf(typeInfo);
+  if (width > 16 && !hasV256()) {
+    uint32_t loTI, hiTI;
+    mpSplitTypeInfo(loTI, hiTI, typeInfo);
+
+    if (mpIsValueLoHiEqual(value)) {
+      IRImm* imm = getIR()->newImmByTypeInfo(value, loTI);
+      MPSL_NULLCHECK(imm);
+      return dst.set(imm, imm);
+    }
+    else {
+      Value loVal, hiVal;
+      loVal.q.set(value.q[0], value.q[1], 0, 0);
+      hiVal.q.set(value.q[2], value.q[3], 0, 0);
+
+      IRImm* loImm = getIR()->newImmByTypeInfo(loVal, loTI);
+      MPSL_NULLCHECK(loImm);
+
+      IRImm* hiImm = getIR()->newImmByTypeInfo(hiVal, hiTI);
+      MPSL_NULLCHECK(hiImm);
+
+      return dst.set(loImm, hiImm);
+    }
+  }
+  else {
+    IRImm* imm = getIR()->newImmByTypeInfo(value, typeInfo);
+    MPSL_NULLCHECK(imm);
+    return dst.set(imm, nullptr);
+  }
+}
+
+Error AstToIR::addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) noexcept {
+  IRVar* base = getIR()->getDataPtr(data.slot);
+
+  IRMem* lo = nullptr;
+  IRMem* hi = nullptr;
+
+  if (width > 16 && !hasV256()) {
+    lo = getIR()->newMem(base, nullptr, data.offset);
+    hi = getIR()->newMem(base, nullptr, data.offset + 16);
+
+    MPSL_NULLCHECK(lo);
+    MPSL_NULLCHECK(hi);
+  }
+  else {
+    lo = getIR()->newMem(base, nullptr, data.offset);
+    MPSL_NULLCHECK(lo);
+  }
+
+  dst.set(lo, hi);
+  return kErrorOk;
+}
+
+Error AstToIR::asVar(IRPair<IRVar>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept {
+  if (in.lo == nullptr && in.hi == nullptr)
+    return out.set(nullptr, nullptr);
+
+  uint32_t ti[2] = { typeInfo, kTypeVoid };
+  uint32_t width = TypeInfo::widthOf(typeInfo);
+
+  if (width > 16 && !hasV256())
+    mpSplitTypeInfo(ti[0], ti[1], typeInfo);
+
+  for (uint32_t i = 0; i < 2; i++) {
+    IRObject* inObj = in.obj[i];
+
+    if (!inObj) {
+      out.obj[i] = nullptr;
+      continue;
     }
 
-    case kIRObjectMem: {
-      IRMem* mem = static_cast<IRMem*>(any);
-      IRVar* var = getIR()->newVarByTypeInfo(typeInfo);
+    switch (inObj->getObjectType()) {
+      case kIRObjectVar: {
+        out.obj[i] = static_cast<IRVar*>(inObj);
+        break;
+      }
 
-      MPSL_NULLCHECK(var);
-      MPSL_PROPAGATE(emitFetchX(var, mem, typeInfo));
+      case kIRObjectMem: {
+        typeInfo = ti[i];
 
-      *varOut = var;
-      return kErrorOk;
+        IRMem* mem = static_cast<IRMem*>(inObj);
+        IRVar* var = getIR()->newVarByTypeInfo(typeInfo);
+
+        MPSL_NULLCHECK(var);
+        MPSL_PROPAGATE(emitFetchX(var, mem, typeInfo));
+
+        out.obj[i] = var;
+        break;
+      }
+
+      case kIRObjectImm: {
+        IRImm* imm = static_cast<IRImm*>(inObj);
+        IRVar* var = getIR()->newVarByTypeInfo(typeInfo);
+
+        MPSL_NULLCHECK(var);
+        MPSL_PROPAGATE(getIR()->emitFetch(getBlock(), var, imm));
+
+        out.obj[i] = var;
+        break;
+      }
+
     }
+  }
 
-    case kIRObjectImm: {
-      IRImm* imm = static_cast<IRImm*>(any);
-      IRVar* var = getIR()->newVar(imm->getReg(), imm->getWidth());
+  return kErrorOk;
+}
 
-      MPSL_NULLCHECK(var);
-      MPSL_PROPAGATE(getIR()->emitFetch(getCurrentBlock(), var, imm));
+Error AstToIR::emitMove(IRPair<IRVar> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept {
+  uint32_t width = TypeInfo::widthOf(typeInfo);
+  IRBlock* block = getBlock();
 
-      *varOut = var;
-      return kErrorOk;
-    }
+  if (dst.lo) MPSL_PROPAGATE(getIR()->emitMove(block, dst.lo, src.lo));
+  if (dst.hi) MPSL_PROPAGATE(getIR()->emitMove(block, dst.hi, src.hi));
 
-    default:
-      return MPSL_TRACE_ERROR(kErrorInvalidState);
+  return kErrorOk;
+}
+
+Error AstToIR::emitStore(IRPair<IRObject> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept {
+  uint32_t width = TypeInfo::widthOf(typeInfo);
+
+  if (needSplit(width)) {
+    uint32_t loTI, hiTI;
+    mpSplitTypeInfo(loTI, hiTI, typeInfo);
+
+    if (src.lo) MPSL_PROPAGATE(emitStoreX(static_cast<IRMem*>(dst.lo), src.lo, loTI));
+    if (src.hi) MPSL_PROPAGATE(emitStoreX(static_cast<IRMem*>(dst.hi), src.hi, hiTI));
+
+    return kErrorOk;
+  }
+  else {
+    return emitStoreX(static_cast<IRMem*>(dst.lo), src.lo, typeInfo);
+  }
+}
+
+Error AstToIR::emitInst2(uint32_t instCode,
+  IRPair<IRObject> o0,
+  IRPair<IRObject> o1, uint32_t typeInfo) noexcept {
+
+  uint32_t width = TypeInfo::widthOf(typeInfo);
+  IRBlock* block = getBlock();
+
+  if (needSplit(width)) {
+    uint32_t loTI, hiTI;
+    mpSplitTypeInfo(loTI, hiTI, typeInfo);
+
+    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetIRInstFlags(loTI), o0.lo, o1.lo));
+    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetIRInstFlags(hiTI), o0.hi, o1.hi));
+    return kErrorOk;
+  }
+  else {
+    return getIR()->emitInst(block, instCode | mpGetIRInstFlags(typeInfo), o0.lo, o1.lo);
+  }
+}
+
+Error AstToIR::emitInst3(uint32_t instCode,
+  IRPair<IRObject> o0,
+  IRPair<IRObject> o1,
+  IRPair<IRObject> o2, uint32_t typeInfo) noexcept {
+
+  uint32_t width = TypeInfo::widthOf(typeInfo);
+  IRBlock* block = getBlock();
+
+  if (needSplit(width)) {
+    uint32_t loTI, hiTI;
+    mpSplitTypeInfo(loTI, hiTI, typeInfo);
+
+    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetIRInstFlags(loTI), o0.lo, o1.lo, o2.lo));
+    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetIRInstFlags(hiTI), o0.hi, o1.hi, o2.hi));
+    return kErrorOk;
+  }
+  else {
+    return getIR()->emitInst(block, instCode | mpGetIRInstFlags(typeInfo), o0.lo, o1.lo, o2.lo);
   }
 }
 
 Error AstToIR::emitFetchX(IRVar* dst, IRMem* src, uint32_t typeInfo) noexcept {
-  uint32_t instCode = kIRInstNone;
+  uint32_t instCode = kIRInstIdNone;
   bool odd = (typeInfo & kTypeVec3) != 0;
 
   switch (typeInfo & (kTypeIdMask | kTypeVecMask)) {
-    case kTypeInt     : instCode = kIRInstFetch32; break;
-    case kTypeInt_1   : instCode = kIRInstFetch32; break;
-    case kTypeInt_2   : instCode = kIRInstFetch64; break;
-    case kTypeInt_3   : instCode = kIRInstFetch64; break;
-    case kTypeInt_4   : instCode = kIRInstFetch128; break;
+    case kTypeBool   : instCode = kIRInstIdFetch32; break;
+    case kTypeBool1  : instCode = kIRInstIdFetch32; break;
+    case kTypeBool2  : instCode = kIRInstIdFetch64; break;
+    case kTypeBool3  : instCode = kIRInstIdFetch96; break;
+    case kTypeBool4  : instCode = kIRInstIdFetch128; break;
+    case kTypeBool8  : instCode = kIRInstIdFetch256; break;
 
-    case kTypeFloat   : instCode = kIRInstFetch32; break;
-    case kTypeFloat_1 : instCode = kIRInstFetch32; break;
-    case kTypeFloat_2 : instCode = kIRInstFetch64; break;
-    case kTypeFloat_3 : instCode = kIRInstFetch64; break;
-    case kTypeFloat_4 : instCode = kIRInstFetch128; break;
+    case kTypeInt    : instCode = kIRInstIdFetch32; break;
+    case kTypeInt1   : instCode = kIRInstIdFetch32; break;
+    case kTypeInt2   : instCode = kIRInstIdFetch64; break;
+    case kTypeInt3   : instCode = kIRInstIdFetch96; break;
+    case kTypeInt4   : instCode = kIRInstIdFetch128; break;
+    case kTypeInt8   : instCode = kIRInstIdFetch256; break;
 
-    case kTypeDouble  : instCode = kIRInstFetch64; break;
-    case kTypeDouble_1: instCode = kIRInstFetch64; break;
-    case kTypeDouble_2: instCode = kIRInstFetch128; break;
-    case kTypeDouble_3: instCode = kIRInstFetch128; break;
-    case kTypeDouble_4: instCode = kIRInstFetch256; break;
+    case kTypeFloat  : instCode = kIRInstIdFetch32; break;
+    case kTypeFloat1 : instCode = kIRInstIdFetch32; break;
+    case kTypeFloat2 : instCode = kIRInstIdFetch64; break;
+    case kTypeFloat3 : instCode = kIRInstIdFetch96; break;
+    case kTypeFloat4 : instCode = kIRInstIdFetch128; break;
+    case kTypeFloat8 : instCode = kIRInstIdFetch256; break;
+
+    case kTypeQBool  : instCode = kIRInstIdFetch64; break;
+    case kTypeQBool1 : instCode = kIRInstIdFetch64; break;
+    case kTypeQBool2 : instCode = kIRInstIdFetch128; break;
+    case kTypeQBool3 : instCode = kIRInstIdFetch192; break;
+    case kTypeQBool4 : instCode = kIRInstIdFetch256; break;
+
+    case kTypeDouble : instCode = kIRInstIdFetch64; break;
+    case kTypeDouble1: instCode = kIRInstIdFetch64; break;
+    case kTypeDouble2: instCode = kIRInstIdFetch128; break;
+    case kTypeDouble3: instCode = kIRInstIdFetch192; break;
+    case kTypeDouble4: instCode = kIRInstIdFetch256; break;
 
     default:
       return MPSL_TRACE_ERROR(kErrorInvalidState);
   }
 
-  MPSL_PROPAGATE(getIR()->emitInst(getCurrentBlock(), instCode, dst, src));
-
-  // TODO: Double3.
-  /*
-  if (odd) {
-    mem = getIR()->newMem(mem->getBase(), mem->getIndex(), mem->getOffset() + 8);
-    MPSL_NULLCHECK(mem);
-    MPSL_PROPAGATE(getIR()->emitInst(block, kIRInstInsert32, var, var, mem));
-  }
-  */
-
-  return kErrorOk;
+  return getIR()->emitInst(getBlock(), instCode, dst, src);
 }
+
 
 Error AstToIR::emitStoreX(IRMem* dst, IRVar* src, uint32_t typeInfo) noexcept {
-  uint32_t instCode = kIRInstNone;
-  bool odd = (typeInfo & kTypeVec3) != 0;
+  uint32_t instCode = kIRInstIdNone;
 
   switch (typeInfo & (kTypeIdMask | kTypeVecMask)) {
-    case kTypeInt     : instCode = kIRInstStore32; break;
-    case kTypeInt_1   : instCode = kIRInstStore32; break;
-    case kTypeInt_2   : instCode = kIRInstStore64; break;
-    case kTypeInt_3   : instCode = kIRInstStore64; break;
-    case kTypeInt_4   : instCode = kIRInstStore128; break;
+    case kTypeBool   : instCode = kIRInstIdStore32; break;
+    case kTypeBool1  : instCode = kIRInstIdStore32; break;
+    case kTypeBool2  : instCode = kIRInstIdStore64; break;
+    case kTypeBool3  : instCode = kIRInstIdStore96; break;
+    case kTypeBool4  : instCode = kIRInstIdStore128; break;
+    case kTypeBool8  : instCode = kIRInstIdStore256; break;
 
-    case kTypeFloat   : instCode = kIRInstStore32; break;
-    case kTypeFloat_1 : instCode = kIRInstStore32; break;
-    case kTypeFloat_2 : instCode = kIRInstStore64; break;
-    case kTypeFloat_3 : instCode = kIRInstStore64; break;
-    case kTypeFloat_4 : instCode = kIRInstStore128; break;
+    case kTypeInt    : instCode = kIRInstIdStore32; break;
+    case kTypeInt1   : instCode = kIRInstIdStore32; break;
+    case kTypeInt2   : instCode = kIRInstIdStore64; break;
+    case kTypeInt3   : instCode = kIRInstIdStore96; break;
+    case kTypeInt4   : instCode = kIRInstIdStore128; break;
+    case kTypeInt8   : instCode = kIRInstIdStore256; break;
 
-    case kTypeDouble  : instCode = kIRInstStore64; break;
-    case kTypeDouble_1: instCode = kIRInstStore64; break;
-    case kTypeDouble_2: instCode = kIRInstStore128; break;
-    case kTypeDouble_3: instCode = kIRInstStore128; break;
-    case kTypeDouble_4: instCode = kIRInstStore256; break;
+    case kTypeFloat  : instCode = kIRInstIdStore32; break;
+    case kTypeFloat1 : instCode = kIRInstIdStore32; break;
+    case kTypeFloat2 : instCode = kIRInstIdStore64; break;
+    case kTypeFloat3 : instCode = kIRInstIdStore96; break;
+    case kTypeFloat4 : instCode = kIRInstIdStore128; break;
+    case kTypeFloat8 : instCode = kIRInstIdStore256; break;
+
+    case kTypeQBool  : instCode = kIRInstIdStore64; break;
+    case kTypeQBool1 : instCode = kIRInstIdStore64; break;
+    case kTypeQBool2 : instCode = kIRInstIdStore128; break;
+    case kTypeQBool3 : instCode = kIRInstIdStore192; break;
+    case kTypeQBool4 : instCode = kIRInstIdStore256; break;
+
+    case kTypeDouble : instCode = kIRInstIdStore64; break;
+    case kTypeDouble1: instCode = kIRInstIdStore64; break;
+    case kTypeDouble2: instCode = kIRInstIdStore128; break;
+    case kTypeDouble3: instCode = kIRInstIdStore192; break;
+    case kTypeDouble4: instCode = kIRInstIdStore256; break;
 
     default:
       return MPSL_TRACE_ERROR(kErrorInvalidState);
   }
 
-  MPSL_PROPAGATE(getIR()->emitInst(getCurrentBlock(), instCode, dst, src));
-
-  // TODO: Double3.
-  /*
-  if (odd) {
-    mem = getIR()->newMem(mem->getBase(), mem->getIndex(), mem->getOffset() + 8);
-    MPSL_NULLCHECK(mem);
-    MPSL_PROPAGATE(getIR()->emitInst(block, kIRInstInsert32, var, var, mem));
-  }
-  */
-
+  MPSL_PROPAGATE(getIR()->emitInst(getBlock(), instCode, dst, src));
   return kErrorOk;
-}
-
-Error AstToIR::fetchIfMem(IRVar** dst, IRObject* src, uint32_t typeInfo) noexcept {
-  if (src->isVar()) {
-    *dst = static_cast<IRVar*>(src);
-    return kErrorOk;
-  }
-
-  if (src->isMem()) {
-    IRMem* mem = static_cast<IRMem*>(src);
-    IRVar* var = getIR()->newVarByTypeInfo(typeInfo);
-
-    MPSL_NULLCHECK(var);
-    MPSL_PROPAGATE(emitFetchX(var, mem, typeInfo));
-
-    *dst = var;
-    return kErrorOk;
-  }
-
-  return MPSL_TRACE_ERROR(kErrorInvalidState);
-}
-
-Error AstToIR::storeIfMem(IRObject* dst, IRVar* src, uint32_t typeInfo) noexcept {
-  if (dst->isVar())
-    return kErrorOk;
-
-  if (dst->isMem())
-    return emitStoreX(static_cast<IRMem*>(dst), src, typeInfo);
-
-  return MPSL_TRACE_ERROR(kErrorInvalidState);
 }
 
 } // mpsl namespace
