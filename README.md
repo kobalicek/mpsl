@@ -1,19 +1,18 @@
 MPSL
 ====
 
-Shader-Like Mathematical Expression JIT Engine for C++.
+MathPresso's Shading Language with JIT Engine for C++.
 
   * [Official Repository (kobalicek/mpsl)](https://github.com/kobalicek/mpsl)
   * [Official Blog (asmbits)] (https://asmbits.blogspot.com/ncr)
   * [Official Chat (gitter)](https://gitter.im/kobalicek/mpsl)
   * [Permissive ZLIB license](./LICENSE.md)
 
+
 Disclaimer
 ----------
 
-The library is not usable at the moment.
-
-This is a WORK-IN-PROGRESS that is far from being complete. MPSL is a challenging and difficult project and I work on it mostly when I'm tired of other projects. Contact me if you found MPSL interesting and want to collaborate on its development - people joining this project are very welcome.
+This is a WORK-IN-PROGRESS library that is far from being complete. MPSL is a challenging and difficult project and I work on it mostly when I'm tired of other projects. Contact me if you found MPSL interesting and want to collaborate on its development - people joining this project are very welcome.
 
 Project Status
 --------------
@@ -23,25 +22,29 @@ What is implemented:
   * [x] AST definition and source code to AST conversion (parser)
   * [x] AST-based semantic code analysis (happens after parsing)
   * [x] AST-based optimizations (constant folding and dead code elimination)
+  * [x] IR concept and initial support for AST to IR mapping
 
 What is a work-in-progress:
-  * [ ] IR is not fully defined yet, it may change a bit, it's an initial idea
   * [ ] AST-To-IR translation is only basic for now (doesn't implement control-flow and many operators)
   * [ ] IR-based optimizations are not implemented yet
   * [ ] IR-To-ASM translation is very basic and buggy
   * [ ] IR is not in SSA form yet, this is to-be-researched subject atm
 
+
 Introduction
 ------------
 
-MPSL is a shader-like mathematical expression parser and JIT compiler for C++. It implements a minimal shader-like language that has types, scalars, vectors (up to 4 elements), flow control, and basic math functions that can operate on scalars and vectors. MPSL started as a sister project of [MathPresso](https://github.com/kobalicek/mathpresso) library, but was rewritten completely and then some parts of MPSL were backported back to MathPresso. MSPL has been developed to be a very lightweight library that can fully utilize CPU's SIMD capability in a safe way through MPSL programs that are just-in-time compiled at runtime.
+MPSL is a lightweight shader-like programming language written in C++. Its name is based on a sister project called [MathPresso](https://github.com/kobalicek/mathpresso), which provided the basic idea and building blocks. MPSL has been designed to be a safe programming language that can access CPU's SIMD capabilities by small programs compiled at runtime. The language is statically typed and allows to use up to 256-bit variables that map to CPU's SIMD registers (SSE, AVX, NEON, ...).
+
+MPSL has been designed to be lightweight and embeddable - it doesn't depend on huge libraries like LLVM, it only uses a very lightweight library called [AsmJit](https://github.com/kobalicek/asmjit) as a JIT backend. It implements its own abstract syntax tree (AST) and intermediate representation (IR) of the input program, and then uses an IRToAsm translator to produce machine code.
 
 Check out a working [mp_tutorial.cpp](./src/app/mp_tutorial.cpp) to see how MPSL APIs are designed and how MPSL engine is embedded and used within an application.
+
 
 MPSL Types
 ----------
 
-MPSL is a statically typed language where variables have to be declared before they are used like in any other C-like language. Variables can be declared anywhere and can shadow other variables and/or function arguments. 
+MPSL is a statically typed language where variables have to be declared before they are used like in any other C-like language. Variables can be declared anywhere and can shadow other variables and/or function arguments.
 
 Available types:
 
@@ -59,6 +62,7 @@ Constants are parsed in the following way:
   * If the number contains "f" suffix it's parsed as `float`
   * If the number contains "d" suffix it's parsed as `double`
   * TODO: MSPL should allow to customize which floating type is preferred (if `float` or `double`).
+
 
 MPSL Features
 -------------
@@ -92,107 +96,161 @@ MPSL Features
     * Each MPSL program contains a `main() { ... }` entry-point
 
   * Arithmetic operators:
-    * Negation `-(x)`
-    * Addition `x + y`
-    * Subtraction `x - y`
-    * Multiplication `x * y`
-    * Division `x / y`
-    * Modulo `x % y`
+    * `-(x)` - negate
+    * `x + y` - add
+    * `x - y` - subtract
+    * `x * y` - multiply
+    * `x / y` - divide
+    * `x % y` - modulo
 
   * Bitwise and shift operators and intrinsics:
-    * Bitwise not `~(x)`
-    * Bitwise and `x & y`
-    * Bitwise or `x | y`
-    * Bitwise xor `x ^ y`
-    * Shift arithmetic right `x >> y`
-    * Shift logical right `x >>> y`
-    * Shift logical left `x << y`
-    * Rotate right `ror(x, y)`
-    * Rotate left `rol(x, y)`
+    * `~(x)` - bitwise NOT
+    * `x & y` - bitwise AND
+    * `x | y` - bitwise OR
+    * `x ^ y` - bitwise XOR
+    * `x >> y` - shift arithmetic right
+    * `x >>> y` - shift logical right
+    * `x << y` - shift logical left
+    * `ror(x, y)` - rotate right
+    * `rol(x, y)` - rotate left
+    * `lzcnt(x)` - count leading zeros
+    * `popcnt(x)` - population count (count of bits set to `1`)
 
   * Logical operators:
-    * Logical not `!(x)`
-    * Logical and `x && y`
-    * Logical or `x || y`
+    * `!(x)` - logical NOT
+    * `x && y` - logical AND
+    * `x || y` - logical OR
 
   * Comparison operators:
-    * Equal `x == y`
-    * Not equal `x != y`
-    * Greater `x > y`
-    * Greater or equal `x >= y`
-    * Lesser `x < y`
-    * Lesser or equal `x <= y`
+    * `x == y` - check if equal
+    * `x != y` - check if not equal
+    * `x > y` - check if greater than
+    * `x >= y` - check if greater than or equal
+    * `x < y` - check if lesser than
+    * `x <= y` - check if lesser than or equal
 
   * Assignment operators:
-    * Pre-increment `++x`
-    * Pre-decrement `--x`
-    * Post-increment `x++`
-    * Post-decrement `x--`
-    * Assignment `x = y`
-    * Add `x += y`
-    * Subtract `x -= y`
-    * Multiply `x *= y`
-    * Divide `x /= y`
-    * Modulo `x %= y`
-    * Bitwise and `x &= y`
-    * Bitwise or `x |= y`
-    * Bitwise xor `x ^= y`
-    * Shift arithmetic right `x >>= y`
-    * Shift logical right `x >>>= y`
-    * Shift logical left `x <<= y`
+    * `++x` - pre-increment
+    * `--x` - pre-decrement
+    * `x++` - post-increment
+    * `x--` - post-decrement
+    * `x = y` - assignment
+    * `x += y` - add with assignment
+    * `x -= y` - subtract with assignment
+    * `x *= y` - multiply with assignment
+    * `x /= y` - divide with assignment
+    * `x %= y` - modulo with assignment
+    * `x &= y` - bitwise AND with assignment
+    * `x |= y` - bitwise OR with assignment
+    * `x ^= y` - bitwise XOR with assignment
+    * `x >>= y` - shift arithmetic right with assignment
+    * `x >>>= y` - shift logical right with assignment
+    * `x <<= y` - shift logical left with assignment
 
   * Built-in intrinsics for special number handling:
-    * Check for NaN `isnan(x)`
-    * Check for infinity `isinf(x)`
-    * Check for finite number `isfinite(x)`
-    * Get a sign bit `signbit(x)`
-    * Copy sign `copysign(x, y)`
+    * `isnan(x)` - check for NaN
+    * `isinf(x)` - check for infinity
+    * `isfinite(x)` - check for finite number
+    * `signbit(x)` - get a sign bit
+    * `copysign(x, y)` - copy sign
 
   * Built-in intrinsics for floating-point rounding:
-    * Round to nearest integer `round(x)`
-    * Round to even integer `roundeven(x)`
-    * Round towards zero `trunc(x)`
-    * Round down `floor(x)`
-    * Round up `ceil(x)`
+    * `round(x)` - round to nearest integer
+    * `roundeven(x)` - round to even integer
+    * `trunc(x)` - round towards zero (truncate)
+    * `floor(x)` - round down (floor)
+    * `ceil(x)` - round up (ceil)
 
   * Built-in intrinsics that map easily to CPU instructions:
-    * Absolute value `abs(x)`
-    * Extract fraction `frac(x)`
-    * Square root `sqrt(x)`
-    * Minimum value `min(x, y)`
-    * Maximum value `max(x, y)`
+    * `abs(x)` - absolute value
+    * `frac(x)` - extract fraction
+    * `sqrt(x)` - square root
+    * `min(x, y)` - minimum value
+    * `max(x, y)` - maximum value
 
-  * Other built-in functions:
-    * Exponential `exp(x)`
-    * Logarithm `log(x)`
-    * Logarithm of base 2 `log2(x)`
-    * Logarithm of base 10 `log10(x)`
-    * Power `pow(x, y)`
-    * Sine `sin(x)`
-    * Cosine `cos(x)`
-    * Tangent `tan(x)`
-    * Arcsine `asin(x)`
-    * Arccosine `acos(x)`
-    * Arctangent `atan(x)` and `atan2(x, y)`
+  * Other built-in intrinsics:
+    * `exp(x)` - exponential
+    * `log(x)` - logarithm of base E
+    * `log2(x)` - logarithm of base 2
+    * `log10(x)` - logarithm of base 10
+    * `pow(x, y)` - power
+    * `sin(x)` - sine
+    * `cos(x)` - cosine
+    * `tan(x)` - tangent
+    * `asin(x)` - arcsine
+    * `acos(x)` - arccosine
+    * `atan(x)` and `atan2(x, y)` - arctangent
 
+  * Built-in DSP intrinsics (`int` and `int2..8` only):
+    * `vabsb(x)` - absolute value of packed bytes
+    * `vabsw(x)` - absolute value of packed words
+    * `vabsd(x)` - absolute value of packed dwords
+    * `vaddb(x, y)` - add packed bytes
+    * `vaddw(x, y)` - add packed words
+    * `vaddd(x, y)` - add packed dwords
+    * `vaddq(x, y)` - add packed qwords
+    * `vaddssb(x, y)` - add packed bytes with signed saturation
+    * `vaddusb(x, y)` - add packed bytes with unsigned saturation
+    * `vaddssw(x, y)` - add packed words with signed saturation
+    * `vaddusw(x, y)` - add packed words with unsigned saturation
+    * `vsubb(x, y)` - subtract packed bytes
+    * `vsubw(x, y)` - subtract packed words
+    * `vsubd(x, y)` - subtract packed dwords
+    * `vsubq(x, y)` - subtract packed qwords
+    * `vsubssb(x, y)` - subtract packed bytes with signed saturation
+    * `vsubusb(x, y)` - subtract packed bytes with unsigned saturation
+    * `vsubssw(x, y)` - Subtract packed words with signed saturation
+    * `vsubusw(x, y)` - subtract packed words with unsigned saturation
+    * `vmulw(x, y)` - multiply packed words (signed or unsigned)
+    * `vmulhsw(x, y)` - multiply packed words and store high word of a signed result
+    * `vmulhuw(x, y)` - multiply packed words and store high word of an unsigned result
+    * `vmuld(x, y)` - multiply packed words (signed or unsigned)
+    * `vminsb(x, y)` - minimum of packed bytes (signed)
+    * `vminub(x, y)` - minimum of packed bytes (unsigned)
+    * `vminsw(x, y)` - minimum of packed words (signed)
+    * `vminuw(x, y)` - minimum of packed words (unsigned)
+    * `vminsd(x, y)` - minimum of packed dwords (signed)
+    * `vminud(x, y)` - minimum of packed dwords (unsigned)
+    * `vmaxsb(x, y)` - maximum of packed bytes (signed)
+    * `vmaxub(x, y)` - maximum of packed bytes (unsigned)
+    * `vmaxsw(x, y)` - maximum of packed words (signed)
+    * `vmaxuw(x, y)` - maximum of packed words (unsigned)
+    * `vmaxsd(x, y)` - maximum of packed dwords (signed)
+    * `vmaxud(x, y)` - maximum of packed dwords (unsigned)
+    * `vsllw(x, y)` - shift left logical of packed words by scalar `y`
+    * `vsrlw(x, y)` - shift right logical of packed words by scalar `y`
+    * `vsraw(x, y)` - shift right arithmetic of packed words by scalar `y`
+    * `vslld(x, y)` - shift left logical of packed dwords by scalar `y`
+    * `vsrld(x, y)` - shift right logical of packed dwords by scalar `y`
+    * `vsrad(x, y)` - shift right arithmetic of packed dwords by scalar `y`
+    * `vsllq(x, y)` - shift left logical of packed qwords by scalar `y`
+    * `vsrlq(x, y)` - shift right logical of packed qwords by scalar `y`
+    * `vcmpeqb(x, y)` - compare packed bytes (signed) if equal
+    * `vcmpeqw(x, y)` - compare packed words (signed) if equal
+    * `vcmpeqd(x, y)` - compare packed dwords (signed) if equal
+    * `vcmpgtb(x, y)` - compare packed bytes (signed) if greater than
+    * `vcmpgtw(x, y)` - compare packed words (signed) if greater than
+    * `vcmpgtd(x, y)` - compare packed dwords (signed) if greater than
+    
   * Built-in special constants:
-    * Infinity `INF`
-    * Not a Number `NaN`
+    * `INF` - infinity
+    * `NaN` - not a number
 
   * Built-in math constants from C's math.h:
-    * Euler's    `M_E`        = `2.71828182845904523536`
-    * log2(e)    `M_LOG2E`    = `1.44269504088896340736`
-    * log10(e)   `M_LOG10E`   = `0.434294481903251827651`
-    * ln(2)      `M_LN2`      = `0.693147180559945309417`
-    * ln(10)     `M_LN10`     = `2.30258509299404568402`
-    * PI         `M_PI`       = `3.14159265358979323846`
-    * PI/2       `M_PI_2`     = `1.57079632679489661923`
-    * PI/4       `M_PI_4`     = `0.785398163397448309616`
-    * 1/PI       `M_1_PI`     = `0.318309886183790671538`
-    * 2/PI       `M_2_PI`     = `0.636619772367581343076`
-    * 2/sqrt(pi) `M_2_SQRTPI` = `1.1283791670955125739`
-    * sqrt(2)    `M_SQRT2`    = `1.4142135623730950488`
-    * 1/sqrt(2)  `M_SQRT1_2`  = `0.707106781186547524401`
+    * `M_E        = 2.71828182845904523536 ` - Euler's number
+    * `M_LOG2E    = 1.44269504088896340736 ` - log2(e)
+    * `M_LOG10E   = 0.434294481903251827651` - log10(e)
+    * `M_LN2      = 0.693147180559945309417` - ln(2)
+    * `M_LN10     = 2.30258509299404568402 ` - ln(10)
+    * `M_PI       = 3.14159265358979323846 ` - PI
+    * `M_PI_2     = 1.57079632679489661923 ` - PI/2
+    * `M_PI_4     = 0.785398163397448309616` - PI/4
+    * `M_1_PI     = 0.318309886183790671538` - 1/PI
+    * `M_2_PI     = 0.636619772367581343076` - 2/PI
+    * `M_2_SQRTPI = 1.1283791670955125739  ` - 2/sqrt(pi)
+    * `M_SQRT2    = 1.4142135623730950488  ` - sqrt(2)
+    * `M_SQRT1_2  = 0.707106781186547524401` - 1/sqrt(2)
+
 
 MPSL Program
 ------------
@@ -200,14 +258,14 @@ MPSL Program
 A typical MPSL program has an entry-point called `main()` and uses input and output variables provided by the embedder. If `a` and `b` variables of type `float4` are provided then we can write a simple shader that returns their sum:
 
 ```c++
-// Shader's entry-point - can have return value, but has no arguments.
+// Shader's entry-point - can have return value (if embedded defines it), but has no arguments.
 float4 main() {
   // In case the embedder provides two arguments `a` and `b` of `float4` type.
   return a + b;
 }
 ```
 
-Where `a`, `b`, and a hidden return variable is provided by the embedder (including their types). This means that the same MPSL program is able to use different data layouts and different number of data arguments passed to the compiled shader.
+Where `a`, `b`, and a hidden return variable are provided by the embedder (including their types). This means that the same MPSL program is able to use different data layouts and different number of data arguments passed to the compiled shader.
 
 
 MPSL C++ API 
@@ -230,7 +288,7 @@ MPSL is written in C++ and provides C++ APIs for embedders. To use MPSL from you
 
 Check out [mpsl.h](./src/mpsl/mpsl.h) for more details about class member functions and public enumerations that can be used by embedders.
 
-Below is a minimal code that puts all together and uses MPSL to create and execute a very simple shader:
+Below is a minimal code that creates a simple data layout and compiles a very simple shader:
 
 ```c++
 #include <mpsl/mpsl.h>
@@ -264,25 +322,24 @@ int main(int argc, char* argv[]) {
   mpsl::Program1<Data> program;
   mpsl::Error err = program.compile(isolate, body, mpsl::kNoOptions, layout);
 
-  if (err == mpsl::kErrorOk) {
+  if (err) {
+    printf("Compilation failed: ERROR 0x%0.8X\n", static_cast<unsigned int>(err));
+  }
+  else {
     Data data;
     data.a = 4.0;
     data.b = 16.0;
     data.c = 0.5f;
 
     err = program.run(&data);
-    if (err == mpsl::kErrorOk)
-      printf("Return=%g\n", data.result);
-    else
+    if (err)
       printf("Execution failed: ERROR 0x%0.8X\n", static_cast<unsigned int>(err));
-  }
-  else {
-    printf("Compilation failed: 0x%0.8X\n", static_cast<unsigned int>(err));
+    else
+      printf("Return=%g\n", data.result);
   }
 
   // RAII - `Isolate` and `Program` are ref-counted and will
   // be automatically destroyed when they go out of scope.
-
   return 0;
 }
 ```

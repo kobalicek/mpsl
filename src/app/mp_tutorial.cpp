@@ -1,5 +1,5 @@
 // [MPSL-Test]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
   mpsl::Program1<> program;
   mpsl::Error err = program.compile(isolate, body, options, args, &log);
   if (err) {
-    printf("ERROR: 0x%08X\n", err);
+    printf("Compilation failed: ERROR 0x%08X\n", err);
   }
   else {
     Args args;

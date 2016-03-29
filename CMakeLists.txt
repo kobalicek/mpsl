@@ -228,7 +228,7 @@ endif()
 # =============================================================================
 
 if(MPSL_BUILD_TEST)
-  set(MPSL_SRC_TEST mp_test mp_tutorial)
+  set(MPSL_SRC_TEST mp_dsp mp_test mp_tutorial)
 
   foreach(file ${MPSL_SRC_TEST})
     add_executable(${file} src/app/${file}.cpp src/app/mp_utils.h)

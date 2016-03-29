@@ -1,5 +1,5 @@
 // [MPSL]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -88,6 +88,8 @@ const IRInstInfo mpInstInfo[kIRInstIdCount] = {
   ROW(NotI32        , 2, I(I32)                                  , "NotI32"),
   ROW(NotF32        , 2, I(F32)                                  , "NotF32"),
   ROW(NotF64        , 2, I(F64)                                  , "NotF64"),
+  ROW(Lzcnt         , 2, I(I32)                                  , "Lzcnt"),
+  ROW(Popcnt        , 2, I(I32)                                  , "Popcnt"),
   ROW(AddI32        , 3, I(I32)                                  , "AddI32"),
   ROW(AddF32        , 3, I(F32)                                  , "AddF32"),
   ROW(AddF64        , 3, I(F64)                                  , "AddF64"),
@@ -172,7 +174,56 @@ const IRInstInfo mpInstInfo[kIRInstIdCount] = {
   ROW(Atan2F32      , 3, I(F32) | I(Complex)                     , "Atan2F32"),
   ROW(Atan2F64      , 3, I(F64) | I(Complex)                     , "Atan2F64"),
   ROW(CopySignF32   , 3, I(F32)                                  , "CopySignF32"),
-  ROW(CopySignF64   , 3, I(F64)                                  , "CopySignF64")
+  ROW(CopySignF64   , 3, I(F64)                                  , "CopySignF64"),
+  ROW(Vabsb         , 2, I(I32)                                  , "vabsb"),
+  ROW(Vabsw         , 2, I(I32)                                  , "vabsw"),
+  ROW(Vabsd         , 2, I(I32)                                  , "vabsd"),
+  ROW(Vaddb         , 3, I(I32)                                  , "vaddb"),
+  ROW(Vaddw         , 3, I(I32)                                  , "vaddw"),
+  ROW(Vaddd         , 3, I(I32)                                  , "vaddd"),
+  ROW(Vaddq         , 3, I(I32)                                  , "vaddq"),
+  ROW(Vaddssb       , 3, I(I32)                                  , "vaddssb"),
+  ROW(Vaddusb       , 3, I(I32)                                  , "vaddusb"),
+  ROW(Vaddssw       , 3, I(I32)                                  , "vaddssw"),
+  ROW(Vaddusw       , 3, I(I32)                                  , "vaddusw"),
+  ROW(Vsubb         , 3, I(I32)                                  , "vsubb"),
+  ROW(Vsubw         , 3, I(I32)                                  , "vsubw"),
+  ROW(Vsubd         , 3, I(I32)                                  , "vsubd"),
+  ROW(Vsubq         , 3, I(I32)                                  , "vsubq"),
+  ROW(Vsubssb       , 3, I(I32)                                  , "vsubssb"),
+  ROW(Vsubusb       , 3, I(I32)                                  , "vsubusb"),
+  ROW(Vsubssw       , 3, I(I32)                                  , "vsubssw"),
+  ROW(Vsubusw       , 3, I(I32)                                  , "vsubusw"),
+  ROW(Vmulw         , 3, I(I32)                                  , "vmulw"),
+  ROW(Vmulhsw       , 3, I(I32)                                  , "vmulhsw"),
+  ROW(Vmulhuw       , 3, I(I32)                                  , "vmulhuw"),
+  ROW(Vmuld         , 3, I(I32)                                  , "vmuld"),
+  ROW(Vminsb        , 3, I(I32)                                  , "vminsb"),
+  ROW(Vminub        , 3, I(I32)                                  , "vminub"),
+  ROW(Vminsw        , 3, I(I32)                                  , "vminsw"),
+  ROW(Vminuw        , 3, I(I32)                                  , "vminuw"),
+  ROW(Vminsd        , 3, I(I32)                                  , "vminsd"),
+  ROW(Vminud        , 3, I(I32)                                  , "vminud"),
+  ROW(Vmaxsb        , 3, I(I32)                                  , "vmaxsb"),
+  ROW(Vmaxub        , 3, I(I32)                                  , "vmaxub"),
+  ROW(Vmaxsw        , 3, I(I32)                                  , "vmaxsw"),
+  ROW(Vmaxuw        , 3, I(I32)                                  , "vmaxuw"),
+  ROW(Vmaxsd        , 3, I(I32)                                  , "vmaxsd"),
+  ROW(Vmaxud        , 3, I(I32)                                  , "vmaxud"),
+  ROW(Vsllw         , 3, I(I32)                                  , "vsllw"),
+  ROW(Vsrlw         , 3, I(I32)                                  , "vsrlw"),
+  ROW(Vsraw         , 3, I(I32)                                  , "vsraw"),
+  ROW(Vslld         , 3, I(I32)                                  , "vslld"),
+  ROW(Vsrld         , 3, I(I32)                                  , "vsrld"),
+  ROW(Vsrad         , 3, I(I32)                                  , "vsrad"),
+  ROW(Vsllq         , 3, I(I32)                                  , "vsllq"),
+  ROW(Vsrlq         , 3, I(I32)                                  , "vsrlq"),
+  ROW(Vcmpeqb       , 3, I(I32)                                  , "vcmpeqb"),
+  ROW(Vcmpeqw       , 3, I(I32)                                  , "vcmpeqw"),
+  ROW(Vcmpeqd       , 3, I(I32)                                  , "vcmpeqd"),
+  ROW(Vcmpgtb       , 3, I(I32)                                  , "vcmpgtb"),
+  ROW(Vcmpgtw       , 3, I(I32)                                  , "vcmpgtw"),
+  ROW(Vcmpgtd       , 3, I(I32)                                  , "vcmpgtd")
 };
 #undef I
 #undef ROW

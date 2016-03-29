@@ -1,5 +1,5 @@
 // [MPSL-Test]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -13,30 +13,15 @@
 #include <stdlib.h>
 
 static mpsl::Value makeIVal(int x, int y = 0, int z = 0, int w = 0) {
-  mpsl::Value v;
-  v.i.x = x;
-  v.i.y = y;
-  v.i.z = z;
-  v.i.w = w;
-  return v;
+  mpsl::Value v; v.i.set(x, y, z, w, 0, 0, 0, 0); return v;
 }
 
 static mpsl::Value makeFVal(float x, float y = 0.0f, float z = 0.0f, float w = 0.0f) {
-  mpsl::Value v;
-  v.f.x = x;
-  v.f.y = y;
-  v.f.z = z;
-  v.f.w = w;
-  return v;
+  mpsl::Value v; v.f.set(x, y, z, w, 0, 0, 0, 0); return v;
 }
 
 static mpsl::Value makeDVal(double x, double y = 0.0, double z = 0.0, double w = 0.0) {
-  mpsl::Value v;
-  v.d.x = x;
-  v.d.y = y;
-  v.d.z = z;
-  v.d.w = w;
-  return v;
+  mpsl::Value v; v.d.set(x, y, z, w); return v;
 }
 
 struct Test {

@@ -1,4 +1,4 @@
-MPSL - Shader-Like Mathematical Expression JIT Engine for C++  
+MPSL - MathPresso's Shading Language with JIT Engine for C++  
 Copyright (c) 2016, Petr Kobalicek <kobalicek.petr@gmail.com>
 
 This software is provided 'as-is', without any express or implied

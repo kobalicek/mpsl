@@ -1,5 +1,5 @@
 // [MPSL-Test]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.

@@ -1,5 +1,5 @@
 // [MPSL]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -250,44 +250,55 @@ Error AstAnalysis::onUnaryOp(AstUnaryOp* node) noexcept {
     MPSL_PROPAGATE(checkAssignment(child, op.type));
 
   if (op.isCast()) {
-    uint32_t dstType = node->getTypeInfo();
     uint32_t srcType = child->getTypeInfo();
+    uint32_t dstType = node->getTypeInfo();
 
-    uint32_t dstId = dstType & kTypeIdMask;
     uint32_t srcId = srcType & kTypeIdMask;
+    uint32_t dstId = dstType & kTypeIdMask;
 
     // Refuse an explicit cast from void to any other type.
     if (srcId == kTypeVoid && dstId != kTypeVoid)
       return invalidCast(node->_position, "Invalid explicit cast", srcType, dstType);
   }
   else {
-    uint32_t typeInfo = child->getTypeInfo() & ~(kTypeRef | kTypeWrite);
-    uint32_t typeId = typeInfo & kTypeIdMask;
+    uint32_t srcType = child->getTypeInfo();
+    uint32_t dstType = srcType & ~(kTypeRef | kTypeWrite);
 
-    if (op.isFloatOnly()) {
-      // Only `float` or `double` can be used.
-      if (!TypeInfo::isFPId(typeId)) {
-        typeId = kTypeDouble;
-        typeInfo = typeId | (typeInfo & ~kTypeIdMask);
+    uint32_t srcId = srcType & kTypeIdMask;
+    uint32_t dstId = srcId;
 
-        MPSL_PROPAGATE(implicitCast(node, child, typeInfo));
+    bool supported = (op.isIntOp()   && TypeInfo::isIntId(srcId))  |
+                     (op.isBoolOp()  && TypeInfo::isBoolId(srcId)) |
+                     (op.isFloatOp() && TypeInfo::isFloatId(srcId));
+
+    if (!supported) {
+      // Promote to double if this is a floating point operator or intrinsic.
+      if (TypeInfo::isFloatId(dstId)) {
+        dstId = kTypeDouble;
+        dstType = dstId | (srcType & ~kTypeIdMask);
+
+        MPSL_PROPAGATE(implicitCast(node, child, dstType));
         child = node->getChild();
       }
     }
 
+    // TODO: This has been relaxed, but there should be some flag that can turn on.
+    /*
     if (op.isBitwise()) {
       // Bitwise operation performed on `float` or `double` is invalid.
       if (!TypeInfo::isIntOrBoolId(typeId))
         return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
           "Bitwise operation '%s' can't be performed on type '%{Type}'", op.name, typeInfo);
     }
-    else if (op.isConditional()) {
-      // Result of a conditional is a boolean.
-      typeId = TypeInfo::boolIdByTypeId(typeInfo & kTypeIdMask);
-      typeInfo = typeId | (typeInfo & ~kTypeIdMask);
+    */
+
+    if (op.isConditional()) {
+      // Result of conditional operator is a boolean.
+      dstId = TypeInfo::boolIdByTypeId(dstType & kTypeIdMask);
+      dstType = dstId | (dstType & ~kTypeIdMask);
     }
 
-    node->setTypeInfo(typeInfo | kTypeRead);
+    node->setTypeInfo(dstType | kTypeRead);
   }
 
   return kErrorOk;
@@ -305,7 +316,7 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
   if (op.isAssignment())
     MPSL_PROPAGATE(checkAssignment(node->getLeft(), op.type));
 
-  // Minimal evaluation requires both operands to be casted to a boolean.
+  // Minimal evaluation requires both operands to be casted to boolean.
   if (op.isLogical()) {
     MPSL_PROPAGATE(boolCast(node, node->getLeft()));
     MPSL_PROPAGATE(boolCast(node, node->getRight()));
@@ -321,7 +332,7 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
     uint32_t lTypeId = lTypeInfo & kTypeIdMask;
     uint32_t rTypeId = rTypeInfo & kTypeIdMask;
 
-    if (op.isFloatOnly() && (lTypeId != rTypeId || !TypeInfo::isFPId(lTypeId))) {
+    if (op.isFloatOnly() && (lTypeId != rTypeId || !TypeInfo::isFloatId(lTypeId))) {
       MPSL_PROPAGATE(implicitCast(node, left , kTypeDouble | (lTypeInfo & ~kTypeIdMask)));
       MPSL_PROPAGATE(implicitCast(node, right, kTypeDouble | (rTypeInfo & ~kTypeIdMask)));
       continue;

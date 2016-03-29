@@ -1,5 +1,5 @@
 // [MPSL]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -130,33 +130,26 @@ enum IRInstCode {
 
   kIRInstIdCvtI32ToF32,
   kIRInstIdCvtI32ToF64,
-
   kIRInstIdCvtF32ToI32,
   kIRInstIdCvtF32ToF64,
-
   kIRInstIdCvtF64ToI32,
   kIRInstIdCvtF64ToF32,
 
   kIRInstIdCmpEqI32,
   kIRInstIdCmpEqF32,
   kIRInstIdCmpEqF64,
-
   kIRInstIdCmpNeI32,
   kIRInstIdCmpNeF32,
   kIRInstIdCmpNeF64,
-
   kIRInstIdCmpLtI32,
   kIRInstIdCmpLtF32,
   kIRInstIdCmpLtF64,
-
   kIRInstIdCmpLeI32,
   kIRInstIdCmpLeF32,
   kIRInstIdCmpLeF64,
-
   kIRInstIdCmpGtI32,
   kIRInstIdCmpGtF32,
   kIRInstIdCmpGtF64,
-
   kIRInstIdCmpGeI32,
   kIRInstIdCmpGeF32,
   kIRInstIdCmpGeF64,
@@ -164,31 +157,27 @@ enum IRInstCode {
   kIRInstIdBitNegI32,
   kIRInstIdBitNegF32,
   kIRInstIdBitNegF64,
-
   kIRInstIdNegI32,
   kIRInstIdNegF32,
   kIRInstIdNegF64,
-
   kIRInstIdNotI32,
   kIRInstIdNotF32,
   kIRInstIdNotF64,
+  kIRInstIdLzcntI32,
+  kIRInstIdPopcntI32,
 
   kIRInstIdAddI32,
   kIRInstIdAddF32,
   kIRInstIdAddF64,
-
   kIRInstIdSubI32,
   kIRInstIdSubF32,
   kIRInstIdSubF64,
-
   kIRInstIdMulI32,
   kIRInstIdMulF32,
   kIRInstIdMulF64,
-
   kIRInstIdDivI32,
   kIRInstIdDivF32,
   kIRInstIdDivF64,
-
   kIRInstIdModI32,
   kIRInstIdModF32,
   kIRInstIdModF64,
@@ -196,11 +185,9 @@ enum IRInstCode {
   kIRInstIdAndI32,
   kIRInstIdAndF32,
   kIRInstIdAndF64,
-
   kIRInstIdOrI32,
   kIRInstIdOrF32,
   kIRInstIdOrF64,
-
   kIRInstIdXorI32,
   kIRInstIdXorF32,
   kIRInstIdXorF64,
@@ -214,17 +201,14 @@ enum IRInstCode {
   kIRInstIdMinI32,
   kIRInstIdMinF32,
   kIRInstIdMinF64,
-
   kIRInstIdMaxI32,
   kIRInstIdMaxF32,
   kIRInstIdMaxF64,
 
   kIRInstIdIsNanF32,
   kIRInstIdIsNanF64,
-
   kIRInstIdIsInfF32,
   kIRInstIdIsInfF64,
-
   kIRInstIdIsFiniteF32,
   kIRInstIdIsFiniteF64,
 
@@ -234,64 +218,97 @@ enum IRInstCode {
 
   kIRInstIdTruncF32,
   kIRInstIdTruncF64,
-
   kIRInstIdFloorF32,
   kIRInstIdFloorF64,
-
   kIRInstIdRoundF32,
   kIRInstIdRoundF64,
-
   kIRInstIdRoundEvenF32,
   kIRInstIdRoundEvenF64,
-
   kIRInstIdCeilF32,
   kIRInstIdCeilF64,
 
   kIRInstIdAbsI32,
   kIRInstIdAbsF32,
   kIRInstIdAbsF64,
-
   kIRInstIdExpF32,
   kIRInstIdExpF64,
-
   kIRInstIdLogF32,
   kIRInstIdLogF64,
-
   kIRInstIdLog2F32,
   kIRInstIdLog2F64,
-
   kIRInstIdLog10F32,
   kIRInstIdLog10F64,
-
   kIRInstIdSqrtF32,
   kIRInstIdSqrtF64,
 
   kIRInstIdSinF32,
   kIRInstIdSinF64,
-
   kIRInstIdCosF32,
   kIRInstIdCosF64,
-
   kIRInstIdTanF32,
   kIRInstIdTanF64,
-
   kIRInstIdAsinF32,
   kIRInstIdAsinF64,
-
   kIRInstIdAcosF32,
   kIRInstIdAcosF64,
-
   kIRInstIdAtanF32,
   kIRInstIdAtanF64,
-
   kIRInstIdPowF32,
   kIRInstIdPowF64,
-
   kIRInstIdAtan2F32,
   kIRInstIdAtan2F64,
-
   kIRInstIdCopySignF32,
   kIRInstIdCopySignF64,
+
+  kIRInstIdVabsb,
+  kIRInstIdVabsw,
+  kIRInstIdVabsd,
+  kIRInstIdVaddb,
+  kIRInstIdVaddw,
+  kIRInstIdVaddd,
+  kIRInstIdVaddq,
+  kIRInstIdVaddssb,
+  kIRInstIdVaddusb,
+  kIRInstIdVaddssw,
+  kIRInstIdVaddusw,
+  kIRInstIdVsubb,
+  kIRInstIdVsubw,
+  kIRInstIdVsubd,
+  kIRInstIdVsubq,
+  kIRInstIdVsubssb,
+  kIRInstIdVsubusb,
+  kIRInstIdVsubssw,
+  kIRInstIdVsubusw,
+  kIRInstIdVmulw,
+  kIRInstIdVmulhsw,
+  kIRInstIdVmulhuw,
+  kIRInstIdVmuld,
+  kIRInstIdVminsb,
+  kIRInstIdVminub,
+  kIRInstIdVminsw,
+  kIRInstIdVminuw,
+  kIRInstIdVminsd,
+  kIRInstIdVminud,
+  kIRInstIdVmaxsb,
+  kIRInstIdVmaxub,
+  kIRInstIdVmaxsw,
+  kIRInstIdVmaxuw,
+  kIRInstIdVmaxsd,
+  kIRInstIdVmaxud,
+  kIRInstIdVsllw,
+  kIRInstIdVsrlw,
+  kIRInstIdVsraw,
+  kIRInstIdVslld,
+  kIRInstIdVsrld,
+  kIRInstIdVsrad,
+  kIRInstIdVsllq,
+  kIRInstIdVsrlq,
+  kIRInstIdVcmpeqb,
+  kIRInstIdVcmpeqw,
+  kIRInstIdVcmpeqd,
+  kIRInstIdVcmpgtb,
+  kIRInstIdVcmpgtw,
+  kIRInstIdVcmpgtd,
 
   kIRInstIdCount,
 

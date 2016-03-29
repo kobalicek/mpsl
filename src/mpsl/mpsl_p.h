@@ -1,5 +1,5 @@
 // [MPSL]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -158,6 +158,9 @@ enum OpType {
   kOpNeg,               // -a
   kOpNot,               // !a
 
+  kOpLzcnt,             // lzcnt(a)
+  kOpPopcnt,            // popcnt(a)
+
   kOpIsNan,             // isnan(a)
   kOpIsInf,             // isinf(a)
   kOpIsFinite,          // isfinite(a)
@@ -228,6 +231,59 @@ enum OpType {
   kOpAtan2,             // atan2(a, b)
   kOpCopySign,          // copysign(a, b)
 
+  // TODO:
+  // kOpBlend,          // blend(a, b, mask)
+
+  kOpVabsb,             // vabsb(a)
+  kOpVabsw,             // vabsw(a)
+  kOpVabsd,             // vabsd(a)
+  kOpVaddb,             // vaddb(a, b)
+  kOpVaddw,             // vaddw(a, b)
+  kOpVaddd,             // vaddd(a, b)
+  kOpVaddq,             // vaddq(a, b)
+  kOpVaddssb,           // vaddssb(a, b)
+  kOpVaddusb,           // vaddusb(a, b)
+  kOpVaddssw,           // vaddssw(a, b)
+  kOpVaddusw,           // vaddusw(a, b)
+  kOpVsubb,             // vsubb(a, b)
+  kOpVsubw,             // vsubw(a, b)
+  kOpVsubd,             // vsubd(a, b)
+  kOpVsubq,             // vsubq(a, b)
+  kOpVsubssb,           // vsubssb(a, b)
+  kOpVsubusb,           // vsubusb(a, b)
+  kOpVsubssw,           // vsubssw(a, b)
+  kOpVsubusw,           // vsubusw(a, b)
+  kOpVmulw,             // vmulw(a, b)
+  kOpVmulhsw,           // vmulhsw(a, b)
+  kOpVmulhuw,           // vmulhuw(a, b)
+  kOpVmuld,             // vmuld(a, b)
+  kOpVminsb,            // vminsb(a, b)
+  kOpVminub,            // vminub(a, b)
+  kOpVminsw,            // vminsw(a, b)
+  kOpVminuw,            // vminuw(a, b)
+  kOpVminsd,            // vminsd(a, b)
+  kOpVminud,            // vminud(a, b)
+  kOpVmaxsb,            // vmaxsb(a, b)
+  kOpVmaxub,            // vmaxub(a, b)
+  kOpVmaxsw,            // vmaxsw(a, b)
+  kOpVmaxuw,            // vmaxuw(a, b)
+  kOpVmaxsd,            // vmaxsd(a, b)
+  kOpVmaxud,            // vmaxud(a, b)
+  kOpVsllw,             // vsllw(a, b)
+  kOpVsrlw,             // vsrlw(a, b)
+  kOpVsraw,             // vsraw(a, b)
+  kOpVslld,             // vslld(a, b)
+  kOpVsrld,             // vsrld(a, b)
+  kOpVsrad,             // vsrad(a, b)
+  kOpVsllq,             // vsllq(a, b)
+  kOpVsrlq,             // vsrlq(a, b)
+  kOpVcmpeqb,           // vcmpeqb(a, b)
+  kOpVcmpeqw,           // vcmpeqw(a, b)
+  kOpVcmpeqd,           // vcmpeqd(a, b)
+  kOpVcmpgtb,           // vcmpgtb(a, b)
+  kOpVcmpgtw,           // vcmpgtw(a, b)
+  kOpVcmpgtd,           // vcmpgtd(a, b)
+
   //! \internal
   //!
   //! Count of operators.
@@ -244,56 +300,54 @@ enum OpFlags {
   kOpFlagUnary         = 0x00000001,
   //! The operator has two parameters (binary node).
   kOpFlagBinary        = 0x00000002,
-  //! The operator is an intrinsic function.
+  //! The operator is an built-in intrinsic function (like `round`, `min`, `max`).
   kOpFlagIntrinsic     = 0x00000004,
+  //! The operator is a special DSP intrinsic function.
+  kOpFlagDSP           = 0x00000008,
+
   //! The operator has right-to-left associativity.
-  kOpFlagRightToLeft   = 0x00000008,
+  kOpFlagRightToLeft   = 0x00000010,
 
   //! The operator does an assignment to a variable.
-  kOpFlagAssign        = 0x00000010,
+  kOpFlagAssign        = 0x00000020,
   //! The operator is a postfix operator (.)++ or (.)--.
-  kOpFlagAssignPost    = 0x00000020,
+  kOpFlagAssignPost    = 0x00000040,
 
   //! The operator performs an arithmetic operation.
-  kOpFlagArithmetic    = 0x00000040,
+  kOpFlagArithmetic    = 0x00000100,
   //! The operator performs a logical operation - `&&` and `||`.
-  kOpFlagLogical       = 0x00000080,
-  //! The operator performs a conditional operation.
-  kOpFlagConditional   = 0x00000100,
+  kOpFlagLogical       = 0x00000200,
   //! The operator performs a floating-point rounding (float-only)
-  kOpFlagRounding      = 0x00000200,
-  //! The operator calculates a trigonometric function (float-only)
-  kOpFlagTrigonometric = 0x00000400,
+  kOpFlagRounding      = 0x00000400,
+  //! The operator performs a conditional operation.
+  kOpFlagConditional   = 0x00000800,
+  //! The operator calculates a trigonometric function (float-only).
+  kOpFlagTrigonometric = 0x00001000,
 
-  //! The operator performs bit masking.
-  kOpFlagBitMask       = 0x00001000,
-  //! The operator performs bit shifting/rotation (integer-only).
-  kOpFlagBitShift      = 0x00002000,
-  //! Combination of `kOpFlagBitMask` and `kOpFlagBitShift`.
-  kOpFlagBitwise       = 0x00003000,
+  //! Bitwise operation (AND, OR, XOR).
+  kOpFlagBitwise       = 0x00002000,
+  //! Bit shifting or rotation (integer-only).
+  kOpFlagBitShift      = 0x00004000,
 
-  //! The operator works with floating-point only.
-  kOpFlagFloatOnly     = 0x00080000,
+  //! The operator is defined for boolean operands.
+  kOpFlagBoolOp        = 0x00010000,
+  //! The operator is defined for ineger operands.
+  kOpFlagIntOp         = 0x00020000,
+  //! The operator is defined for floating-point operands.
+  kOpFlagFloatOp       = 0x00040000,
 
-  // TODO:
-  /*
-  //! The operator performs a bitwise operation.
-  kOpFlagBitwise       = 0x00000400,
-  //! The operator is defined for `int` operands.
-  kOpFlagIntOp         = 0x0,
-  //! The operator is defined for `float` operands.
-  kOpFlagFloatOp       = 0x0,
-  //! The operator is defined for operands in boolean mode.
-  kOpFlagBoolOp        = 0x0,
-  */
+  //! The operator is defined for `int`, `float` types.
+  kOpFlagIntFPOp       = kOpFlagIntOp | kOpFlagFloatOp,
+  //! The operator is defined for `int`, `float`, and `bool` types.
+  kOpFlagAnyOp         = kOpFlagIntOp | kOpFlagFloatOp | kOpFlagBoolOp,
 
-  kOpFlagNopIfLZero    = 0x10000000,
-  kOpFlagNopIfRZero    = 0x20000000,
-  kOpFlagNopIfLOne     = 0x40000000,
-  kOpFlagNopIfROne     = 0x80000000,
+  kOpFlagNopIfL0       = 0x10000000,
+  kOpFlagNopIfR0       = 0x20000000,
+  kOpFlagNopIfL1       = 0x40000000,
+  kOpFlagNopIfR1       = 0x80000000,
 
-  kOpFlagNopIfZero     = kOpFlagNopIfLZero | kOpFlagNopIfRZero,
-  kOpFlagNopIfOne      = kOpFlagNopIfLOne  | kOpFlagNopIfROne
+  kOpFlagNopIf0        = kOpFlagNopIfL0 | kOpFlagNopIfR0,
+  kOpFlagNopIf1        = kOpFlagNopIfL1 | kOpFlagNopIfR1
 };
 
 // ============================================================================
@@ -355,8 +409,8 @@ struct TypeInfo {
   static MPSL_INLINE bool isIntId(uint32_t typeId) noexcept { return (get(typeId).flags & kTypeFlagInt) != 0; }
   static MPSL_INLINE bool isIntType(uint32_t ti) noexcept { return isIntId(ti & kTypeIdMask); }
 
-  static MPSL_INLINE bool isFPId(uint32_t typeId) noexcept { return (get(typeId).flags & kTypeFlagFP) != 0; }
-  static MPSL_INLINE bool isFPType(uint32_t ti) noexcept { return isFPId(ti & kTypeIdMask); }
+  static MPSL_INLINE bool isFloatId(uint32_t typeId) noexcept { return (get(typeId).flags & kTypeFlagFP) != 0; }
+  static MPSL_INLINE bool isFloatType(uint32_t ti) noexcept { return isFloatId(ti & kTypeIdMask); }
 
   static MPSL_INLINE bool isPtrId(uint32_t typeId) noexcept { return (get(typeId).flags & (kTypeFlagPtr)) != 0; }
   static MPSL_INLINE bool isPtrType(uint32_t ti) noexcept { return isPtrId(ti & kTypeIdMask); }
@@ -462,15 +516,17 @@ struct OpInfo {
   MPSL_INLINE bool isAssignment() const noexcept { return (flags & kOpFlagAssign) != 0; }
   MPSL_INLINE bool isArithmetic() const noexcept { return (flags & kOpFlagArithmetic) != 0; }
   MPSL_INLINE bool isLogical() const noexcept { return (flags & kOpFlagLogical) != 0; }
-  MPSL_INLINE bool isConditional() const noexcept { return (flags & kOpFlagConditional) != 0; }
-
-  MPSL_INLINE bool isBitMask() const noexcept { return (flags & kOpFlagBitMask) != 0; }
-  MPSL_INLINE bool isBitShift() const noexcept { return (flags & kOpFlagBitShift) != 0; }
-  MPSL_INLINE bool isBitwise() const noexcept { return (flags & kOpFlagBitwise) != 0; }
-
-  MPSL_INLINE bool isFloatOnly() const noexcept { return (flags & kOpFlagFloatOnly) != 0; }
   MPSL_INLINE bool isRounding() const noexcept { return (flags & kOpFlagRounding) != 0; }
+  MPSL_INLINE bool isConditional() const noexcept { return (flags & kOpFlagConditional) != 0; }
   MPSL_INLINE bool isTrigonometric() const noexcept { return (flags & kOpFlagTrigonometric) != 0; }
+
+  MPSL_INLINE bool isBitwise() const noexcept { return (flags & kOpFlagBitwise) != 0; }
+  MPSL_INLINE bool isBitShift() const noexcept { return (flags & kOpFlagBitShift) != 0; }
+
+  MPSL_INLINE bool isIntOp() const noexcept { return (flags & kOpFlagIntOp) != 0; }
+  MPSL_INLINE bool isBoolOp() const noexcept { return (flags & kOpFlagBoolOp) != 0; }
+  MPSL_INLINE bool isFloatOp() const noexcept { return (flags & kOpFlagFloatOp) != 0; }
+  MPSL_INLINE bool isFloatOnly() const noexcept { return (flags & kOpFlagAnyOp) == kOpFlagFloatOp; }
 
   MPSL_INLINE bool rightAssociate(uint32_t rPrec) const noexcept {
     return precedence > rPrec || (precedence == rPrec && isRightToLeft());

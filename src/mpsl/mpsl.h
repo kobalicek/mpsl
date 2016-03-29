@@ -1,5 +1,5 @@
 // [MPSL]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -775,13 +775,13 @@ struct Program {
   //! \internal
   struct Impl {
     //! Prototype of `main()` that accepts a single argument.
-    typedef Error (*MainFunc1)(void* arg1);
+    typedef Error (MPSL_CDECL *MainFunc1)(void* arg1);
     //! Prototype of `main()` that accepts two arguments.
-    typedef Error (*MainFunc2)(void* arg1, void* arg2);
+    typedef Error (MPSL_CDECL *MainFunc2)(void* arg1, void* arg2);
     //! Prototype of `main()` that accepts three arguments.
-    typedef Error (*MainFunc3)(void* arg1, void* arg2, void* arg3);
+    typedef Error (MPSL_CDECL *MainFunc3)(void* arg1, void* arg2, void* arg3);
     //! Prototype of `main()` that accepts four arguments.
-    typedef Error (*MainFunc4)(void* arg1, void* arg2, void* arg3, void* arg4);
+    typedef Error (MPSL_CDECL *MainFunc4)(void* arg1, void* arg2, void* arg3, void* arg4);
 
     // Implemented in `mpsl.cpp`.
     MPSL_INLINE void destroy() noexcept;

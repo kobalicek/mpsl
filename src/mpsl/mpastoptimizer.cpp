@@ -1,5 +1,5 @@
 // [MPSL]
-// Shader-Like Mathematical Expression JIT Engine for C++.
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -458,8 +458,8 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
       double val;
 
       if (TypeInfo::isIntOrFPType(typeInfo) && mpValueAsScalarDouble(&val, &lNode->_value, left->getTypeInfo())) {
-        if ((val == 0.0 && (op.flags & kOpFlagNopIfLZero)) ||
-            (val == 1.0 && (op.flags & kOpFlagNopIfLOne))) {
+        if ((val == 0.0 && (op.flags & kOpFlagNopIfL0)) ||
+            (val == 1.0 && (op.flags & kOpFlagNopIfL1))) {
           node->unlinkRight();
           node->getParent()->replaceNode(node, right);
 
@@ -493,8 +493,8 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
       else {
         double val;
         if (TypeInfo::isIntOrFPType(typeInfo) && mpValueAsScalarDouble(&val, &rNode->_value, right->getTypeInfo())) {
-          if ((val == 0.0 && (op.flags & kOpFlagNopIfRZero)) ||
-              (val == 1.0 && (op.flags & kOpFlagNopIfROne))) {
+          if ((val == 0.0 && (op.flags & kOpFlagNopIfR0)) ||
+              (val == 1.0 && (op.flags & kOpFlagNopIfR1))) {
             node->unlinkLeft();
             node->getParent()->replaceNode(node, left);
 
