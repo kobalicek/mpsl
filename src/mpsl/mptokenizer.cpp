@@ -55,9 +55,9 @@ enum TokenChar {
   kTokenCharDiv = kTokenDiv,          // /
   kTokenCharMod = kTokenMod,          // %
   kTokenCharNot = kTokenNot,          // !
-  kTokenCharAnd = kTokenBitAnd,       // &
-  kTokenCharOr  = kTokenBitOr,        // |
-  kTokenCharXor = kTokenBitXor,       // ^
+  kTokenCharAnd = kTokenAnd,          // &
+  kTokenCharOr  = kTokenOr,           // |
+  kTokenCharXor = kTokenXor,          // ^
   kTokenCharNeg = kTokenBitNeg,       // ~
   kTokenCharEq  = kTokenAssign,       // =
   kTokenCharLt  = kTokenLt,           // <
@@ -497,41 +497,41 @@ _Repeat:
 
     switch (c) {
       case kTokenCharAdd: // `+=`, `++`, `+`.
-        if (c1 == '=') { c = kTokenAssignAdd   ; p++; break; }
-        if (c1 == '+') { c = kTokenPlusPlus    ; p++; break; }
+        if (c1 == '=') { c = kTokenAssignAdd; p++; break; }
+        if (c1 == '+') { c = kTokenPlusPlus; p++; break; }
         break;
 
       case kTokenCharSub: // `-=`, `--`, `-`.
-        if (c1 == '=') { c = kTokenAssignSub   ; p++; break; }
-        if (c1 == '-') { c = kTokenMinusMinus  ; p++; break; }
+        if (c1 == '=') { c = kTokenAssignSub; p++; break; }
+        if (c1 == '-') { c = kTokenMinusMinus; p++; break; }
         break;
 
       case kTokenCharMul: // `*=`, `*`.
-        if (c1 == '=') { c = kTokenAssignMul   ; p++; break; }
+        if (c1 == '=') { c = kTokenAssignMul; p++; break; }
         break;
 
       case kTokenCharDiv: // `//`, `/=`, `/`.
         if (c1 == '/')
           goto _Comment;
-        if (c1 == '=') { c = kTokenAssignDiv   ; p++; break; }
+        if (c1 == '=') { c = kTokenAssignDiv; p++; break; }
         break;
 
       case kTokenCharMod: // `%=`, `%`.
-        if (c1 == '=') { c = kTokenAssignMod   ; p++; break; }
+        if (c1 == '=') { c = kTokenAssignMod; p++; break; }
         break;
 
       case kTokenCharAnd: // `&=`, `&&`, `&`.
-        if (c1 == '=') { c = kTokenAssignBitAnd; p++; break; }
-        if (c1 == '&') { c = kTokenLogAnd      ; p++; break; }
+        if (c1 == '=') { c = kTokenAssignAnd; p++; break; }
+        if (c1 == '&') { c = kTokenLogAnd; p++; break; }
         break;
 
       case kTokenCharOr: // `|=`, `||`, `|`.
-        if (c1 == '=') { c = kTokenAssignBitOr ; p++; break; }
-        if (c1 == '|') { c = kTokenLogOr       ; p++; break; }
+        if (c1 == '=') { c = kTokenAssignOr; p++; break; }
+        if (c1 == '|') { c = kTokenLogOr; p++; break; }
         break;
 
       case kTokenCharXor: // `^=`, `^`.
-        if (c1 == '=') { c = kTokenAssignBitXor; p++; break; }
+        if (c1 == '=') { c = kTokenAssignXor; p++; break; }
         break;
 
       case kTokenCharNeg: // `~`.
@@ -548,10 +548,10 @@ _Repeat:
       case kTokenCharLt: // `<<=`, `<<`, `<=`, `<`.
         if (c1 == '<') {
           if (++p != pEnd && p[0] == '=') {
-            c = kTokenAssignBitShl; p++;
+            c = kTokenAssignSll; p++;
           }
           else {
-            c = kTokenBitShl;
+            c = kTokenSll;
           }
           break;
         }
@@ -564,19 +564,19 @@ _Repeat:
             uint32_t c2 = static_cast<uint8_t>(p[0]);
             if (c2 == '>') {
               if (++p != pEnd && p[0] == '=') {
-                c = kTokenAssignBitShr; p++;
+                c = kTokenAssignSrl; p++;
               }
               else {
-                c = kTokenBitShr;
+                c = kTokenSrl;
               }
               break;
             }
             else if (c2 == '=') {
-              c = kTokenAssignBitSar;
+              c = kTokenAssignSra;
               break;
             }
           }
-          c = kTokenBitSar;
+          c = kTokenSra;
           break;
         }
         if (c1 == '=') { c = kTokenGe; p++; break; }

@@ -30,7 +30,7 @@ struct AstNestedScope : public AstScope {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstNestedScope(Parser* parser) noexcept
-    : AstScope(parser->_ast, parser->_currentScope, kAstScopeNested),
+    : AstScope(parser->_ast, parser->_currentScope, AstScope::kTypeNested),
       _parser(parser) {
     _parser->_currentScope = this;
   }
@@ -107,7 +107,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
   AstScope* localScope;
 
   MPSL_PROPAGATE(block->willAdd());
-  MPSL_NULLCHECK(localScope = _ast->newScope(globalScope, kAstScopeLocal));
+  MPSL_NULLCHECK(localScope = _ast->newScope(globalScope, AstScope::kTypeLocal));
 
   // Create `AstFunction` and essential sub-nodes.
   AstFunction* func = _ast->newNode<AstFunction>();
@@ -131,7 +131,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
     str.set(_tokenizer._start + token.position, token.length);
     AstSymbol* retType = localScope->resolveSymbol(str, token.hVal);
 
-    if (retType == nullptr || retType->getSymbolType() != kAstSymbolTypeName)
+    if (retType == nullptr || !retType->isTypeName())
       MPSL_PARSER_ERROR(token, "Expected a type-name.");
     func->setRet(retType);
   }
@@ -149,7 +149,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
   if (funcSym != nullptr)
     MPSL_PARSER_ERROR(token, "Attempt to redefine '%s'.", funcSym->getName());
 
-  funcSym = _ast->newSymbol(str, token.hVal, kAstSymbolFunction, globalScope->getScopeType());
+  funcSym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeFunction, globalScope->getScopeType());
   MPSL_NULLCHECK(funcSym);
 
   // Function name has to be put into the parent scope, otherwise the symbol
@@ -177,7 +177,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
       str.set(_tokenizer._start + token.position, token.length);
       AstSymbol* argType = localScope->resolveSymbol(str, token.hVal);
 
-      if (argType == nullptr || argType->getSymbolType() != kAstSymbolTypeName)
+      if (argType == nullptr || !argType->isTypeName())
         MPSL_PARSER_ERROR(token, "Expected an argument type.");
 
       // Parse the argument name.
@@ -190,7 +190,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
       AstSymbol* argSym = localScope->resolveSymbol(str, token.hVal, &argScope);
 
       if (argSym != nullptr) {
-        if (argSym->getSymbolType() != kAstSymbolVariable)
+        if (!argSym->isVariable())
           MPSL_PARSER_ERROR(token, "Can't use %{SymbolType} '%s' as an argument name .",
             argSym->getSymbolType(), argSym->getName());
 
@@ -199,7 +199,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
             argSym->getName());
       }
 
-      argSym = _ast->newSymbol(str, token.hVal, kAstSymbolVariable, kAstScopeLocal);
+      argSym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeVariable, AstScope::kTypeLocal);
       MPSL_NULLCHECK(argSym);
 
       argSym->setDeclared();
@@ -316,7 +316,7 @@ Error Parser::parseStatement(AstBlock* block, uint32_t flags) noexcept {
     StringRef str(_tokenizer._start + token.position, token.length);
     AstSymbol* sym = _currentScope->resolveSymbol(str, token.hVal);
 
-    if (sym != nullptr && sym->getSymbolType() == kAstSymbolTypeName) {
+    if (sym != nullptr && sym->isTypeName()) {
       if (!(flags & kEnableNewSymbols))
         MPSL_PARSER_ERROR(token, "Cannot declare a new variable here.");
       return parseVarDecl(block);
@@ -383,7 +383,7 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
   str.set(_tokenizer._start + token.position, token.length);
   AstSymbol* typeSym = scope->resolveSymbol(str, token.hVal);
 
-  if (typeSym == nullptr || typeSym->getSymbolType() != kAstSymbolTypeName)
+  if (typeSym == nullptr || !typeSym->isTypeName())
     MPSL_PARSER_ERROR(token, "Unresolved type-name after 'typedef' declaration.");
 
   // Parse the synonym.
@@ -397,7 +397,7 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
   if (synonym != nullptr)
     MPSL_PARSER_ERROR(token, "Attempt to redefine '%s'.", synonym->getName());
 
-  synonym = _ast->newSymbol(str, token.hVal, kAstSymbolTypeName, scope->getScopeType());
+  synonym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeTypeName, scope->getScopeType());
   MPSL_NULLCHECK(synonym);
 
   synonym->setDeclared();
@@ -435,7 +435,7 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
   AstScope* scope = _currentScope;
   AstSymbol* typeSym = scope->resolveSymbol(str, token.hVal);
 
-  if (typeSym == nullptr || typeSym->getSymbolType() != kAstSymbolTypeName)
+  if (typeSym == nullptr || !typeSym->isTypeName())
     MPSL_PARSER_ERROR(token, "Expected a type-name.");
 
   for (;;) {
@@ -456,7 +456,7 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
 
     str.set(_tokenizer._start + token.position, token.length);
     if ((vSym = scope->resolveSymbol(str, token.hVal, &vScope)) != nullptr) {
-      if (vSym->getSymbolType() != kAstSymbolVariable || scope == vScope)
+      if (!vSym->isVariable() || scope == vScope)
         MPSL_PARSER_ERROR(token, "Attempt to redefine %{SymbolType} '%s'.",
           vSym->getSymbolType(), vSym->getName());
 
@@ -470,7 +470,7 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
       }
     }
 
-    vSym = _ast->newSymbol(str, token.hVal, kAstSymbolVariable, scope->getScopeType());
+    vSym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeVariable, scope->getScopeType());
     MPSL_NULLCHECK(vSym);
 
     uint32_t typeInfo = typeSym->getTypeInfo();
@@ -612,7 +612,7 @@ Error Parser::parseFor(AstBlock* block) noexcept {
   AstLoop* for_;
 
   MPSL_PROPAGATE(block->willAdd());
-  MPSL_NULLCHECK(for_ = _ast->newNode<AstLoop>(kAstNodeFor));
+  MPSL_NULLCHECK(for_ = _ast->newNode<AstLoop>(AstNode::kTypeFor));
 
   for_->setPosition(token.getPosAsUInt());
   block->appendNode(for_);
@@ -643,7 +643,7 @@ Error Parser::parseFor(AstBlock* block) noexcept {
     StringRef str(_tokenizer._start + token.position, token.length);
     AstSymbol* sym = tmpScope.resolveSymbol(str, token.hVal);
 
-    if (sym != nullptr && sym->getSymbolType() == kAstSymbolTypeName) {
+    if (sym != nullptr && sym->isTypeName()) {
       MPSL_PROPAGATE(parseVarDecl(init));
       hasVarDecl = true;
     }
@@ -716,7 +716,7 @@ Error Parser::parseWhile(AstBlock* block) noexcept {
   AstLoop* while_;
 
   MPSL_PROPAGATE(block->willAdd());
-  MPSL_NULLCHECK(while_ = _ast->newNode<AstLoop>(kAstNodeWhile));
+  MPSL_NULLCHECK(while_ = _ast->newNode<AstLoop>(AstNode::kTypeWhile));
 
   while_->setPosition(token.getPosAsUInt());
   block->appendNode(while_);
@@ -757,7 +757,7 @@ Error Parser::parseDoWhile(AstBlock* block) noexcept {
   AstLoop* doWhile;
 
   MPSL_PROPAGATE(block->willAdd());
-  MPSL_NULLCHECK(doWhile = _ast->newNode<AstLoop>(kAstNodeDoWhile));
+  MPSL_NULLCHECK(doWhile = _ast->newNode<AstLoop>(AstNode::kTypeDoWhile));
 
   doWhile->setPosition(token.getPosAsUInt());
   block->appendNode(doWhile);
@@ -942,12 +942,11 @@ _Repeat1:
         if (sym == nullptr)
           MPSL_PARSER_ERROR(token, "Unresolved symbol.");
 
-        uint32_t symType = sym->getSymbolType();
-        if (symType == kAstSymbolTypeName)
+        if (sym->isTypeName())
           MPSL_PARSER_ERROR(token, "Unexpected type-name '%s'.", sym->getName());
 
         AstNode* zNode;
-        if (symType == kAstSymbolVariable) {
+        if (sym->isVariable()) {
           if (!sym->isDeclared())
             MPSL_PARSER_ERROR(token, "Can't use variable '%s' that is being declared.", sym->getName());
 
@@ -1012,7 +1011,7 @@ _Repeat1:
           StringRef str(_tokenizer._start + token.position, token.length);
           AstSymbol* sym = scope->resolveSymbol(str, token.hVal);
 
-          if (sym != nullptr && sym->getSymbolType() == kAstSymbolTypeName) {
+          if (sym != nullptr && sym->isTypeName()) {
             if (_tokenizer.consumeAndNext(&token) != kTokenRParen)
               MPSL_PARSER_ERROR(token, "Expected a ')' token.");
 
@@ -1106,7 +1105,7 @@ _Repeat2:
 _UnaryPostfixOp: {
         // Fail if the current node is not a variable.
         AstNode* aNode = unary ? unary->getChild() : tNode;
-        if (aNode == nullptr || (aNode->getNodeType() != kAstNodeVar && aNode->getNodeType() != kAstNodeVarMemb))
+        if (aNode == nullptr || (aNode->getNodeType() != AstNode::kTypeVar && aNode->getNodeType() != AstNode::kTypeVarMemb))
           MPSL_PARSER_ERROR(token, "Unexpected postfix operator.");
 
         AstUnaryOp* zNode = _ast->newNode<AstUnaryOp>(op);
@@ -1132,7 +1131,7 @@ _UnaryPostfixOp: {
         uint32_t position = token.getPosAsUInt();
         AstNode* aNode = unary ? unary->getChild() : tNode;
 
-        if (aNode == nullptr || (aNode->getNodeType() != kAstNodeVar && aNode->getNodeType() != kAstNodeVarMemb))
+        if (aNode == nullptr || (aNode->getNodeType() != AstNode::kTypeVar && aNode->getNodeType() != AstNode::kTypeVarMemb))
           MPSL_PARSER_ERROR(token, "Unexpected member access.");
 
         if (_tokenizer.next(&token) != kTokenSymbol)
@@ -1162,38 +1161,38 @@ _UnaryPostfixOp: {
       }
 
       // Parse a binary operator.
-      case kTokenEq          : op = kOpEq          ; goto _Binary;
-      case kTokenNe          : op = kOpNe          ; goto _Binary;
-      case kTokenGt          : op = kOpGt          ; goto _Binary;
-      case kTokenGe          : op = kOpGe          ; goto _Binary;
-      case kTokenLt          : op = kOpLt          ; goto _Binary;
-      case kTokenLe          : op = kOpLe          ; goto _Binary;
-      case kTokenLogAnd      : op = kOpLogAnd      ; goto _Binary;
-      case kTokenLogOr       : op = kOpLogOr       ; goto _Binary;
-      case kTokenAdd         : op = kOpAdd         ; goto _Binary;
-      case kTokenSub         : op = kOpSub         ; goto _Binary;
-      case kTokenMul         : op = kOpMul         ; goto _Binary;
-      case kTokenDiv         : op = kOpDiv         ; goto _Binary;
-      case kTokenMod         : op = kOpMod         ; goto _Binary;
-      case kTokenBitAnd      : op = kOpBitAnd      ; goto _Binary;
-      case kTokenBitOr       : op = kOpBitOr       ; goto _Binary;
-      case kTokenBitXor      : op = kOpBitXor      ; goto _Binary;
-      case kTokenBitNeg      : op = kOpBitNeg      ; goto _Binary;
-      case kTokenBitSar      : op = kOpBitSar      ; goto _Binary;
-      case kTokenBitShr      : op = kOpBitShr      ; goto _Binary;
-      case kTokenBitShl      : op = kOpBitShl      ; goto _Binary;
-      case kTokenAssign      : op = kOpAssign      ; goto _Binary;
-      case kTokenAssignAdd   : op = kOpAssignAdd   ; goto _Binary;
-      case kTokenAssignSub   : op = kOpAssignSub   ; goto _Binary;
-      case kTokenAssignMul   : op = kOpAssignMul   ; goto _Binary;
-      case kTokenAssignDiv   : op = kOpAssignDiv   ; goto _Binary;
-      case kTokenAssignMod   : op = kOpAssignMod   ; goto _Binary;
-      case kTokenAssignBitAnd: op = kOpAssignBitAnd; goto _Binary;
-      case kTokenAssignBitOr : op = kOpAssignBitOr ; goto _Binary;
-      case kTokenAssignBitXor: op = kOpAssignBitXor; goto _Binary;
-      case kTokenAssignBitSar: op = kOpAssignBitSar; goto _Binary;
-      case kTokenAssignBitShr: op = kOpAssignBitShr; goto _Binary;
-      case kTokenAssignBitShl: op = kOpAssignBitShl; goto _Binary;
+      case kTokenEq       : op = kOpEq       ; goto _Binary;
+      case kTokenNe       : op = kOpNe       ; goto _Binary;
+      case kTokenGt       : op = kOpGt       ; goto _Binary;
+      case kTokenGe       : op = kOpGe       ; goto _Binary;
+      case kTokenLt       : op = kOpLt       ; goto _Binary;
+      case kTokenLe       : op = kOpLe       ; goto _Binary;
+      case kTokenLogAnd   : op = kOpLogAnd   ; goto _Binary;
+      case kTokenLogOr    : op = kOpLogOr    ; goto _Binary;
+      case kTokenAdd      : op = kOpAdd      ; goto _Binary;
+      case kTokenSub      : op = kOpSub      ; goto _Binary;
+      case kTokenMul      : op = kOpMul      ; goto _Binary;
+      case kTokenDiv      : op = kOpDiv      ; goto _Binary;
+      case kTokenMod      : op = kOpMod      ; goto _Binary;
+      case kTokenAnd      : op = kOpAnd      ; goto _Binary;
+      case kTokenOr       : op = kOpOr       ; goto _Binary;
+      case kTokenXor      : op = kOpXor      ; goto _Binary;
+      case kTokenBitNeg   : op = kOpBitNeg   ; goto _Binary;
+      case kTokenSll      : op = kOpSll      ; goto _Binary;
+      case kTokenSrl      : op = kOpSrl      ; goto _Binary;
+      case kTokenSra      : op = kOpSra      ; goto _Binary;
+      case kTokenAssign   : op = kOpAssign   ; goto _Binary;
+      case kTokenAssignAdd: op = kOpAssignAdd; goto _Binary;
+      case kTokenAssignSub: op = kOpAssignSub; goto _Binary;
+      case kTokenAssignMul: op = kOpAssignMul; goto _Binary;
+      case kTokenAssignDiv: op = kOpAssignDiv; goto _Binary;
+      case kTokenAssignMod: op = kOpAssignMod; goto _Binary;
+      case kTokenAssignAnd: op = kOpAssignAnd; goto _Binary;
+      case kTokenAssignOr : op = kOpAssignOr ; goto _Binary;
+      case kTokenAssignXor: op = kOpAssignXor; goto _Binary;
+      case kTokenAssignSll: op = kOpAssignSll; goto _Binary;
+      case kTokenAssignSrl: op = kOpAssignSrl; goto _Binary;
+      case kTokenAssignSra: op = kOpAssignSra; goto _Binary;
 _Binary: {
         AstBinaryOp* zNode = _ast->newNode<AstBinaryOp>(op);
         MPSL_NULLCHECK(zNode);
@@ -1299,7 +1298,7 @@ Error Parser::parseVariable(AstVar** pNodeOut) noexcept {
       StringRef str(_tokenizer._start + token.position, token.length);
       sym = _currentScope->resolveSymbol(str, token.hVal);
 
-      if (sym == nullptr || sym->getSymbolType() != kAstSymbolVariable)
+      if (sym == nullptr || !sym->isVariable())
         MPSL_PARSER_ERROR(token, "Expected a variable.");
       break;
     }
@@ -1348,8 +1347,7 @@ Error Parser::parseCall(AstCall** pNodeOut) noexcept {
   if (sym == nullptr)
     MPSL_PARSER_ERROR(token, "Unresolved symbol.");
 
-  if (sym->getSymbolType() != kAstSymbolIntrinsic &&
-      sym->getSymbolType() != kAstSymbolFunction)
+  if (!sym->isIntrinsic() && !sym->isFunction())
     MPSL_PARSER_ERROR(token, "Expected a function name.");
 
   uToken = _tokenizer.next(&token);

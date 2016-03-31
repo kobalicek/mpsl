@@ -41,25 +41,25 @@ struct AstNodeSize {
 
 #define ROW(type, size) { type, 0, static_cast<uint8_t>(size) }
 static const AstNodeSize mpAstNodeSize[] = {
-  ROW(kAstNodeNone     , 0                   ),
-  ROW(kAstNodeProgram  , sizeof(AstProgram)  ),
-  ROW(kAstNodeFunction , sizeof(AstFunction) ),
-  ROW(kAstNodeBlock    , sizeof(AstBlock)    ),
-  ROW(kAstNodeBranch   , sizeof(AstBranch)   ),
-  ROW(kAstNodeCondition, sizeof(AstCondition)),
-  ROW(kAstNodeFor      , sizeof(AstLoop)     ),
-  ROW(kAstNodeWhile    , sizeof(AstLoop)     ),
-  ROW(kAstNodeDoWhile  , sizeof(AstLoop)     ),
-  ROW(kAstNodeBreak    , sizeof(AstBreak)    ),
-  ROW(kAstNodeContinue , sizeof(AstContinue) ),
-  ROW(kAstNodeReturn   , sizeof(AstReturn)   ),
-  ROW(kAstNodeVarDecl  , sizeof(AstVarDecl)  ),
-  ROW(kAstNodeVarMemb  , sizeof(AstVarMemb)  ),
-  ROW(kAstNodeVar      , sizeof(AstVar)      ),
-  ROW(kAstNodeImm      , sizeof(AstImm)      ),
-  ROW(kAstNodeUnaryOp  , sizeof(AstUnaryOp)  ),
-  ROW(kAstNodeBinaryOp , sizeof(AstBinaryOp) ),
-  ROW(kAstNodeCall     , sizeof(AstCall)     )
+  ROW(AstNode::kTypeNone     , 0                   ),
+  ROW(AstNode::kTypeProgram  , sizeof(AstProgram)  ),
+  ROW(AstNode::kTypeFunction , sizeof(AstFunction) ),
+  ROW(AstNode::kTypeBlock    , sizeof(AstBlock)    ),
+  ROW(AstNode::kTypeBranch   , sizeof(AstBranch)   ),
+  ROW(AstNode::kTypeCondition, sizeof(AstCondition)),
+  ROW(AstNode::kTypeFor      , sizeof(AstLoop)     ),
+  ROW(AstNode::kTypeWhile    , sizeof(AstLoop)     ),
+  ROW(AstNode::kTypeDoWhile  , sizeof(AstLoop)     ),
+  ROW(AstNode::kTypeBreak    , sizeof(AstBreak)    ),
+  ROW(AstNode::kTypeContinue , sizeof(AstContinue) ),
+  ROW(AstNode::kTypeReturn   , sizeof(AstReturn)   ),
+  ROW(AstNode::kTypeVarDecl  , sizeof(AstVarDecl)  ),
+  ROW(AstNode::kTypeVarMemb  , sizeof(AstVarMemb)  ),
+  ROW(AstNode::kTypeVar      , sizeof(AstVar)      ),
+  ROW(AstNode::kTypeImm      , sizeof(AstImm)      ),
+  ROW(AstNode::kTypeUnaryOp  , sizeof(AstUnaryOp)  ),
+  ROW(AstNode::kTypeBinaryOp , sizeof(AstBinaryOp) ),
+  ROW(AstNode::kTypeCall     , sizeof(AstCall)     )
 };
 #undef ROW
 
@@ -124,24 +124,24 @@ void AstBuilder::deleteNode(AstNode* node) noexcept {
   MPSL_ASSERT(mpAstNodeSize[nodeType].getNodeType() == nodeType);
 
   switch (nodeType) {
-    case kAstNodeProgram  : static_cast<AstProgram*  >(node)->destroy(this); break;
-    case kAstNodeFunction : static_cast<AstFunction* >(node)->destroy(this); break;
-    case kAstNodeBlock    : static_cast<AstBlock*    >(node)->destroy(this); break;
-    case kAstNodeBranch   : static_cast<AstBranch*   >(node)->destroy(this); break;
-    case kAstNodeCondition: static_cast<AstCondition*>(node)->destroy(this); break;
-    case kAstNodeFor      :
-    case kAstNodeWhile    :
-    case kAstNodeDoWhile  : static_cast<AstLoop*     >(node)->destroy(this); break;
-    case kAstNodeBreak    : static_cast<AstBreak*    >(node)->destroy(this); break;
-    case kAstNodeContinue : static_cast<AstContinue* >(node)->destroy(this); break;
-    case kAstNodeReturn   : static_cast<AstReturn*   >(node)->destroy(this); break;
-    case kAstNodeVarDecl  : static_cast<AstVarDecl*  >(node)->destroy(this); break;
-    case kAstNodeVarMemb  : static_cast<AstVarMemb*  >(node)->destroy(this); break;
-    case kAstNodeVar      : static_cast<AstVar*      >(node)->destroy(this); break;
-    case kAstNodeImm      : static_cast<AstImm*      >(node)->destroy(this); break;
-    case kAstNodeUnaryOp  : static_cast<AstUnaryOp*  >(node)->destroy(this); break;
-    case kAstNodeBinaryOp : static_cast<AstBinaryOp* >(node)->destroy(this); break;
-    case kAstNodeCall     : static_cast<AstCall*     >(node)->destroy(this); break;
+    case AstNode::kTypeProgram  : static_cast<AstProgram*  >(node)->destroy(this); break;
+    case AstNode::kTypeFunction : static_cast<AstFunction* >(node)->destroy(this); break;
+    case AstNode::kTypeBlock    : static_cast<AstBlock*    >(node)->destroy(this); break;
+    case AstNode::kTypeBranch   : static_cast<AstBranch*   >(node)->destroy(this); break;
+    case AstNode::kTypeCondition: static_cast<AstCondition*>(node)->destroy(this); break;
+    case AstNode::kTypeFor      :
+    case AstNode::kTypeWhile    :
+    case AstNode::kTypeDoWhile  : static_cast<AstLoop*     >(node)->destroy(this); break;
+    case AstNode::kTypeBreak    : static_cast<AstBreak*    >(node)->destroy(this); break;
+    case AstNode::kTypeContinue : static_cast<AstContinue* >(node)->destroy(this); break;
+    case AstNode::kTypeReturn   : static_cast<AstReturn*   >(node)->destroy(this); break;
+    case AstNode::kTypeVarDecl  : static_cast<AstVarDecl*  >(node)->destroy(this); break;
+    case AstNode::kTypeVarMemb  : static_cast<AstVarMemb*  >(node)->destroy(this); break;
+    case AstNode::kTypeVar      : static_cast<AstVar*      >(node)->destroy(this); break;
+    case AstNode::kTypeImm      : static_cast<AstImm*      >(node)->destroy(this); break;
+    case AstNode::kTypeUnaryOp  : static_cast<AstUnaryOp*  >(node)->destroy(this); break;
+    case AstNode::kTypeBinaryOp : static_cast<AstBinaryOp* >(node)->destroy(this); break;
+    case AstNode::kTypeCall     : static_cast<AstCall*     >(node)->destroy(this); break;
   }
 
   _allocator->release(node, mpAstNodeSize[nodeType].getNodeSize());
@@ -153,7 +153,7 @@ void AstBuilder::deleteNode(AstNode* node) noexcept {
 
 Error AstBuilder::addProgramScope() noexcept {
   if (_globalScope == nullptr) {
-    _globalScope = newScope(nullptr, kAstScopeGlobal);
+    _globalScope = newScope(nullptr, AstScope::kTypeGlobal);
     MPSL_NULLCHECK(_globalScope);
   }
 
@@ -165,7 +165,7 @@ Error AstBuilder::addProgramScope() noexcept {
   return kErrorOk;
 }
 
-// TODO: Not sure this is a right place for these functions.
+// TODO: Not sure this is the right place for these functions.
 Error AstBuilder::addBuiltInTypes(const TypeInfo* data, size_t count) noexcept {
   AstScope* scope = getGlobalScope();
   if (scope == nullptr)
@@ -205,7 +205,7 @@ Error AstBuilder::addBuiltInTypes(const TypeInfo* data, size_t count) noexcept {
       }
 
       uint32_t hVal = HashUtils::hashString(name);
-      AstSymbol* symbol = newSymbol(name, hVal, kAstSymbolTypeName, kAstScopeGlobal);
+      AstSymbol* symbol = newSymbol(name, hVal, AstSymbol::kTypeTypeName, AstScope::kTypeGlobal);
       MPSL_NULLCHECK(symbol);
 
       symbol->setDeclared();
@@ -229,7 +229,7 @@ Error AstBuilder::addBuiltInConstants(const ConstInfo* data, size_t count) noexc
     StringRef name(constInfo.name, ::strlen(constInfo.name));
     uint32_t hVal = HashUtils::hashString(name);
 
-    AstSymbol* symbol = newSymbol(name, hVal, kAstSymbolVariable, kAstScopeGlobal);
+    AstSymbol* symbol = newSymbol(name, hVal, AstSymbol::kTypeVariable, AstScope::kTypeGlobal);
     MPSL_NULLCHECK(symbol);
 
     symbol->setTypeInfo(kTypeDouble | kTypeRead);
@@ -258,7 +258,7 @@ Error AstBuilder::addBuiltInIntrinsics() noexcept {
     StringRef name(op.name, ::strlen(op.name));
     uint32_t hVal = HashUtils::hashString(name);
 
-    AstSymbol* symbol = newSymbol(name, hVal, kAstSymbolIntrinsic, kAstScopeGlobal);
+    AstSymbol* symbol = newSymbol(name, hVal, AstSymbol::kTypeIntrinsic, AstScope::kTypeGlobal);
     MPSL_NULLCHECK(symbol);
 
     symbol->setDeclared();
@@ -298,7 +298,7 @@ Error AstBuilder::addBuiltInObject(uint32_t slot, const Layout* layout, AstSymbo
   }
 
   // Create the root object symbol even if it's anonymous.
-  symbol = newSymbol(name, hVal, kAstSymbolVariable, kAstScopeGlobal);
+  symbol = newSymbol(name, hVal, AstSymbol::kTypeVariable, AstScope::kTypeGlobal);
   MPSL_NULLCHECK(symbol);
 
   symbol->setDeclared();
@@ -329,7 +329,7 @@ Error AstBuilder::addBuiltInObject(uint32_t slot, const Layout* layout, AstSymbo
         return MPSL_TRACE_ERROR(kErrorSymbolCollision);
       }
 
-      symbol = newSymbol(name, hVal, kAstSymbolVariable, kAstScopeGlobal);
+      symbol = newSymbol(name, hVal, AstSymbol::kTypeVariable, AstScope::kTypeGlobal);
       MPSL_NULLCHECK(symbol);
 
       // NOTE: Denested symbols don't have a data layout as they don't act
@@ -668,9 +668,9 @@ Error AstDump::onCondition(AstCondition* node) noexcept {
 Error AstDump::onLoop(AstLoop* node) noexcept {
   uint32_t nodeType = node->getNodeType();
 
-  nest(nodeType == kAstNodeFor     ? "For"   :
-       nodeType == kAstNodeWhile   ? "While" :
-       nodeType == kAstNodeDoWhile ? "Do"    : "<unknown>");
+  nest(nodeType == AstNode::kTypeFor     ? "For"   :
+       nodeType == AstNode::kTypeWhile   ? "While" :
+       nodeType == AstNode::kTypeDoWhile ? "Do"    : "<unknown>");
 
   if (node->hasInit()) {
     nest("Init");
@@ -684,7 +684,7 @@ Error AstDump::onLoop(AstLoop* node) noexcept {
     denest();
   }
 
-  if (nodeType == kAstNodeDoWhile) {
+  if (nodeType == AstNode::kTypeDoWhile) {
     if (node->hasBody())
       MPSL_PROPAGATE(onNode(node->getBody()));
 

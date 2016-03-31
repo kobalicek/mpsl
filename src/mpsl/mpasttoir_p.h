@@ -18,59 +18,6 @@
 namespace mpsl {
 
 // ============================================================================
-// [mpsl::IRPair]
-// ============================================================================
-
-//! A pair of two IR objects.
-//!
-//! Used to split 256-bit wide operations to 128-bit in case the target
-//! doesn't support 256-bit wide registers (all pre-AVX architectures, ARM).
-template<typename T>
-struct IRPair {
-  MPSL_INLINE IRPair() noexcept
-    : lo(nullptr),
-      hi(nullptr) {}
-
-  MPSL_INLINE IRPair(const IRPair<T>& other) noexcept
-    : lo(other.lo),
-      hi(other.hi) {}
-
-  MPSL_INLINE Error set(T* lo, T* hi = nullptr) noexcept {
-    this->lo = lo;
-    this->hi = hi;
-    return kErrorOk;
-  }
-
-  template<typename U>
-  MPSL_INLINE Error set(const IRPair<U>& pair) noexcept {
-    this->lo = static_cast<T*>(pair.lo);
-    this->hi = static_cast<T*>(pair.hi);
-    return kErrorOk;
-  }
-
-  MPSL_INLINE operator IRPair<IRObject>&() noexcept {
-    return *reinterpret_cast<IRPair<IRObject>*>(this);
-  }
-  MPSL_INLINE operator const IRPair<IRObject>&() const noexcept {
-    return *reinterpret_cast<const IRPair<IRObject>*>(this);
-  }
-
-  MPSL_INLINE void reset() noexcept {
-    this->lo = nullptr;
-    this->hi = nullptr;
-  }
-
-  union {
-    struct {
-      T* lo;
-      T* hi;
-    };
-
-    T* obj[2];
-  };
-};
-
-// ============================================================================
 // [mpsl::AstToIR]
 // ============================================================================
 

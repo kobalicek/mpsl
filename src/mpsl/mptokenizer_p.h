@@ -67,9 +67,9 @@ enum TokenType {
   kTokenMod,          // %
   kTokenNot,          // !
 
-  kTokenBitAnd,       // &
-  kTokenBitOr,        // |
-  kTokenBitXor,       // ^
+  kTokenAnd,          // &
+  kTokenOr,           // |
+  kTokenXor,          // ^
   kTokenBitNeg,       // ~
 
   kTokenAssign,       // =
@@ -87,9 +87,9 @@ enum TokenType {
   kTokenLogAnd,       // &&
   kTokenLogOr,        // ||
 
-  kTokenBitSar,       // >>
-  kTokenBitShr,       // >>>
-  kTokenBitShl,       // <<
+  kTokenSll,          // <<
+  kTokenSrl,          // >>>
+  kTokenSra,          // >>
 
   kTokenAssignAdd,    // +=
   kTokenAssignSub,    // -=
@@ -97,12 +97,12 @@ enum TokenType {
   kTokenAssignDiv,    // /=
   kTokenAssignMod,    // %=
 
-  kTokenAssignBitAnd, // &=
-  kTokenAssignBitOr,  // |=
-  kTokenAssignBitXor, // ^=
-  kTokenAssignBitSar, // >>=
-  kTokenAssignBitShr, // >>>=
-  kTokenAssignBitShl, // <<=
+  kTokenAssignAnd,    // &=
+  kTokenAssignOr,     // |=
+  kTokenAssignXor,    // ^=
+  kTokenAssignSll,    // <<=
+  kTokenAssignSrl,    // >>>=
+  kTokenAssignSra,    // >>=
 
   kTokenEnd           // <end>
 };

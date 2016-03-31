@@ -66,13 +66,12 @@ struct JitCompiler {
   MPSL_NOAPI Error compileConsecutiveBlocks(IRBlock* block);
   MPSL_NOAPI Error compileBasicBlock(IRBlock* block, IRBlock* next);
 
-  MPSL_INLINE void emit2_Any(uint32_t instId, const Operand& o0, const Operand& o1) { _c->emit(instId, o0, o1); }
-
-  MPSL_NOAPI void emit3_I32(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
-  MPSL_NOAPI void emit3_F32(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
-  MPSL_NOAPI void emit3_F32(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
-  MPSL_NOAPI void emit3_F64(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
-  MPSL_NOAPI void emit3_F64(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
+  MPSL_INLINE void emit2x(uint32_t instId, const Operand& o0, const Operand& o1) { _c->emit(instId, o0, o1); }
+  MPSL_NOAPI void emit3i(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
+  MPSL_NOAPI void emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
+  MPSL_NOAPI void emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
+  MPSL_NOAPI void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
+  MPSL_NOAPI void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
 
   MPSL_NOAPI X86GpVar varAsPtr(IRVar* irVar);
   MPSL_NOAPI X86GpVar varAsI32(IRVar* irVar);

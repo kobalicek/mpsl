@@ -12,6 +12,7 @@
 #include "./mpallocator_p.h"
 #include "./mpast_p.h"
 #include "./mphash_p.h"
+#include "./mplang_p.h"
 
 // [Api-Begin]
 #include "./mpsl_apibegin.h"
@@ -28,30 +29,6 @@ struct IRVar;
 struct IRImm;
 struct IRInst;
 struct IRBlock;
-
-// ============================================================================
-// [mpsl::IRObjectType]
-// ============================================================================
-
-//! \internal
-//!
-//! Type of \ref IRObject.
-enum IRObjectType {
-  //! Not used.
-  kIRObjectNone = 0,
-
-  //! The object is \ref IRVar.
-  kIRObjectVar,
-  //! The object is \ref IRMem.
-  kIRObjectMem,
-  //! The object is \ref IRImm.
-  kIRObjectImm,
-
-  //! The object is \ref IRInst.
-  kIRObjectInst,
-  //! The object is \ref IRBlock.
-  kIRObjectBlock
-};
 
 // ============================================================================
 // [mpsl::IRBlockType]
@@ -83,329 +60,6 @@ enum IRRegType {
 };
 
 // ============================================================================
-// [mpsl::IRInstCode]
-// ============================================================================
-
-//! \internal
-//!
-//! IR instruction code and meta-data.
-enum IRInstCode {
-  // --------------------------------------------------------------------------
-  // [Instruction-ID]
-  // --------------------------------------------------------------------------
-
-  //! Not used.
-  kIRInstIdMask = 0x00003FFF,
-  kIRInstIdNone = 0,
-
-  kIRInstIdJmp,
-  kIRInstIdJcc,
-  kIRInstIdCall,
-  kIRInstIdRet,
-
-  kIRInstIdFetch32,
-  kIRInstIdFetch64,
-  kIRInstIdFetch96,
-  kIRInstIdFetch128,
-  kIRInstIdFetch192,
-  kIRInstIdFetch256,
-
-  kIRInstIdStore32,
-  kIRInstIdStore64,
-  kIRInstIdStore96,
-  kIRInstIdStore128,
-  kIRInstIdStore192,
-  kIRInstIdStore256,
-
-  kIRInstIdMov32,
-  kIRInstIdMov64,
-  kIRInstIdMov128,
-  kIRInstIdMov256,
-
-  kIRInstIdInsert32,
-  kIRInstIdInsert64,
-
-  kIRInstIdExtract32,
-  kIRInstIdExtract64,
-
-  kIRInstIdCvtI32ToF32,
-  kIRInstIdCvtI32ToF64,
-  kIRInstIdCvtF32ToI32,
-  kIRInstIdCvtF32ToF64,
-  kIRInstIdCvtF64ToI32,
-  kIRInstIdCvtF64ToF32,
-
-  kIRInstIdCmpEqI32,
-  kIRInstIdCmpEqF32,
-  kIRInstIdCmpEqF64,
-  kIRInstIdCmpNeI32,
-  kIRInstIdCmpNeF32,
-  kIRInstIdCmpNeF64,
-  kIRInstIdCmpLtI32,
-  kIRInstIdCmpLtF32,
-  kIRInstIdCmpLtF64,
-  kIRInstIdCmpLeI32,
-  kIRInstIdCmpLeF32,
-  kIRInstIdCmpLeF64,
-  kIRInstIdCmpGtI32,
-  kIRInstIdCmpGtF32,
-  kIRInstIdCmpGtF64,
-  kIRInstIdCmpGeI32,
-  kIRInstIdCmpGeF32,
-  kIRInstIdCmpGeF64,
-
-  kIRInstIdBitNegI32,
-  kIRInstIdBitNegF32,
-  kIRInstIdBitNegF64,
-  kIRInstIdNegI32,
-  kIRInstIdNegF32,
-  kIRInstIdNegF64,
-  kIRInstIdNotI32,
-  kIRInstIdNotF32,
-  kIRInstIdNotF64,
-  kIRInstIdLzcntI32,
-  kIRInstIdPopcntI32,
-
-  kIRInstIdAddI32,
-  kIRInstIdAddF32,
-  kIRInstIdAddF64,
-  kIRInstIdSubI32,
-  kIRInstIdSubF32,
-  kIRInstIdSubF64,
-  kIRInstIdMulI32,
-  kIRInstIdMulF32,
-  kIRInstIdMulF64,
-  kIRInstIdDivI32,
-  kIRInstIdDivF32,
-  kIRInstIdDivF64,
-  kIRInstIdModI32,
-  kIRInstIdModF32,
-  kIRInstIdModF64,
-
-  kIRInstIdAndI32,
-  kIRInstIdAndF32,
-  kIRInstIdAndF64,
-  kIRInstIdOrI32,
-  kIRInstIdOrF32,
-  kIRInstIdOrF64,
-  kIRInstIdXorI32,
-  kIRInstIdXorF32,
-  kIRInstIdXorF64,
-
-  kIRInstIdSarI32,
-  kIRInstIdShrI32,
-  kIRInstIdShlI32,
-  kIRInstIdRorI32,
-  kIRInstIdRolI32,
-
-  kIRInstIdMinI32,
-  kIRInstIdMinF32,
-  kIRInstIdMinF64,
-  kIRInstIdMaxI32,
-  kIRInstIdMaxF32,
-  kIRInstIdMaxF64,
-
-  kIRInstIdIsNanF32,
-  kIRInstIdIsNanF64,
-  kIRInstIdIsInfF32,
-  kIRInstIdIsInfF64,
-  kIRInstIdIsFiniteF32,
-  kIRInstIdIsFiniteF64,
-
-  kIRInstIdSignBitI32,
-  kIRInstIdSignBitF32,
-  kIRInstIdSignBitF64,
-
-  kIRInstIdTruncF32,
-  kIRInstIdTruncF64,
-  kIRInstIdFloorF32,
-  kIRInstIdFloorF64,
-  kIRInstIdRoundF32,
-  kIRInstIdRoundF64,
-  kIRInstIdRoundEvenF32,
-  kIRInstIdRoundEvenF64,
-  kIRInstIdCeilF32,
-  kIRInstIdCeilF64,
-
-  kIRInstIdAbsI32,
-  kIRInstIdAbsF32,
-  kIRInstIdAbsF64,
-  kIRInstIdExpF32,
-  kIRInstIdExpF64,
-  kIRInstIdLogF32,
-  kIRInstIdLogF64,
-  kIRInstIdLog2F32,
-  kIRInstIdLog2F64,
-  kIRInstIdLog10F32,
-  kIRInstIdLog10F64,
-  kIRInstIdSqrtF32,
-  kIRInstIdSqrtF64,
-
-  kIRInstIdSinF32,
-  kIRInstIdSinF64,
-  kIRInstIdCosF32,
-  kIRInstIdCosF64,
-  kIRInstIdTanF32,
-  kIRInstIdTanF64,
-  kIRInstIdAsinF32,
-  kIRInstIdAsinF64,
-  kIRInstIdAcosF32,
-  kIRInstIdAcosF64,
-  kIRInstIdAtanF32,
-  kIRInstIdAtanF64,
-  kIRInstIdPowF32,
-  kIRInstIdPowF64,
-  kIRInstIdAtan2F32,
-  kIRInstIdAtan2F64,
-  kIRInstIdCopySignF32,
-  kIRInstIdCopySignF64,
-
-  kIRInstIdVabsb,
-  kIRInstIdVabsw,
-  kIRInstIdVabsd,
-  kIRInstIdVaddb,
-  kIRInstIdVaddw,
-  kIRInstIdVaddd,
-  kIRInstIdVaddq,
-  kIRInstIdVaddssb,
-  kIRInstIdVaddusb,
-  kIRInstIdVaddssw,
-  kIRInstIdVaddusw,
-  kIRInstIdVsubb,
-  kIRInstIdVsubw,
-  kIRInstIdVsubd,
-  kIRInstIdVsubq,
-  kIRInstIdVsubssb,
-  kIRInstIdVsubusb,
-  kIRInstIdVsubssw,
-  kIRInstIdVsubusw,
-  kIRInstIdVmulw,
-  kIRInstIdVmulhsw,
-  kIRInstIdVmulhuw,
-  kIRInstIdVmuld,
-  kIRInstIdVminsb,
-  kIRInstIdVminub,
-  kIRInstIdVminsw,
-  kIRInstIdVminuw,
-  kIRInstIdVminsd,
-  kIRInstIdVminud,
-  kIRInstIdVmaxsb,
-  kIRInstIdVmaxub,
-  kIRInstIdVmaxsw,
-  kIRInstIdVmaxuw,
-  kIRInstIdVmaxsd,
-  kIRInstIdVmaxud,
-  kIRInstIdVsllw,
-  kIRInstIdVsrlw,
-  kIRInstIdVsraw,
-  kIRInstIdVslld,
-  kIRInstIdVsrld,
-  kIRInstIdVsrad,
-  kIRInstIdVsllq,
-  kIRInstIdVsrlq,
-  kIRInstIdVcmpeqb,
-  kIRInstIdVcmpeqw,
-  kIRInstIdVcmpeqd,
-  kIRInstIdVcmpgtb,
-  kIRInstIdVcmpgtw,
-  kIRInstIdVcmpgtd,
-
-  kIRInstIdCount,
-
-  // --------------------------------------------------------------------------
-  // [Vector]
-  // --------------------------------------------------------------------------
-
-  // Part of the instruction. Specifies how wide the operation is, maps well to
-  // current architectures (SSE/AVX).
-
-  kIRInstVMask = 0x0000C000,
-  //! The operation is scalar.
-  kIRInstV0    = 0x00000000,
-  //! The operation is 128-bit wide.
-  kIRInstV128  = 0x00004000,
-  //! The operation is 256-bit wide.
-  kIRInstV256  = 0x00008000,
-
-  // --------------------------------------------------------------------------
-  // [Use]
-  // --------------------------------------------------------------------------
-
-  // TODO: Not implemented.
-
-  // Use flags are not part of the IR instruction itself, however, they provide
-  // some useful hints for code-generator and IR lowering phases. For example
-  // when MPSL doesn't use the full width of the SIMD register it annotates it
-  // to make certain optimizations possible and to prevent emitting code which
-  // result won't be used (for example it's easier to multiply int2 vector than
-  // int4 vector on pure SSE2 target - i.e. without using SSE4.1).
-
-  kIRInstUseMask = 0x00FF0000,
-  kIRInstUse32_0 = 0x00010000,
-  kIRInstUse32_1 = 0x00020000,
-  kIRInstUse32_2 = 0x00040000,
-  kIRInstUse32_3 = 0x00080000,
-  kIRInstUse32_4 = 0x00100000,
-  kIRInstUse32_5 = 0x00200000,
-  kIRInstUse32_6 = 0x00400000,
-  kIRInstUse32_7 = 0x00800000
-};
-
-// ============================================================================
-// [mpsl::IRInstFlags]
-// ============================================================================
-
-enum IRInstFlags {
-  kIRInstInfoI32     = 0x0001, //! Works with I32 operand(s).
-  kIRInstInfoF32     = 0x0002, //! Works with F32 operand(s).
-  kIRInstInfoF64     = 0x0004, //! Works with D32 operand(s).
-  kIRInstInfoSIMD    = 0x0008,
-  kIRInstInfoFetch   = 0x0010,
-  kIRInstInfoStore   = 0x0020,
-  kIRInstInfoMov     = 0x0040,
-  kIRInstInfoCvt     = 0x0080,
-  kIRInstInfoJxx     = 0x0100,
-  kIRInstInfoRet     = 0x0200,
-  kIRInstInfoCall    = 0x0400,
-  kIRInstInfoComplex = 0x8000
-};
-
-// ============================================================================
-// [mpsl::IRInstInfo]
-// ============================================================================
-
-struct IRInstInfo {
-  // --------------------------------------------------------------------------
-  // [Accessors]
-  // --------------------------------------------------------------------------
-
-  MPSL_INLINE bool isI32() const noexcept { return flags & kIRInstInfoI32; }
-  MPSL_INLINE bool isF32() const noexcept { return flags & kIRInstInfoF32; }
-  MPSL_INLINE bool isF64() const noexcept { return flags & kIRInstInfoF64; }
-  MPSL_INLINE bool isCvt() const noexcept { return flags & kIRInstInfoCvt; }
-
-  MPSL_INLINE bool isFetch() const noexcept { return flags & kIRInstInfoFetch; }
-  MPSL_INLINE bool isStore() const noexcept { return flags & kIRInstInfoStore; }
-
-  MPSL_INLINE bool isJxx() const noexcept { return flags & kIRInstInfoJxx; }
-  MPSL_INLINE bool isRet() const noexcept { return flags & kIRInstInfoRet; }
-  MPSL_INLINE bool isCall() const noexcept { return flags & kIRInstInfoCall; }
-  MPSL_INLINE bool isComplex() const noexcept { return flags & kIRInstInfoComplex; }
-
-  MPSL_INLINE bool getNumOps() const noexcept { return numOps; }
-  MPSL_INLINE const char* getName() const noexcept { return name; }
-
-  // --------------------------------------------------------------------------
-  // [Members]
-  // --------------------------------------------------------------------------
-
-  uint16_t flags;
-  uint8_t numOps;
-  char name[13];
-};
-extern const IRInstInfo mpInstInfo[kIRInstIdCount];
-
-// ============================================================================
 // [mpsl::IRObject]
 // ============================================================================
 
@@ -414,12 +68,32 @@ struct IRObject {
   MPSL_NO_COPY(IRObject)
 
   // --------------------------------------------------------------------------
+  // [Enums]
+  // --------------------------------------------------------------------------
+
+  //! Type of \ref IRObject.
+  enum Type {
+    //! Not used.
+    kTypeNone = 0,
+
+    //! The object is \ref IRVar.
+    kTypeVar,
+    //! The object is \ref IRMem.
+    kTypeMem,
+    //! The object is \ref IRImm.
+    kTypeImm,
+
+    //! The object is \ref IRInst.
+    kTypeInst,
+    //! The object is \ref IRBlock.
+    kTypeBlock
+  };
+
+  // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE IRObject(IRBuilder* ir, uint32_t objectType) noexcept
-    : _ir(ir) {
-
+  MPSL_INLINE IRObject(IRBuilder* ir, uint32_t objectType) noexcept {
     _anyData._objectType = static_cast<uint8_t>(objectType);
     _anyData._reserved[0] = 0;
     _anyData._reserved[1] = 0;
@@ -433,22 +107,19 @@ struct IRObject {
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  //! Get context that created this IRObject.
-  MPSL_INLINE IRBuilder* getIR() const noexcept { return _ir; }
-
   //! Get the object type, see \ref IRObjectType.
   MPSL_INLINE uint32_t getObjectType() const noexcept { return _anyData._objectType; }
 
   //! Get whether the `IRObject` is `IRVar`.
-  MPSL_INLINE bool isVar() const noexcept { return getObjectType() == kIRObjectVar; }
+  MPSL_INLINE bool isVar() const noexcept { return getObjectType() == kTypeVar; }
   //! Get whether the `IRObject` is `IRMem`.
-  MPSL_INLINE bool isMem() const noexcept { return getObjectType() == kIRObjectMem; }
+  MPSL_INLINE bool isMem() const noexcept { return getObjectType() == kTypeMem; }
   //! Get whether the `IRObject` is `IRImm`.
-  MPSL_INLINE bool isImm() const noexcept { return getObjectType() == kIRObjectImm; }
+  MPSL_INLINE bool isImm() const noexcept { return getObjectType() == kTypeImm; }
   //! Get whether the `IRObject` is `IRInst`.
-  MPSL_INLINE bool isInst() const noexcept { return getObjectType() == kIRObjectInst; }
+  MPSL_INLINE bool isInst() const noexcept { return getObjectType() == kTypeInst; }
   //! Get whether the `IRObject` is `IRBlock`.
-  MPSL_INLINE bool isBlock() const noexcept { return getObjectType() == kIRObjectBlock; }
+  MPSL_INLINE bool isBlock() const noexcept { return getObjectType() == kTypeBlock; }
 
   //! Get the object ID.
   MPSL_INLINE uint32_t getId() const noexcept { return _id; }
@@ -463,9 +134,6 @@ struct IRObject {
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
-
-  //! IRBuilder that created this object.
-  IRBuilder* _ir;
 
   struct AnyData {
     //! Type of the IRObject, see \ref IRObjectType.
@@ -556,7 +224,7 @@ struct IRVar : public IRObject {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE IRVar(IRBuilder* ir, uint32_t reg, uint32_t width) noexcept
-    : IRObject(ir, kIRObjectVar) {
+    : IRObject(ir, kTypeVar) {
     _varData._reg = static_cast<uint8_t>(reg);
     _varData._width = static_cast<uint8_t>(width);
     _varData._jitId = kInvalidValue;
@@ -585,7 +253,7 @@ struct IRMem : public IRObject {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE IRMem(IRBuilder* ir, IRVar* base, IRVar* index, int32_t offset) noexcept
-    : IRObject(ir, kIRObjectMem),
+    : IRObject(ir, kTypeMem),
       _base(base),
       _index(index),
       _offset(offset) {
@@ -626,10 +294,10 @@ struct IRImm : public IRObject {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE IRImm(IRBuilder* ir) noexcept
-    : IRObject(ir, kIRObjectImm) {}
+    : IRObject(ir, kTypeImm) {}
 
   MPSL_INLINE IRImm(IRBuilder* ir, const Value& value, uint32_t reg, uint32_t width) noexcept
-    : IRObject(ir, kIRObjectImm),
+    : IRObject(ir, kTypeImm),
       _value(value) {
     _immData._reg = static_cast<uint8_t>(reg);
     _immData._width = static_cast<uint8_t>(width);
@@ -670,7 +338,7 @@ struct IRInst : public IRObject {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE IRInst(IRBuilder* ir, uint32_t instCode, uint32_t opCount) noexcept
-    : IRObject(ir, kIRObjectInst),
+    : IRObject(ir, kTypeInst),
       _block(nullptr),
       _prev(nullptr),
       _next(nullptr) {
@@ -727,7 +395,7 @@ struct IRBlock : IRObject {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE IRBlock(IRBuilder* ir) noexcept
-    : IRObject(ir, kIRObjectBlock),
+    : IRObject(ir, kTypeBlock),
       _prevBlock(nullptr),
       _nextBlock(nullptr),
       _firstChild(nullptr),
@@ -813,6 +481,59 @@ struct IRBlock : IRObject {
   IRInst* _firstChild;
   //! Last instruction in the block.
   IRInst* _lastChild;
+};
+
+// ============================================================================
+// [mpsl::IRPair]
+// ============================================================================
+
+//! A pair of two IR objects.
+//!
+//! Used to split 256-bit wide operations to 128-bit in case the target
+//! doesn't support 256-bit wide registers (all pre-AVX architectures, ARM).
+template<typename T>
+struct IRPair {
+  MPSL_INLINE IRPair() noexcept
+    : lo(nullptr),
+      hi(nullptr) {}
+
+  MPSL_INLINE IRPair(const IRPair<T>& other) noexcept
+    : lo(other.lo),
+      hi(other.hi) {}
+
+  MPSL_INLINE Error set(T* lo, T* hi = nullptr) noexcept {
+    this->lo = lo;
+    this->hi = hi;
+    return kErrorOk;
+  }
+
+  template<typename U>
+  MPSL_INLINE Error set(const IRPair<U>& pair) noexcept {
+    this->lo = static_cast<T*>(pair.lo);
+    this->hi = static_cast<T*>(pair.hi);
+    return kErrorOk;
+  }
+
+  MPSL_INLINE operator IRPair<IRObject>&() noexcept {
+    return *reinterpret_cast<IRPair<IRObject>*>(this);
+  }
+  MPSL_INLINE operator const IRPair<IRObject>&() const noexcept {
+    return *reinterpret_cast<const IRPair<IRObject>*>(this);
+  }
+
+  MPSL_INLINE void reset() noexcept {
+    this->lo = nullptr;
+    this->hi = nullptr;
+  }
+
+  union {
+    struct {
+      T* lo;
+      T* hi;
+    };
+
+    T* obj[2];
+  };
 };
 
 // ============================================================================

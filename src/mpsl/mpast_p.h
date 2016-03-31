@@ -11,6 +11,7 @@
 // [Dependencies - MPSL]
 #include "./mpallocator_p.h"
 #include "./mphash_p.h"
+#include "./mplang_p.h"
 
 // [Api-Begin]
 #include "./mpsl_apibegin.h"
@@ -29,151 +30,6 @@ struct AstNode;
 struct AstFunction;
 struct AstProgram;
 struct AstUnary;
-
-// ============================================================================
-// [mpsl::AstScopeType]
-// ============================================================================
-
-enum AstScopeType {
-  //! Global scope.
-  kAstScopeGlobal = 0,
-
-  //! Local scope.
-  kAstScopeLocal = 1,
-
-  //! Nested scope.
-  //!
-  //! Always statically allocated and merged with the local scope before the
-  //! scope is destroyed.
-  kAstScopeNested = 2
-};
-
-// ============================================================================
-// [mpsl::AstSymbolType]
-// ============================================================================
-
-//! \internal
-//!
-//! Symbol type.
-enum AstSymbolType {
-  //! Not used.
-  kAstSymbolNone = 0,
-  //! Symbol is a type-name.
-  kAstSymbolTypeName,
-  //! Symbol is an intrinsic (converted to operator internally).
-  kAstSymbolIntrinsic,
-  //! Symbol is a variable.
-  kAstSymbolVariable,
-  //! Symbol is a function.
-  kAstSymbolFunction
-};
-
-// ============================================================================
-// [mpsl::AstSymbolFlags]
-// ============================================================================
-
-enum AstSymbolFlags {
-  //! The symbol was declared in global scope.
-  kAstSymbolIsGlobal   = 0x0001,
-
-  //! The symbol was declared and can be used.
-  //!
-  //! If this flag is not set it means that the parser is parsing its assignment
-  //! (code like "int x = ...") and the symbol can't be used at this time. It's
-  //! for parser to make sure that the symbol is declared before it's used.
-  kAstSymbolIsDeclared = 0x0002,
-
-  kAstSymbolIsAssigned = 0x0004
-};
-
-// ============================================================================
-// [mpsl::AstNodeType]
-// ============================================================================
-
-//! \internal
-//!
-//! `AstNode` type.
-enum AstNodeType {
-  //! Not used.
-  kAstNodeNone = 0,
-
-  // --------------------------------------------------------------------------
-  // [Block]
-  // --------------------------------------------------------------------------
-
-  //! Node is `AstProgram`.
-  kAstNodeProgram,
-  //! Node is `AstFunction`.
-  kAstNodeFunction,
-  //! Node is `AstBlock`.
-  kAstNodeBlock,
-
-  // --------------------------------------------------------------------------
-  // [Control Flow]
-  // --------------------------------------------------------------------------
-
-  //! Node is `AstBranch`.
-  kAstNodeBranch,
-  //! Node is `AstCondition`.
-  kAstNodeCondition,
-
-  //! Node is `AstLoop` describing `for () { ... }`.
-  kAstNodeFor,
-  //! Node is `AstLoop` describing `while () { ... }`.
-  kAstNodeWhile,
-  //! Node is `AstLoop` describing `do { ... } while ()`.
-  kAstNodeDoWhile,
-
-  //! Node is `AstBreak`.
-  kAstNodeBreak,
-  //! Node is `AstContinue`.
-  kAstNodeContinue,
-  //! Node is `AstReturn`.
-  kAstNodeReturn,
-
-  // --------------------------------------------------------------------------
-  // [Variable, Immediate]
-  // --------------------------------------------------------------------------
-
-  //! Node is `AstVarDecl`.
-  kAstNodeVarDecl,
-  //! Node is `AstVarMemb`.
-  kAstNodeVarMemb,
-  //! Node is `AstVar`.
-  kAstNodeVar,
-  //! Node is `AstImm`.
-  kAstNodeImm,
-
-  // --------------------------------------------------------------------------
-  // [Op]
-  // --------------------------------------------------------------------------
-
-  //! Node is `AstUnaryOp`.
-  kAstNodeUnaryOp,
-  //! Node is `AstBinaryOp`.
-  kAstNodeBinaryOp,
-  //! Node is `AstCall`.
-  kAstNodeCall
-};
-
-// ============================================================================
-// [mpsl::AstNodeFlags]
-// ============================================================================
-
-//! \internal
-//!
-//! `AstNode` flags.
-enum AstNodeFlags {
-  kAstNodeHasSideEffect = 0x01
-};
-
-// ============================================================================
-// [mpsl::mpNodeInfo]
-// ============================================================================
-
-static MPSL_INLINE bool mpIsVarNodeType(uint32_t nodeType) noexcept {
-  return nodeType == kAstNodeVar || nodeType == kAstNodeVarMemb;
-}
 
 // ============================================================================
 // [mpsl::AstBuilder]
@@ -282,6 +138,39 @@ struct AstSymbol : public HashNode {
   MPSL_NO_COPY(AstSymbol)
 
   // --------------------------------------------------------------------------
+  // [Enums]
+  // --------------------------------------------------------------------------
+
+  //! Symbol type.
+  enum Type {
+    //! Not used.
+    kTypeNone = 0,
+    //! The symbol is a type-name.
+    kTypeTypeName,
+    //! The symbol is an intrinsic (converted to an operator internally).
+    kTypeIntrinsic,
+    //! The symbol is a variable.
+    kTypeVariable,
+    //! The symbol is a function.
+    kTypeFunction
+  };
+
+  //! Symbol flags.
+  enum Flags {
+    //! The symbol was declared in global scope.
+    kFlagIsGlobal   = 0x0001,
+
+    //! The symbol was declared and can be used.
+    //!
+    //! If this flag is not set it means that the parser is parsing its assignment
+    //! (code like "int x = ...") and the symbol can't be used at this time. It's
+    //! for parser to make sure that the symbol is declared before it's used.
+    kFlagIsDeclared = 0x0002,
+
+    kFlagIsAssigned = 0x0004
+  };
+
+  // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
@@ -290,7 +179,7 @@ struct AstSymbol : public HashNode {
       _name(name),
       _length(length),
       _symbolType(static_cast<uint8_t>(symbolType)),
-      _symbolFlags(scopeType == kAstScopeGlobal ? uint8_t(kAstSymbolIsGlobal) : uint8_t(0)),
+      _symbolFlags(scopeType == /* AstScope::kTypeGlobal */ 0 ? uint8_t(kFlagIsGlobal) : uint8_t(0)),
       _opType(kOpNone),
       _dataSlot(kInvalidDataSlot),
       _typeInfo(kTypeVoid),
@@ -326,9 +215,18 @@ struct AstSymbol : public HashNode {
   //! Associate node with the symbol (basically the node that declares it).
   MPSL_INLINE void setNode(AstNode* node) noexcept { _node = node; }
 
-  //! Get symbol type, see \ref AstSymbolType.
+  //! Get symbol type, see \ref AstSymbol::Type.
   MPSL_INLINE uint32_t getSymbolType() const noexcept { return _symbolType; }
-  //! Get symbol flags, see \ref AstSymbolFlags.
+  //! Get whether the symbol is `kTypeTypeName`.
+  MPSL_INLINE uint32_t isTypeName() const noexcept { return _symbolType == kTypeTypeName; }
+  //! Get whether the symbol is `kTypeIntrinsic`.
+  MPSL_INLINE uint32_t isIntrinsic() const noexcept { return _symbolType == kTypeIntrinsic; }
+  //! Get whether the symbol is `kTypeVariable`.
+  MPSL_INLINE uint32_t isVariable() const noexcept { return _symbolType == kTypeVariable; }
+  //! Get whether the symbol is `kTypeFunction`.
+  MPSL_INLINE uint32_t isFunction() const noexcept { return _symbolType == kTypeFunction; }
+
+  //! Get symbol flags, see \ref AstSymbol::Flags.
   MPSL_INLINE uint32_t getSymbolFlags() const noexcept { return _symbolFlags; }
 
   MPSL_INLINE bool hasSymbolFlag(uint32_t flag) const noexcept { return (_symbolFlags & flag) != 0; }
@@ -337,11 +235,11 @@ struct AstSymbol : public HashNode {
 
   //! Get operator type, see \ref OpType.
   //!
-  //! Only valid if symbol type is \ref kAstSymbolIntrinsic.
+  //! Only valid if symbol type is \ref kTypeIntrinsic.
   MPSL_INLINE uint32_t getOpType() const noexcept { return _opType; }
   //! Set operator type to `opType`.
   MPSL_INLINE void setOpType(uint32_t opType) noexcept {
-    MPSL_ASSERT(_symbolType == kAstSymbolIntrinsic);
+    MPSL_ASSERT(_symbolType == kTypeIntrinsic);
     _opType = static_cast<uint8_t>(opType);
   }
 
@@ -352,11 +250,11 @@ struct AstSymbol : public HashNode {
   MPSL_INLINE void setDataOffset(int32_t offset) noexcept { _dataOffset = offset; }
 
   //! Check if the symbol is global (i.e. it was declared in a global scope).
-  MPSL_INLINE bool isGlobal() const noexcept { return hasSymbolFlag(kAstSymbolIsGlobal); }
+  MPSL_INLINE bool isGlobal() const noexcept { return hasSymbolFlag(kFlagIsGlobal); }
   //! Check if the symbol was declared.
-  MPSL_INLINE bool isDeclared() const noexcept { return hasSymbolFlag(kAstSymbolIsDeclared); }
-  //! Set the symbol to be declared (\ref kAstSymbolIsDeclared flag).
-  MPSL_INLINE void setDeclared() noexcept { setSymbolFlag(kAstSymbolIsDeclared); }
+  MPSL_INLINE bool isDeclared() const noexcept { return hasSymbolFlag(kFlagIsDeclared); }
+  //! Set the symbol to be declared (\ref kFlagIsDeclared).
+  MPSL_INLINE void setDeclared() noexcept { setSymbolFlag(kFlagIsDeclared); }
 
   //! Get whether the variable has assigned a constant value at the moment.
   //!
@@ -367,11 +265,11 @@ struct AstSymbol : public HashNode {
   //! is mutable. The value never changes if the variable is declared in global
   //! scope (is that case it's always const) or it has been declared with const
   //! keyword (semantic analysis would refuse any modification to that variable).
-  MPSL_INLINE bool isAssigned() const noexcept { return hasSymbolFlag(kAstSymbolIsAssigned); }
-  //! Set symbol to be assigned (sets the \ref kAstSymbolIsAssigned flag).
-  MPSL_INLINE void setAssigned() noexcept { setSymbolFlag(kAstSymbolIsAssigned); }
-  //! Set symbol to not be assigned (clears the \ref kAstSymbolIsAssigned flag).
-  MPSL_INLINE void clearAssigned() noexcept { clearSymbolFlag(kAstSymbolIsAssigned); }
+  MPSL_INLINE bool isAssigned() const noexcept { return hasSymbolFlag(kFlagIsAssigned); }
+  //! Set symbol to be assigned (sets the \ref kFlagIsAssigned flag).
+  MPSL_INLINE void setAssigned() noexcept { setSymbolFlag(kFlagIsAssigned); }
+  //! Set symbol to not be assigned (clears the \ref kFlagIsAssigned flag).
+  MPSL_INLINE void clearAssigned() noexcept { clearSymbolFlag(kFlagIsAssigned); }
 
   //! Set symbol type-info.
   MPSL_INLINE uint32_t getTypeInfo() const noexcept { return _typeInfo; }
@@ -399,7 +297,7 @@ struct AstSymbol : public HashNode {
   uint8_t _symbolType;
   //! Symbol flags, see \ref AstSymbolFlags.
   uint8_t _symbolFlags;
-  //! Operator type (if the symbol is \ref kAstSymbolIntrinsic).
+  //! Operator type (if the symbol is \ref kTypeIntrinsic).
   uint8_t _opType;
   //! Data slot (only if the symbol is mapped to a data object).
   uint8_t _dataSlot;
@@ -413,10 +311,10 @@ struct AstSymbol : public HashNode {
   //! before program parsing). This is mostly used by error reporting.
   AstNode* _node;
 
-  //! Link to the layout, only valid if the symbol is an object.
+  //! Link to the layout, only valid if the symbol is object.
   const Layout* _layout;
 
-  //! The current value of the symbol (in case the symbol is an immediate).
+  //! The current value of the symbol (in case the symbol is immediate).
   Value _value;
 };
 
@@ -426,6 +324,24 @@ struct AstSymbol : public HashNode {
 
 struct AstScope {
   MPSL_NO_COPY(AstScope)
+
+  // --------------------------------------------------------------------------
+  // [Enums]
+  // --------------------------------------------------------------------------
+
+  enum Type {
+    //! Global scope.
+    kTypeGlobal = 0,
+
+    //! Local scope.
+    kTypeLocal = 1,
+
+    //! Nested scope.
+    //!
+    //! Always statically allocated and merged with the local scope before the
+    //! scope is destroyed.
+    kTypeNested = 2
+  };
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -442,7 +358,7 @@ struct AstScope {
   MPSL_INLINE AstBuilder* getAst() const noexcept { return _ast; }
   //! Get the parent scope (or nullptr).
   MPSL_INLINE AstScope* getParent() const noexcept { return _parent; }
-  //! Get scope type, see \ref AstScopeType.
+  //! Get scope type, see \ref AstScope::Type.
   MPSL_INLINE uint32_t getScopeType() const noexcept { return _scopeType; }
 
   // --------------------------------------------------------------------------
@@ -485,7 +401,7 @@ struct AstScope {
   //! Symbols defined in this scope.
   Hash<StringRef, AstSymbol> _symbols;
 
-  //! Scope type, see \ref AstScopeType.
+  //! Scope type, see \ref AstScope::Type.
   uint32_t _scopeType;
 };
 
@@ -517,6 +433,63 @@ struct AstScope {
 
 struct AstNode {
   MPSL_NO_COPY(AstNode)
+
+  // --------------------------------------------------------------------------
+  // [Enums]
+  // --------------------------------------------------------------------------
+
+  //! AST node type.
+  enum Type {
+    //! Not used.
+    kTypeNone = 0,
+
+    //! Node is `AstProgram`.
+    kTypeProgram,
+    //! Node is `AstFunction`.
+    kTypeFunction,
+    //! Node is `AstBlock`.
+    kTypeBlock,
+
+    //! Node is `AstBranch`.
+    kTypeBranch,
+    //! Node is `AstCondition`.
+    kTypeCondition,
+
+    //! Node is `AstLoop` describing `for () { ... }`.
+    kTypeFor,
+    //! Node is `AstLoop` describing `while () { ... }`.
+    kTypeWhile,
+    //! Node is `AstLoop` describing `do { ... } while ()`.
+    kTypeDoWhile,
+
+    //! Node is `AstBreak`.
+    kTypeBreak,
+    //! Node is `AstContinue`.
+    kTypeContinue,
+    //! Node is `AstReturn`.
+    kTypeReturn,
+
+    //! Node is `AstVarDecl`.
+    kTypeVarDecl,
+    //! Node is `AstVarMemb`.
+    kTypeVarMemb,
+    //! Node is `AstVar`.
+    kTypeVar,
+    //! Node is `AstImm`.
+    kTypeImm,
+
+    //! Node is `AstUnaryOp`.
+    kTypeUnaryOp,
+    //! Node is `AstBinaryOp`.
+    kTypeBinaryOp,
+    //! Node is `AstCall`.
+    kTypeCall
+  };
+
+  //! AST node flags.
+  enum Flags {
+    kFlagSideEffect = 0x01
+  };
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -562,17 +535,11 @@ struct AstNode {
   //! Get node type.
   MPSL_INLINE uint32_t getNodeType() const noexcept { return _nodeType; }
   //! Get whether the node is a loop (for, do, while, ...).
-  MPSL_INLINE bool isLoop() const noexcept {
-    return _nodeType >= kAstNodeFor && _nodeType <= kAstNodeDoWhile;
-  }
+  MPSL_INLINE bool isLoop() const noexcept { return _nodeType >= kTypeFor && _nodeType <= kTypeDoWhile; }
   //! Get whether the node is `AstVar`.
-  MPSL_INLINE bool isVar() const noexcept {
-    return _nodeType == kAstNodeVar;
-  }
+  MPSL_INLINE bool isVar() const noexcept { return _nodeType == kTypeVar; }
   //! Get whether the node is `AstImm`.
-  MPSL_INLINE bool isImm() const noexcept {
-    return _nodeType == kAstNodeImm;
-  }
+  MPSL_INLINE bool isImm() const noexcept { return _nodeType == kTypeImm; }
 
   //! Get whether the node has flag `flag`.
   MPSL_INLINE bool hasNodeFlag(uint32_t flag) const noexcept {
@@ -651,9 +618,9 @@ struct AstNode {
   //! Child nodes.
   AstNode** _children;
 
-  //! Node type, see `AstNodeType`.
+  //! Node type, see `AstNode::Type`.
   uint8_t _nodeType;
-  //! Node flags, see `AstNodeFlags`.
+  //! Node flags, see `AstNode::Flags`.
   uint8_t _nodeFlags;
   //! Node size in bytes for `Allocator`.
   uint8_t _nodeSize;
@@ -685,7 +652,7 @@ struct AstBlock : public AstNode {
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE AstBlock(AstBuilder* ast, uint32_t nodeType = kAstNodeBlock) noexcept
+  MPSL_INLINE AstBlock(AstBuilder* ast, uint32_t nodeType = kTypeBlock) noexcept
     : AstNode(ast, nodeType),
       _capacity(0) {}
 
@@ -824,7 +791,7 @@ struct AstProgram : public AstBlock {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstProgram(AstBuilder* ast) noexcept
-    : AstBlock(ast, kAstNodeProgram) {}
+    : AstBlock(ast, kTypeProgram) {}
 };
 
 // ============================================================================
@@ -839,7 +806,7 @@ struct AstFunction : public AstNode {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstFunction(AstBuilder* ast) noexcept
-    : AstNode(ast, kAstNodeFunction, (AstNode**)&_args, 2),
+    : AstNode(ast, kTypeFunction, (AstNode**)&_args, 2),
       _scope(nullptr),
       _func(nullptr),
       _ret(nullptr),
@@ -889,7 +856,7 @@ struct AstBranch : public AstBlock {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstBranch(AstBuilder* ast) noexcept
-    : AstBlock(ast, kAstNodeBranch) {}
+    : AstBlock(ast, kTypeBranch) {}
 };
 
 // ============================================================================
@@ -904,7 +871,7 @@ struct AstCondition : public AstNode {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstCondition(AstBuilder* ast) noexcept
-    : AstNode(ast, kAstNodeCondition, &_exp, 2),
+    : AstNode(ast, kTypeCondition, &_exp, 2),
       _exp(nullptr),
       _body(nullptr) {}
 
@@ -992,7 +959,7 @@ struct AstBreak : public AstFlow {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstBreak(AstBuilder* ast) noexcept
-    : AstFlow(ast, kAstNodeBreak) {}
+    : AstFlow(ast, kTypeBreak) {}
 };
 
 // ============================================================================
@@ -1007,7 +974,7 @@ struct AstContinue : public AstFlow {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstContinue(AstBuilder* ast) noexcept
-    : AstFlow(ast, kAstNodeContinue) {}
+    : AstFlow(ast, kTypeContinue) {}
 };
 
 // ============================================================================
@@ -1022,7 +989,7 @@ struct AstReturn : public AstUnary {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstReturn(AstBuilder* ast) noexcept
-    : AstUnary(ast, kAstNodeReturn) {}
+    : AstUnary(ast, kTypeReturn) {}
 };
 
 // ============================================================================
@@ -1037,7 +1004,7 @@ struct AstVarDecl : public AstUnary {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstVarDecl(AstBuilder* ast) noexcept
-    : AstUnary(ast, kAstNodeVarDecl),
+    : AstUnary(ast, kTypeVarDecl),
       _symbol(nullptr) {}
 
   // --------------------------------------------------------------------------
@@ -1066,7 +1033,7 @@ struct AstVarMemb : public AstUnary {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstVarMemb(AstBuilder* ast) noexcept
-    : AstUnary(ast, kAstNodeVarMemb),
+    : AstUnary(ast, kTypeVarMemb),
       _field(nullptr, 0),
       _offset(0) {}
 
@@ -1101,7 +1068,7 @@ struct AstVar : public AstNode {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstVar(AstBuilder* ast) noexcept
-    : AstNode(ast, kAstNodeVar),
+    : AstNode(ast, kTypeVar),
       _symbol(nullptr) {}
 
   // --------------------------------------------------------------------------
@@ -1130,13 +1097,13 @@ struct AstImm : public AstNode {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstImm(AstBuilder* ast) noexcept
-    : AstNode(ast, kAstNodeImm) {
+    : AstNode(ast, kTypeImm) {
     ::memset(&_value, 0, sizeof(_value));
     _slot = 0;
   }
 
   MPSL_INLINE AstImm(AstBuilder* ast, const Value& value, uint32_t typeInfo) noexcept
-    : AstNode(ast, kAstNodeImm) {
+    : AstNode(ast, kTypeImm) {
     _typeInfo = typeInfo;
     _value = value;
     _slot = 0;
@@ -1172,12 +1139,12 @@ struct AstUnaryOp : public AstUnary {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstUnaryOp(AstBuilder* ast, uint32_t op) noexcept
-    : AstUnary(ast, kAstNodeUnaryOp) {
+    : AstUnary(ast, kTypeUnaryOp) {
     setOp(op);
   }
 
   MPSL_INLINE AstUnaryOp(AstBuilder* ast, uint32_t op, uint32_t typeInfo) noexcept
-    : AstUnary(ast, kAstNodeUnaryOp) {
+    : AstUnary(ast, kTypeUnaryOp) {
     setOp(op);
     setTypeInfo(typeInfo);
   }
@@ -1195,7 +1162,7 @@ struct AstBinaryOp : public AstBinary {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstBinaryOp(AstBuilder* ast, uint32_t op) noexcept
-    : AstBinary(ast, kAstNodeBinaryOp) {
+    : AstBinary(ast, kTypeBinaryOp) {
     setOp(op);
   }
 };
@@ -1212,7 +1179,7 @@ struct AstCall : public AstBlock {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstCall(AstBuilder* ast) noexcept
-    : AstBlock(ast, kAstNodeCall),
+    : AstBlock(ast, kTypeCall),
       _symbol(nullptr) {}
 
   // --------------------------------------------------------------------------
@@ -1256,24 +1223,24 @@ struct AstVisitor {
 
   MPSL_NOINLINE Error onNode(AstNode* node) noexcept {
     switch (node->getNodeType()) {
-      case kAstNodeProgram  : return static_cast<Impl*>(this)->onProgram  (static_cast<AstProgram*  >(node));
-      case kAstNodeFunction : return static_cast<Impl*>(this)->onFunction (static_cast<AstFunction* >(node));
-      case kAstNodeBlock    : return static_cast<Impl*>(this)->onBlock    (static_cast<AstBlock*    >(node));
-      case kAstNodeBranch   : return static_cast<Impl*>(this)->onBranch   (static_cast<AstBranch*   >(node));
-      case kAstNodeCondition: return static_cast<Impl*>(this)->onCondition(static_cast<AstCondition*>(node));
-      case kAstNodeFor      :
-      case kAstNodeWhile    :
-      case kAstNodeDoWhile  : return static_cast<Impl*>(this)->onLoop     (static_cast<AstLoop*     >(node));
-      case kAstNodeBreak    : return static_cast<Impl*>(this)->onBreak    (static_cast<AstBreak*    >(node));
-      case kAstNodeContinue : return static_cast<Impl*>(this)->onContinue (static_cast<AstContinue* >(node));
-      case kAstNodeReturn   : return static_cast<Impl*>(this)->onReturn   (static_cast<AstReturn*   >(node));
-      case kAstNodeVarDecl  : return static_cast<Impl*>(this)->onVarDecl  (static_cast<AstVarDecl*  >(node));
-      case kAstNodeVarMemb  : return static_cast<Impl*>(this)->onVarMemb  (static_cast<AstVarMemb*  >(node));
-      case kAstNodeVar      : return static_cast<Impl*>(this)->onVar      (static_cast<AstVar*      >(node));
-      case kAstNodeImm      : return static_cast<Impl*>(this)->onImm      (static_cast<AstImm*      >(node));
-      case kAstNodeUnaryOp  : return static_cast<Impl*>(this)->onUnaryOp  (static_cast<AstUnaryOp*  >(node));
-      case kAstNodeBinaryOp : return static_cast<Impl*>(this)->onBinaryOp (static_cast<AstBinaryOp* >(node));
-      case kAstNodeCall     : return static_cast<Impl*>(this)->onCall     (static_cast<AstCall*     >(node));
+      case AstNode::kTypeProgram  : return static_cast<Impl*>(this)->onProgram  (static_cast<AstProgram*  >(node));
+      case AstNode::kTypeFunction : return static_cast<Impl*>(this)->onFunction (static_cast<AstFunction* >(node));
+      case AstNode::kTypeBlock    : return static_cast<Impl*>(this)->onBlock    (static_cast<AstBlock*    >(node));
+      case AstNode::kTypeBranch   : return static_cast<Impl*>(this)->onBranch   (static_cast<AstBranch*   >(node));
+      case AstNode::kTypeCondition: return static_cast<Impl*>(this)->onCondition(static_cast<AstCondition*>(node));
+      case AstNode::kTypeFor      :
+      case AstNode::kTypeWhile    :
+      case AstNode::kTypeDoWhile  : return static_cast<Impl*>(this)->onLoop     (static_cast<AstLoop*     >(node));
+      case AstNode::kTypeBreak    : return static_cast<Impl*>(this)->onBreak    (static_cast<AstBreak*    >(node));
+      case AstNode::kTypeContinue : return static_cast<Impl*>(this)->onContinue (static_cast<AstContinue* >(node));
+      case AstNode::kTypeReturn   : return static_cast<Impl*>(this)->onReturn   (static_cast<AstReturn*   >(node));
+      case AstNode::kTypeVarDecl  : return static_cast<Impl*>(this)->onVarDecl  (static_cast<AstVarDecl*  >(node));
+      case AstNode::kTypeVarMemb  : return static_cast<Impl*>(this)->onVarMemb  (static_cast<AstVarMemb*  >(node));
+      case AstNode::kTypeVar      : return static_cast<Impl*>(this)->onVar      (static_cast<AstVar*      >(node));
+      case AstNode::kTypeImm      : return static_cast<Impl*>(this)->onImm      (static_cast<AstImm*      >(node));
+      case AstNode::kTypeUnaryOp  : return static_cast<Impl*>(this)->onUnaryOp  (static_cast<AstUnaryOp*  >(node));
+      case AstNode::kTypeBinaryOp : return static_cast<Impl*>(this)->onBinaryOp (static_cast<AstBinaryOp* >(node));
+      case AstNode::kTypeCall     : return static_cast<Impl*>(this)->onCall     (static_cast<AstCall*     >(node));
 
       default:
         return MPSL_TRACE_ERROR(kErrorInvalidState);
@@ -1314,24 +1281,24 @@ struct AstVisitorWithArgs {
 
   MPSL_NOINLINE Error onNode(AstNode* node, Args args) noexcept {
     switch (node->getNodeType()) {
-      case kAstNodeProgram  : return static_cast<Impl*>(this)->onProgram  (static_cast<AstProgram*  >(node), args);
-      case kAstNodeFunction : return static_cast<Impl*>(this)->onFunction (static_cast<AstFunction* >(node), args);
-      case kAstNodeBlock    : return static_cast<Impl*>(this)->onBlock    (static_cast<AstBlock*    >(node), args);
-      case kAstNodeBranch   : return static_cast<Impl*>(this)->onBranch   (static_cast<AstBranch*   >(node), args);
-      case kAstNodeCondition: return static_cast<Impl*>(this)->onCondition(static_cast<AstCondition*>(node), args);
-      case kAstNodeFor      :
-      case kAstNodeWhile    :
-      case kAstNodeDoWhile  : return static_cast<Impl*>(this)->onLoop     (static_cast<AstLoop*     >(node), args);
-      case kAstNodeBreak    : return static_cast<Impl*>(this)->onBreak    (static_cast<AstBreak*    >(node), args);
-      case kAstNodeContinue : return static_cast<Impl*>(this)->onContinue (static_cast<AstContinue* >(node), args);
-      case kAstNodeReturn   : return static_cast<Impl*>(this)->onReturn   (static_cast<AstReturn*   >(node), args);
-      case kAstNodeVarDecl  : return static_cast<Impl*>(this)->onVarDecl  (static_cast<AstVarDecl*  >(node), args);
-      case kAstNodeVarMemb  : return static_cast<Impl*>(this)->onVarMemb  (static_cast<AstVarMemb*  >(node), args);
-      case kAstNodeVar      : return static_cast<Impl*>(this)->onVar      (static_cast<AstVar*      >(node), args);
-      case kAstNodeImm      : return static_cast<Impl*>(this)->onImm      (static_cast<AstImm*      >(node), args);
-      case kAstNodeUnaryOp  : return static_cast<Impl*>(this)->onUnaryOp  (static_cast<AstUnaryOp*  >(node), args);
-      case kAstNodeBinaryOp : return static_cast<Impl*>(this)->onBinaryOp (static_cast<AstBinaryOp* >(node), args);
-      case kAstNodeCall     : return static_cast<Impl*>(this)->onCall     (static_cast<AstCall*     >(node), args);
+      case AstNode::kTypeProgram  : return static_cast<Impl*>(this)->onProgram  (static_cast<AstProgram*  >(node), args);
+      case AstNode::kTypeFunction : return static_cast<Impl*>(this)->onFunction (static_cast<AstFunction* >(node), args);
+      case AstNode::kTypeBlock    : return static_cast<Impl*>(this)->onBlock    (static_cast<AstBlock*    >(node), args);
+      case AstNode::kTypeBranch   : return static_cast<Impl*>(this)->onBranch   (static_cast<AstBranch*   >(node), args);
+      case AstNode::kTypeCondition: return static_cast<Impl*>(this)->onCondition(static_cast<AstCondition*>(node), args);
+      case AstNode::kTypeFor      :
+      case AstNode::kTypeWhile    :
+      case AstNode::kTypeDoWhile  : return static_cast<Impl*>(this)->onLoop     (static_cast<AstLoop*     >(node), args);
+      case AstNode::kTypeBreak    : return static_cast<Impl*>(this)->onBreak    (static_cast<AstBreak*    >(node), args);
+      case AstNode::kTypeContinue : return static_cast<Impl*>(this)->onContinue (static_cast<AstContinue* >(node), args);
+      case AstNode::kTypeReturn   : return static_cast<Impl*>(this)->onReturn   (static_cast<AstReturn*   >(node), args);
+      case AstNode::kTypeVarDecl  : return static_cast<Impl*>(this)->onVarDecl  (static_cast<AstVarDecl*  >(node), args);
+      case AstNode::kTypeVarMemb  : return static_cast<Impl*>(this)->onVarMemb  (static_cast<AstVarMemb*  >(node), args);
+      case AstNode::kTypeVar      : return static_cast<Impl*>(this)->onVar      (static_cast<AstVar*      >(node), args);
+      case AstNode::kTypeImm      : return static_cast<Impl*>(this)->onImm      (static_cast<AstImm*      >(node), args);
+      case AstNode::kTypeUnaryOp  : return static_cast<Impl*>(this)->onUnaryOp  (static_cast<AstUnaryOp*  >(node), args);
+      case AstNode::kTypeBinaryOp : return static_cast<Impl*>(this)->onBinaryOp (static_cast<AstBinaryOp* >(node), args);
+      case AstNode::kTypeCall     : return static_cast<Impl*>(this)->onCall     (static_cast<AstCall*     >(node), args);
 
       default:
         return MPSL_TRACE_ERROR(kErrorInvalidState);

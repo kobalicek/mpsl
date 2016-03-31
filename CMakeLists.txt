@@ -188,6 +188,8 @@ mpsl_add_source(MPSL_SRC mpsl
   mphash_p.h
   mpir.cpp
   mpir_p.h
+  mplang.cpp
+  mplang_p.h
   mpparser.cpp
   mpparser_p.h
   mpstrtod_p.h

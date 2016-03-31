@@ -16,6 +16,14 @@
 namespace mpsl {
 
 // ============================================================================
+// [mpsl::mpIsVarNodeType]
+// ============================================================================
+
+static MPSL_INLINE bool mpIsVarNodeType(uint32_t nodeType) noexcept {
+  return nodeType == AstNode::kTypeVar || nodeType == AstNode::kTypeVarMemb;
+}
+
+// ============================================================================
 // [mpsl::AstAnalysis - Construction / Destruction]
 // ============================================================================
 
@@ -121,7 +129,7 @@ Error AstAnalysis::onLoop(AstLoop* node) noexcept {
     _unreachable = prevUnreachable;
   }
 
-  if (node->getNodeType() != kAstNodeFor && !node->hasCond())
+  if (node->getNodeType() != AstNode::kTypeFor && !node->hasCond())
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
   return kErrorOk;
@@ -189,7 +197,7 @@ Error AstAnalysis::onVarMemb(AstVarMemb* node) noexcept {
   uint32_t typeId = typeInfo & kTypeIdMask;
 
   if (TypeInfo::isPtrId(typeId)) {
-    if (child->getNodeType() != kAstNodeVar)
+    if (child->getNodeType() != AstNode::kTypeVar)
       return MPSL_TRACE_ERROR(kErrorInvalidState);
 
     // The field accesses an object's member.
@@ -338,8 +346,8 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
       continue;
     }
 
-    // Bit shift/rotation operator does never change the left operand type.
-    if (op.isBitShift()) {
+    if (op.isShift()) {
+      // Bit shift and rotation can only be done on integers.
       if (!TypeInfo::isIntId(lTypeId))
         return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
           "Bitwise operation '%s' can't be performed on type '%{Type}'.", op.name, lTypeId);
@@ -347,9 +355,14 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
       if (!TypeInfo::isIntId(rTypeId))
         return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
           "Bitwise operation '%s' can't be specified by type '%{Type}'.", op.name, rTypeId);
+
+      // Right operand of bit shift and rotation must be scalar.
+      if (TypeInfo::elementsOf(rTypeInfo) > 1)
+        return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
+          "Bitwise operation '%s' requires right operand to be scalar, not '%{Type}'.", op.name, rTypeId);
     }
 
-    uint32_t result = lTypeInfo;
+    uint32_t dstTypeInfo = lTypeInfo;
     if (lTypeId != rTypeId) {
       bool rightToLeft = true;
       bool leftToRight = true;
@@ -359,16 +372,16 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
 
       if (mpCanImplicitCast(lTypeId, rTypeId) && rightToLeft) {
         // Cast type on the right side to the type on the left side.
-        AstUnaryOp* castNode = _ast->newNode<AstUnaryOp>(kOpCast, result);
+        AstUnaryOp* castNode = _ast->newNode<AstUnaryOp>(kOpCast, dstTypeInfo);
         node->injectNode(right, castNode);
         continue;
       }
 
       if (mpCanImplicitCast(rTypeId, lTypeId) && leftToRight) {
         // Cast type on the left side to the type on the right side.
-        result = rTypeInfo;
+        dstTypeInfo = rTypeInfo;
 
-        AstUnaryOp* castNode = _ast->newNode<AstUnaryOp>(kOpCast, result);
+        AstUnaryOp* castNode = _ast->newNode<AstUnaryOp>(kOpCast, dstTypeInfo);
         node->injectNode(left, castNode);
         continue;
       }
@@ -378,14 +391,14 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
 
     if (op.isConditional()) {
       // Result of a conditional is a boolean.
-      result = TypeInfo::boolIdByTypeId(lTypeId & kTypeIdMask) | kTypeRead;
+      dstTypeInfo = TypeInfo::boolIdByTypeId(lTypeId & kTypeIdMask) | kTypeRead;
     }
     else {
       // Results in a new temporary, clear the reference/write flags.
-      result = (result | kTypeRead) & ~(kTypeRef | kTypeWrite);
+      dstTypeInfo = (dstTypeInfo | kTypeRead) & ~(kTypeRef | kTypeWrite);
     }
 
-    node->setTypeInfo(result);
+    node->setTypeInfo(dstTypeInfo);
     break;
   }
 
@@ -397,7 +410,7 @@ Error AstAnalysis::onCall(AstCall* node) noexcept {
   uint32_t count = node->getLength();
 
   // Transform an intrinsic function into unary or binary operator.
-  if (sym->getSymbolType() == kAstSymbolIntrinsic) {
+  if (sym->isIntrinsic()) {
     const OpInfo& op = OpInfo::get(sym->getOpType());
 
     uint32_t reqArgs = op.getOpCount();
@@ -429,7 +442,7 @@ Error AstAnalysis::onCall(AstCall* node) noexcept {
   }
 
   AstFunction* decl = static_cast<AstFunction*>(sym->getNode());
-  if (decl == nullptr || decl->getNodeType() != kAstNodeFunction)
+  if (decl == nullptr || decl->getNodeType() != AstNode::kTypeFunction)
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
   if (decl->getRet())
@@ -464,7 +477,7 @@ Error AstAnalysis::checkAssignment(AstNode* node, uint32_t op) noexcept {
 
   // Assignment has always a side-effect - used by optimizer to not remove code
   // that has to be executed.
-  node->addNodeFlags(kAstNodeHasSideEffect);
+  node->addNodeFlags(AstNode::kFlagSideEffect);
 
   return kErrorOk;
 }

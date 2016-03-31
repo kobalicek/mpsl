@@ -8,6 +8,7 @@
 #define MPSL_EXPORTS
 
 // [Dependencies - MPSL]
+#include "./mplang_p.h"
 #include "./mputils_p.h"
 
 // [Api-Begin]
