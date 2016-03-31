@@ -53,7 +53,7 @@ namespace mpsl {
 #if defined(MPSL_DEBUG)
 # define MPSL_TRACE_ERROR(err) ::mpsl::mpTraceError(err)
 #else
-# define MPSL_TRACE_ERROR(err) static_cast<::mpsl::Error>(err)
+# define MPSL_TRACE_ERROR(err) static_cast< ::mpsl::Error >(err)
 #endif
 
 // ============================================================================
