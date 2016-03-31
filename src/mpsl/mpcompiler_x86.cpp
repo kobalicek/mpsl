@@ -274,36 +274,6 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
       case OP_1(Cvtdtoi): emit2x(asmjit::kX86InstIdCvttsd2si, asmOp[0], asmOp[1]); break;
       case OP_1(Cvtdtof): emit2x(asmjit::kX86InstIdCvtsd2ss, asmOp[0], asmOp[1]); break;
 
-      case OP_1(Cmpeqf): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
-      case OP_X(Cmpeqf): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
-      case OP_1(Cmpeqd): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
-      case OP_X(Cmpeqd): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
-
-      case OP_1(Cmpnef): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
-      case OP_X(Cmpnef): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
-      case OP_1(Cmpned): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
-      case OP_X(Cmpned): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
-
-      case OP_1(Cmpltf): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
-      case OP_X(Cmpltf): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
-      case OP_1(Cmpltd): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
-      case OP_X(Cmpltd): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
-
-      case OP_1(Cmplef): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
-      case OP_X(Cmplef): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
-      case OP_1(Cmpled): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
-      case OP_X(Cmpled): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
-
-      case OP_1(Cmpgtf): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
-      case OP_X(Cmpgtf): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
-      case OP_1(Cmpgtd): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
-      case OP_X(Cmpgtd): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
-
-      case OP_1(Cmpgef): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
-      case OP_X(Cmpgef): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
-      case OP_1(Cmpged): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
-      case OP_X(Cmpged): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
-
       case OP_1(Addi): emit3i(asmjit::kX86InstIdAdd, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_X(Addi): emit3i(asmjit::kX86InstIdPaddd, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Addf): emit3f(asmjit::kX86InstIdAddss, asmOp[0], asmOp[1], asmOp[2]); break;
@@ -365,6 +335,36 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
       case OP_X(Sqrtf): emit2x(asmjit::kX86InstIdSqrtps, asmOp[0], asmOp[1]); break;
       case OP_1(Sqrtd): emit2x(asmjit::kX86InstIdSqrtsd, asmOp[0], asmOp[1]); break;
       case OP_X(Sqrtd): emit2x(asmjit::kX86InstIdSqrtpd, asmOp[0], asmOp[1]); break;
+
+      case OP_1(Cmpeqf): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
+      case OP_X(Cmpeqf): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
+      case OP_1(Cmpeqd): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
+      case OP_X(Cmpeqd): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpEQ); break;
+
+      case OP_1(Cmpnef): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
+      case OP_X(Cmpnef): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
+      case OP_1(Cmpned): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
+      case OP_X(Cmpned): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpNEQ); break;
+
+      case OP_1(Cmpltf): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
+      case OP_X(Cmpltf): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
+      case OP_1(Cmpltd): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
+      case OP_X(Cmpltd): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLT); break;
+
+      case OP_1(Cmplef): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
+      case OP_X(Cmplef): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
+      case OP_1(Cmpled): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
+      case OP_X(Cmpled): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[1], asmOp[2], asmjit::kX86CmpLE); break;
+
+      case OP_1(Cmpgtf): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
+      case OP_X(Cmpgtf): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
+      case OP_1(Cmpgtd): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
+      case OP_X(Cmpgtd): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLE); break;
+
+      case OP_1(Cmpgef): emit3f(asmjit::kX86InstIdCmpss, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
+      case OP_X(Cmpgef): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
+      case OP_1(Cmpged): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
+      case OP_X(Cmpged): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
 
       case OP_1(Vaddb):
       case OP_X(Vaddb): emit3i(asmjit::kX86InstIdPaddb, asmOp[0], asmOp[1], asmOp[2]); break;
@@ -452,6 +452,9 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
       case OP_1(Vsrlq):
       case OP_X(Vsrlq): emit3i(asmjit::kX86InstIdPsrlq, asmOp[0], asmOp[1], asmOp[2]); break;
 
+      case OP_1(Vmaddwd):
+      case OP_X(Vmaddwd): emit3i(asmjit::kX86InstIdPmaddwd, asmOp[0], asmOp[1], asmOp[2]); break;
+
       case OP_1(Vcmpeqb):
       case OP_X(Vcmpeqb): emit3i(asmjit::kX86InstIdPcmpeqb, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Vcmpeqw):
@@ -465,6 +468,26 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
       case OP_X(Vcmpgtw): emit3i(asmjit::kX86InstIdPcmpgtw, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Vcmpgtd):
       case OP_X(Vcmpgtd): emit3i(asmjit::kX86InstIdPcmpgtd, asmOp[0], asmOp[1], asmOp[2]); break;
+
+      case OP_1(Vmovsxbw):
+      case OP_X(Vmovsxbw): emit3i(asmjit::kX86InstIdPmovsxbw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Vmovzxbw):
+      case OP_X(Vmovzxbw): emit3i(asmjit::kX86InstIdPmovzxbw, asmOp[0], asmOp[1], asmOp[2]); break;
+
+      case OP_1(Vmovsxwd):
+      case OP_X(Vmovsxwd): emit3i(asmjit::kX86InstIdPmovsxwd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Vmovzxwd):
+      case OP_X(Vmovzxwd): emit3i(asmjit::kX86InstIdPmovzxwd, asmOp[0], asmOp[1], asmOp[2]); break;
+
+      case OP_1(Vpacksswb):
+      case OP_X(Vpacksswb): emit3i(asmjit::kX86InstIdPacksswb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Vpackuswb):
+      case OP_X(Vpackuswb): emit3i(asmjit::kX86InstIdPackuswb, asmOp[0], asmOp[1], asmOp[2]); break;
+
+      case OP_1(Vpackssdw):
+      case OP_X(Vpackssdw): emit3i(asmjit::kX86InstIdPackssdw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Vpackusdw):
+      case OP_X(Vpackusdw): emit3i(asmjit::kX86InstIdPackusdw, asmOp[0], asmOp[1], asmOp[2]); break;
 
       default:
         // TODO:
@@ -500,6 +523,10 @@ void JitCompiler::emit3i(uint32_t instId, const Operand& o0, const Operand& o1, 
       _c->emit(asmjit::kX86InstIdPmuludq, o0, o2);
       _c->emit(asmjit::kX86InstIdShufps, o0, _tmpXmm0, X86Util::shuffle(0, 2, 0, 2));
       return;
+    }
+
+    case asmjit::kX86InstIdPackusdw: {
+      // TODO:
     }
   }
 

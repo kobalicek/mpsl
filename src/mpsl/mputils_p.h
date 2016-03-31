@@ -29,12 +29,12 @@ struct Utils {
   //! Append a formatted type name and related information of `type`.
   //!
   //! Provided also by `sformat`'s `"%{Type}"` extension.
-  static StringBuilder& formatType(StringBuilder& sb, uint32_t type) noexcept;
+  static StringBuilder& formatType(StringBuilder& sb, uint32_t typeInfo) noexcept;
 
   //! Append a formatted `value` (scalar or vector) of type `type`.
   //!
   //! Provided also by `sformat`'s `"%{Value}"` extension.
-  static StringBuilder& formatValue(StringBuilder& sb, uint32_t type, const Value* value) noexcept;
+  static StringBuilder& formatValue(StringBuilder& sb, uint32_t typeInfo, const Value* value) noexcept;
 };
 
 } // mpsl namespace

@@ -324,7 +324,7 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
   if (op.isAssignment())
     MPSL_PROPAGATE(checkAssignment(node->getLeft(), op.type));
 
-  // Minimal evaluation requires both operands to be casted to boolean.
+  // Minimal evaluation requires both operands to be casted to bool.
   if (op.isLogical()) {
     MPSL_PROPAGATE(boolCast(node, node->getLeft()));
     MPSL_PROPAGATE(boolCast(node, node->getRight()));
@@ -340,11 +340,7 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
     uint32_t lTypeId = lTypeInfo & kTypeIdMask;
     uint32_t rTypeId = rTypeInfo & kTypeIdMask;
 
-    if (op.isFloatOnly() && (lTypeId != rTypeId || !TypeInfo::isFloatId(lTypeId))) {
-      MPSL_PROPAGATE(implicitCast(node, left , kTypeDouble | (lTypeInfo & ~kTypeIdMask)));
-      MPSL_PROPAGATE(implicitCast(node, right, kTypeDouble | (rTypeInfo & ~kTypeIdMask)));
-      continue;
-    }
+    uint32_t dstTypeInfo = lTypeInfo;
 
     if (op.isShift()) {
       // Bit shift and rotation can only be done on integers.
@@ -361,32 +357,83 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
         return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
           "Bitwise operation '%s' requires right operand to be scalar, not '%{Type}'.", op.name, rTypeId);
     }
+    else {
+      // Promote `int` to `double` in case that the operator is only defined
+      // for floating point operand(s).
+      if (op.isFloatOnly() && (lTypeId != rTypeId || !TypeInfo::isFloatId(lTypeId))) {
+        // This kind of conversion should never happen on assignment. This
+        // should remain a runtime check to prevent undefined behavior in
+        // case of a bug in the `OpInfo table.
+        if (op.isAssignment())
+          return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-    uint32_t dstTypeInfo = lTypeInfo;
-    if (lTypeId != rTypeId) {
-      bool rightToLeft = true;
-      bool leftToRight = true;
-
-      if (op.isAssignment())
-        leftToRight = false;
-
-      if (mpCanImplicitCast(lTypeId, rTypeId) && rightToLeft) {
-        // Cast type on the right side to the type on the left side.
-        AstUnaryOp* castNode = _ast->newNode<AstUnaryOp>(kOpCast, dstTypeInfo);
-        node->injectNode(right, castNode);
+        MPSL_PROPAGATE(implicitCast(node, left , kTypeDouble | (lTypeInfo & ~kTypeIdMask)));
+        MPSL_PROPAGATE(implicitCast(node, right, kTypeDouble | (rTypeInfo & ~kTypeIdMask)));
         continue;
       }
 
-      if (mpCanImplicitCast(rTypeId, lTypeId) && leftToRight) {
-        // Cast type on the left side to the type on the right side.
-        dstTypeInfo = rTypeInfo;
+      if (lTypeId != rTypeId) {
+        bool rightToLeft = true;
+        bool leftToRight = true;
 
-        AstUnaryOp* castNode = _ast->newNode<AstUnaryOp>(kOpCast, dstTypeInfo);
-        node->injectNode(left, castNode);
-        continue;
+        if (op.isAssignment())
+          leftToRight = false;
+
+        if (mpCanImplicitCast(lTypeId, rTypeId) && rightToLeft) {
+          // Cast type on the right side to the type on the left side.
+          AstUnaryOp* castNode = _ast->newNode<AstUnaryOp>(kOpCast, dstTypeInfo);
+          MPSL_NULLCHECK(castNode);
+
+          node->injectNode(right, castNode);
+          continue;
+        }
+
+        if (mpCanImplicitCast(rTypeId, lTypeId) && leftToRight) {
+          // Cast type on the left side to the type on the right side.
+          dstTypeInfo = rTypeInfo;
+
+          AstUnaryOp* castNode = _ast->newNode<AstUnaryOp>(kOpCast, dstTypeInfo);
+          MPSL_NULLCHECK(castNode);
+
+          node->injectNode(left, castNode);
+          continue;
+        }
+
+        return invalidCast(node->_position, "Invalid implicit cast", rTypeInfo, lTypeInfo);
       }
 
-      return invalidCast(node->_position, "Invalid implicit cast", rTypeInfo, lTypeInfo);
+      // Check whether both operands have the same number of vector elements.
+      // In case of mismatch the scalar operand should be promoted to vector
+      // if the operator is not an assignment. All other cases are errors.
+      uint32_t lVec = TypeInfo::elementsOf(lTypeInfo);
+      uint32_t rVec = TypeInfo::elementsOf(rTypeInfo);
+
+      if (lVec != rVec) {
+        if (lVec == 1) {
+          if (op.isAssignment())
+            return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
+              "Vector size mismatch '%{Type}' vs '%{Type}'.", lTypeId, rTypeId);
+
+          // Promote left operand to a vector of `rVec` elements.
+          AstUnaryOp* swizzleNode = _ast->newNode<AstUnaryOp>(kOpSwizzle, lTypeId | (rVec << kTypeVecShift) | kTypeRead);
+          MPSL_NULLCHECK(swizzleNode);
+
+          node->injectNode(left, swizzleNode);
+          continue;
+        }
+        else if (rVec == 1) {
+          // Promote right operand to a vector of `lVec` elements.
+          AstUnaryOp* swizzleNode = _ast->newNode<AstUnaryOp>(kOpSwizzle, rTypeId | (lVec << kTypeVecShift) | kTypeRead);
+          MPSL_NULLCHECK(swizzleNode);
+
+          node->injectNode(right, swizzleNode);
+          continue;
+        }
+        else {
+          return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
+            "Vector size mismatch '%{Type}' vs '%{Type}'.", lTypeId, rTypeId);
+        }
+      }
     }
 
     if (op.isConditional()) {

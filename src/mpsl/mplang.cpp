@@ -111,6 +111,7 @@ const OpInfo mpOpInfo[kOpCount] = {
   // +------------+------------+-------+--+--+--+--+-----+---------------------------------------------+-----------+-----------+
   ROW(None        , "<none>"   , None  , 0, 0, 0, 0, LTR | 0                                           , None      , None      ),
   ROW(Cast        , "(cast)"   , None  , 1, 3, 0, 0, RTL | 0                                           , None      , None      ),
+  ROW(Swizzle     , "(swizzle)", None  , 1, 3, 0, 0, LTR | 0                 | F(AnyOp)                , None      , None      ),
   ROW(PreInc      , "++(.)"    , None  , 1, 3,-1, 0, RTL | F(Arithmetic)     | F(AnyOp)                , Addi      , Addf      ),
   ROW(PreDec      , "--(.)"    , None  , 1, 3,-1, 0, RTL | F(Arithmetic)     | F(AnyOp)                , Subi      , Subf      ),
   ROW(PostInc     , "(.)++"    , None  , 1, 2, 1, 0, LTR | F(Arithmetic)     | F(AnyOp)                , Addi      , Addf      ),
@@ -170,16 +171,16 @@ const OpInfo mpOpInfo[kOpCount] = {
   ROW(And         , "&"        , None  , 2,10, 0, 0, LTR | F(Bitwise)        | F(AnyOp)                , Andi      , Andf      ),
   ROW(Or          , "|"        , None  , 2,12, 0, 0, LTR | F(Bitwise)        | F(AnyOp)   | F(NopIf0)  , Ori       , Orf       ),
   ROW(Xor         , "^"        , None  , 2,11, 0, 0, LTR | F(Bitwise)        | F(AnyOp)   | F(NopIf0)  , Xori      , Xorf      ),
+  ROW(Min         , "min"      , None  , 2, 0, 0, 1, LTR | 0                 | F(AnyOp)                , Mini      , Minf      ),
+  ROW(Max         , "max"      , None  , 2, 0, 0, 1, LTR | 0                 | F(AnyOp)                , Maxi      , Maxf      ),
   ROW(Sll         , "<<"       , None  , 2, 7, 0, 0, LTR | F(Shift)          | F(IntOp)   | F(NopIf0)  , Slli      , None      ),
   ROW(Srl         , ">>>"      , None  , 2, 7, 0, 0, LTR | F(Shift)          | F(IntOp)   | F(NopIf0)  , Srli      , None      ),
   ROW(Sra         , ">>"       , None  , 2, 7, 0, 0, LTR | F(Shift)          | F(IntOp)   | F(NopIf0)  , Srai      , None      ),
   ROW(Rol         , "rol"      , None  , 2, 0, 0, 1, LTR | F(Shift)          | F(IntOp)   | F(NopIf0)  , Roli      , None      ),
   ROW(Ror         , "ror"      , None  , 2, 0, 0, 1, LTR | F(Shift)          | F(IntOp)   | F(NopIf0)  , Rori      , None      ),
-  ROW(Min         , "min"      , None  , 2, 0, 0, 1, LTR | 0                 | F(AnyOp)                , Mini      , Minf      ),
-  ROW(Max         , "max"      , None  , 2, 0, 0, 1, LTR | 0                 | F(AnyOp)                , Maxi      , Maxf      ),
+  ROW(CopySign    , "copysign" , None  , 2, 0, 0, 1, LTR | 0                 | F(FloatOp)              , None      , Copysignf ),
   ROW(Pow         , "pow"      , None  , 2, 0, 0, 1, LTR | 0                 | F(FloatOp) | F(NopIfR1) , None      , Powf      ),
   ROW(Atan2       , "atan2"    , None  , 2, 0, 0, 1, LTR | F(Trigonometric)  | F(FloatOp)              , None      , Atan2f    ),
-  ROW(CopySign    , "copysign" , None  , 2, 0, 0, 1, LTR | 0                 | F(FloatOp)              , None      , Copysignf ),
   ROW(Vabsb       , "vabsb"    , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vabsb     , None      ),
   ROW(Vabsw       , "vabsw"    , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vabsw     , None      ),
   ROW(Vabsd       , "vabsd"    , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vabsd     , None      ),
@@ -223,12 +224,21 @@ const OpInfo mpOpInfo[kOpCount] = {
   ROW(Vsrad       , "vsrad"    , None  , 2, 0, 0, 1, LTR | F(DSP) | F(Shift) | F(IntOp)                , Vsrad     , None      ),
   ROW(Vsllq       , "vsllq"    , None  , 2, 0, 0, 1, LTR | F(DSP) | F(Shift) | F(IntOp)                , Vsllq     , None      ),
   ROW(Vsrlq       , "vsrlq"    , None  , 2, 0, 0, 1, LTR | F(DSP) | F(Shift) | F(IntOp)                , Vsrlq     , None      ),
+  ROW(Vmaddwd     , "vmaddwd"  , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vmaddwd   , None      ),
   ROW(Vcmpeqb     , "vcmpeqb"  , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vcmpeqb   , None      ),
   ROW(Vcmpeqw     , "vcmpeqw"  , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vcmpeqw   , None      ),
   ROW(Vcmpeqd     , "vcmpeqd"  , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vcmpeqd   , None      ),
   ROW(Vcmpgtb     , "vcmpgtb"  , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vcmpgtb   , None      ),
   ROW(Vcmpgtw     , "vcmpgtw"  , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vcmpgtw   , None      ),
-  ROW(Vcmpgtd     , "vcmpgtd"  , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vcmpgtd   , None      )
+  ROW(Vcmpgtd     , "vcmpgtd"  , None  , 2, 0, 0, 1, LTR | F(DSP)            | F(IntOp)                , Vcmpgtd   , None      ),
+  ROW(Vmovsxbw    , "vmovsxbw" , None  , 2, 0, 0, 1, LTR | F(DSP) | F(Unpack)| F(IntOp)                , Vmovsxbw  , None      ),
+  ROW(Vmovzxbw    , "vmovzxbw" , None  , 2, 0, 0, 1, LTR | F(DSP) | F(Unpack)| F(IntOp)                , Vmovzxbw  , None      ),
+  ROW(Vmovsxwd    , "vmovsxwd" , None  , 2, 0, 0, 1, LTR | F(DSP) | F(Unpack)| F(IntOp)                , Vmovsxwd  , None      ),
+  ROW(Vmovzxwd    , "vmovzxwd" , None  , 2, 0, 0, 1, LTR | F(DSP) | F(Unpack)| F(IntOp)                , Vmovzxwd  , None      ),
+  ROW(Vpacksswb   , "vpacksswb", None  , 2, 0, 0, 1, LTR | F(DSP) | F(Pack)  | F(IntOp)                , Vpacksswb , None      ),
+  ROW(Vpackuswb   , "vpackuswb", None  , 2, 0, 0, 1, LTR | F(DSP) | F(Pack)  | F(IntOp)                , Vpackuswb , None      ),
+  ROW(Vpackssdw   , "vpackssdw", None  , 2, 0, 0, 1, LTR | F(DSP) | F(Pack)  | F(IntOp)                , Vpackssdw , None      ),
+  ROW(Vpackusdw   , "vpackusdw", None  , 2, 0, 0, 1, LTR | F(DSP) | F(Pack)  | F(IntOp)                , Vpackusdw , None      )
 };
 #undef F
 #undef RTL
@@ -401,12 +411,12 @@ const InstInfo mpInstInfo[kInstCodeCount] = {
   ROW(Cmpgef    , "cmpgef"      , 3, I(F32)                               ),
   ROW(Cmpged    , "cmpged"      , 3, I(F64)                               ),
 
+  ROW(Copysignf , "copysignf"   , 3, I(F32)                               ),
+  ROW(Copysignd , "copysignd"   , 3, I(F64)                               ),
   ROW(Powf      , "powf"        , 3, I(F32) | I(Complex)                  ),
   ROW(Powd      , "powd"        , 3, I(F64) | I(Complex)                  ),
   ROW(Atan2f    , "atan2f"      , 3, I(F32) | I(Complex)                  ),
   ROW(Atan2d    , "atan2d"      , 3, I(F64) | I(Complex)                  ),
-  ROW(Copysignf , "copysignf"   , 3, I(F32)                               ),
-  ROW(Copysignd , "copysignd"   , 3, I(F64)                               ),
 
   ROW(Vabsb     , "vabsb"       , 2, I(I32)                               ),
   ROW(Vabsw     , "vabsw"       , 2, I(I32)                               ),
@@ -451,12 +461,21 @@ const InstInfo mpInstInfo[kInstCodeCount] = {
   ROW(Vsrad     , "vsrad"       , 3, I(I32)                               ),
   ROW(Vsllq     , "vsllq"       , 3, I(I32)                               ),
   ROW(Vsrlq     , "vsrlq"       , 3, I(I32)                               ),
+  ROW(Vmaddwd   , "vmaddwd"     , 3, I(I32)                               ),
   ROW(Vcmpeqb   , "vcmpeqb"     , 3, I(I32)                               ),
   ROW(Vcmpeqw   , "vcmpeqw"     , 3, I(I32)                               ),
   ROW(Vcmpeqd   , "vcmpeqd"     , 3, I(I32)                               ),
   ROW(Vcmpgtb   , "vcmpgtb"     , 3, I(I32)                               ),
   ROW(Vcmpgtw   , "vcmpgtw"     , 3, I(I32)                               ),
-  ROW(Vcmpgtd   , "vcmpgtd"     , 3, I(I32)                               )
+  ROW(Vcmpgtd   , "vcmpgtd"     , 3, I(I32)                               ),
+  ROW(Vmovsxbw  , "vmovsxbw"    , 3, I(I32)                               ),
+  ROW(Vmovzxbw  , "vmovzxbw"    , 3, I(I32)                               ),
+  ROW(Vmovsxwd  , "vmovsxwd"    , 3, I(I32)                               ),
+  ROW(Vmovzxwd  , "vmovzxwd"    , 3, I(I32)                               ),
+  ROW(Vpacksswb , "vpacksswb"   , 3, I(I32)                               ),
+  ROW(Vpackuswb , "vpackuswb"   , 3, I(I32)                               ),
+  ROW(Vpackssdw , "vpackssdw"   , 3, I(I32)                               ),
+  ROW(Vpackusdw , "vpackusdw"   , 3, I(I32)                               )
 };
 #undef I
 #undef ROW

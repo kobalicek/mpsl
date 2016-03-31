@@ -501,8 +501,8 @@ struct AstNode {
       _children(children),
       _nodeType(static_cast<uint8_t>(nodeType)),
       _nodeFlags(0),
-      _nodeSize(0),
       _op(kOpNone),
+      _reserved(0),
       _position(~static_cast<uint32_t>(0)),
       _typeInfo(kTypeVoid),
       _length(length) {}
@@ -541,13 +541,13 @@ struct AstNode {
   //! Get whether the node is `AstImm`.
   MPSL_INLINE bool isImm() const noexcept { return _nodeType == kTypeImm; }
 
-  //! Get whether the node has flag `flag`.
-  MPSL_INLINE bool hasNodeFlag(uint32_t flag) const noexcept {
-    return (static_cast<uint32_t>(_nodeFlags) & flag) != 0;
-  }
   //! Get node flags.
   MPSL_INLINE uint32_t getNodeFlags() const noexcept {
     return _nodeFlags;
+  }
+  //! Get whether the node has a `flag` set.
+  MPSL_INLINE bool hasNodeFlag(uint32_t flag) const noexcept {
+    return (static_cast<uint32_t>(_nodeFlags) & flag) != 0;
   }
   //! Set node flags.
   MPSL_INLINE void setNodeFlags(uint32_t flags) noexcept {
@@ -557,9 +557,6 @@ struct AstNode {
   MPSL_INLINE void addNodeFlags(uint32_t flags) noexcept {
     _nodeFlags |= static_cast<uint8_t>(flags);
   }
-
-  //! Get node size (in bytes).
-  MPSL_INLINE uint32_t getNodeSize() const noexcept { return _nodeSize; }
 
   //! Get op.
   MPSL_INLINE uint32_t getOp() const noexcept { return _op; }
@@ -622,12 +619,12 @@ struct AstNode {
   uint8_t _nodeType;
   //! Node flags, see `AstNode::Flags`.
   uint8_t _nodeFlags;
-  //! Node size in bytes for `Allocator`.
-  uint8_t _nodeSize;
   //! Operator, see `OpType`.
   uint8_t _op;
+  //! \internal
+  uint8_t _reserved;
 
-  //! Position (in characters) to the beginning of the program (default -1).
+  //! Position (in characters) to the beginning of the program.
   uint32_t _position;
 
   //! Type-info of the node (mostly the result type).
@@ -1139,15 +1136,30 @@ struct AstUnaryOp : public AstUnary {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstUnaryOp(AstBuilder* ast, uint32_t op) noexcept
-    : AstUnary(ast, kTypeUnaryOp) {
+    : AstUnary(ast, kTypeUnaryOp),
+      _swizzleMask(0) {
     setOp(op);
   }
 
   MPSL_INLINE AstUnaryOp(AstBuilder* ast, uint32_t op, uint32_t typeInfo) noexcept
-    : AstUnary(ast, kTypeUnaryOp) {
+    : AstUnary(ast, kTypeUnaryOp),
+      _swizzleMask(0) {
     setOp(op);
     setTypeInfo(typeInfo);
   }
+
+  // --------------------------------------------------------------------------
+  // [Accessors]
+  // --------------------------------------------------------------------------
+
+  MPSL_INLINE uint32_t getSwizzleMask() const noexcept { return _swizzleMask; }
+  MPSL_INLINE void setSwizzleMask(uint32_t m) noexcept { _swizzleMask = m; }
+
+  // --------------------------------------------------------------------------
+  // [Members]
+  // --------------------------------------------------------------------------
+
+  uint32_t _swizzleMask;
 };
 
 // ============================================================================

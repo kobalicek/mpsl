@@ -347,6 +347,15 @@ Error AstOptimizer::onUnaryOp(AstUnaryOp* node) noexcept {
 
         _ast->deleteNode(node);
       }
+      else if (op.isSwizzle()) {
+        MPSL_PROPAGATE(foldSwizzle(node->getPosition(), value, value, dTypeInfo, node->getSwizzleMask()));
+        child->setTypeInfo(dTypeInfo);
+
+        node->unlinkChild();
+        node->getParent()->replaceNode(node, child);
+
+        _ast->deleteNode(node);
+      }
       else {
         MPSL_PROPAGATE(foldUnaryOp(node->getPosition(), value, value, sTypeInfo, op.type));
         child->setTypeInfo(dTypeInfo);
@@ -601,6 +610,41 @@ Error AstOptimizer::foldCast(uint32_t position,
 #undef COMB_DST_SRC
 
 // ============================================================================
+// [mpsl::AstOptimizer - Utilities - Swizzle]
+// ============================================================================
+
+Error AstOptimizer::foldSwizzle(uint32_t position, Value* dVal,
+  const Value* sVal, uint32_t typeInfo, uint32_t swizzleMask) noexcept {
+
+  uint32_t typeId = typeInfo & kTypeIdMask;
+  uint32_t i, count = TypeInfo::elementsOf(typeInfo);
+
+  Value tVal = *sVal;
+  switch (TypeInfo::sizeOf(typeId)) {
+    case 4:
+      for (i = 0; i < count; i++, swizzleMask >>= 4) {
+        uint32_t sIdx = swizzleMask & 0xF;
+        if (MPSL_UNLIKELY(sIdx >= 8))
+          return MPSL_TRACE_ERROR(kErrorInvalidState);
+        dVal->i[i] = tVal.i[sIdx];
+      }
+      return kErrorOk;
+
+    case 8:
+      for (i = 0; i < count; i++, swizzleMask >>= 4) {
+        uint32_t sIdx = swizzleMask & 0xF;
+        if (MPSL_UNLIKELY(sIdx >= 4))
+          return MPSL_TRACE_ERROR(kErrorInvalidState);
+        dVal->q[i] = tVal.q[sIdx];
+      }
+      return kErrorOk;
+
+    default:
+      return MPSL_TRACE_ERROR(kErrorInvalidState);
+  }
+}
+
+// ============================================================================
 // [mpsl::AstOptimizer - Utilities - UnaryOp]
 // ============================================================================
 
@@ -746,25 +790,20 @@ Error AstOptimizer::foldBinaryOp(uint32_t position, Value* dst,
     case COMB_SPEC(kOpEq      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] == rVal->f[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpEq      , kTypeQBool ): COMB_PROC({ dst->q[i] = lVal->q[i] == rVal->q[i] ? kB64_1 : kB64_0; });
     case COMB_SPEC(kOpEq      , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->d[i] == rVal->d[i] ? kB64_1 : kB64_0; });
-
     case COMB_SPEC(kOpNe      , kTypeBool  ):
     case COMB_SPEC(kOpNe      , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] != rVal->u[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpNe      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] != rVal->f[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpNe      , kTypeQBool ): COMB_PROC({ dst->q[i] = lVal->q[i] != rVal->q[i] ? kB64_1 : kB64_0; });
     case COMB_SPEC(kOpNe      , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->d[i] != rVal->d[i] ? kB64_1 : kB64_0; });
-
     case COMB_SPEC(kOpLt      , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->i[i] <  rVal->i[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpLt      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] <  rVal->f[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpLt      , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->d[i] <  rVal->d[i] ? kB64_1 : kB64_0; });
-
     case COMB_SPEC(kOpLe      , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->i[i] <= rVal->i[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpLe      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] <= rVal->f[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpLe      , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->d[i] <= rVal->d[i] ? kB64_1 : kB64_0; });
-
     case COMB_SPEC(kOpGt      , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->i[i] >  rVal->i[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpGt      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] >  rVal->f[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpGt      , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->d[i] >  rVal->d[i] ? kB64_1 : kB64_0; });
-
     case COMB_SPEC(kOpGe      , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->i[i] >= rVal->i[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpGe      , kTypeFloat ): COMB_PROC({ dst->u[i] = lVal->f[i] >= rVal->f[i] ? kB32_1 : kB32_0; });
     case COMB_SPEC(kOpGe      , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->d[i] >= rVal->d[i] ? kB64_1 : kB64_0; });
@@ -772,19 +811,15 @@ Error AstOptimizer::foldBinaryOp(uint32_t position, Value* dst,
     case COMB_SPEC(kOpAdd     , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] + rVal->u[i]; });
     case COMB_SPEC(kOpAdd     , kTypeFloat ): COMB_PROC({ dst->f[i] = lVal->f[i] + rVal->f[i]; });
     case COMB_SPEC(kOpAdd     , kTypeDouble): COMB_PROC({ dst->d[i] = lVal->d[i] + rVal->d[i]; });
-
     case COMB_SPEC(kOpSub     , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] - rVal->u[i]; });
     case COMB_SPEC(kOpSub     , kTypeFloat ): COMB_PROC({ dst->f[i] = lVal->f[i] - rVal->f[i]; });
     case COMB_SPEC(kOpSub     , kTypeDouble): COMB_PROC({ dst->d[i] = lVal->d[i] - rVal->d[i]; });
-
     case COMB_SPEC(kOpMul     , kTypeInt   ): COMB_PROC({ dst->i[i] = lVal->i[i] * rVal->i[i]; });
     case COMB_SPEC(kOpMul     , kTypeFloat ): COMB_PROC({ dst->f[i] = lVal->f[i] * rVal->f[i]; });
     case COMB_SPEC(kOpMul     , kTypeDouble): COMB_PROC({ dst->d[i] = lVal->d[i] * rVal->d[i]; });
-
     case COMB_SPEC(kOpDiv     , kTypeInt   ): COMB_PROC({ int32_t v = rVal->i[i]; IDIV_CHECK(v); dst->i[i] = lVal->i[i] / v; });
     case COMB_SPEC(kOpDiv     , kTypeFloat ): COMB_PROC({ dst->f[i] = lVal->f[i] / rVal->f[i]; });
     case COMB_SPEC(kOpDiv     , kTypeDouble): COMB_PROC({ dst->d[i] = lVal->d[i] / rVal->d[i]; });
-
     case COMB_SPEC(kOpMod     , kTypeInt   ): COMB_PROC({ int32_t v = rVal->i[i]; IDIV_CHECK(v); dst->i[i] = lVal->i[i] % v; });
     case COMB_SPEC(kOpMod     , kTypeFloat ): COMB_PROC({ dst->f[i] = mpModF(lVal->f[i], rVal->f[i]); });
     case COMB_SPEC(kOpMod     , kTypeDouble): COMB_PROC({ dst->d[i] = mpModD(lVal->d[i], rVal->d[i]); });
@@ -811,12 +846,6 @@ Error AstOptimizer::foldBinaryOp(uint32_t position, Value* dst,
     case COMB_SPEC(kOpXor     , kTypeQBool ):
     case COMB_SPEC(kOpXor     , kTypeDouble): COMB_PROC({ dst->q[i] = lVal->q[i] ^ rVal->q[i]; });
 
-    case COMB_SPEC(kOpSll     , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] << (rVal->u[i] & 0x1F); });
-    case COMB_SPEC(kOpSrl     , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] >> (rVal->u[i] & 0x1F); });
-    case COMB_SPEC(kOpSra     , kTypeInt   ): COMB_PROC({ dst->i[i] = lVal->i[i] >> (rVal->i[i] & 0x1F); });
-    case COMB_SPEC(kOpRol     , kTypeInt   ): COMB_PROC({ dst->u[i] = mpBitRol(lVal->u[i], rVal->u[i] & 0x1F); });
-    case COMB_SPEC(kOpRor     , kTypeInt   ): COMB_PROC({ dst->u[i] = mpBitRor(lVal->u[i], rVal->u[i] & 0x1F); });
-
     case COMB_SPEC(kOpMin     , kTypeInt   ): COMB_PROC({ dst->i[i] = mpMin(lVal->i[i], rVal->i[i]); });
     case COMB_SPEC(kOpMin     , kTypeFloat ): COMB_PROC({ dst->f[i] = mpMin(lVal->f[i], rVal->f[i]); });
     case COMB_SPEC(kOpMin     , kTypeDouble): COMB_PROC({ dst->d[i] = mpMin(lVal->d[i], rVal->d[i]); });
@@ -824,12 +853,18 @@ Error AstOptimizer::foldBinaryOp(uint32_t position, Value* dst,
     case COMB_SPEC(kOpMax     , kTypeFloat ): COMB_PROC({ dst->f[i] = mpMax(lVal->f[i], rVal->f[i]); });
     case COMB_SPEC(kOpMax     , kTypeDouble): COMB_PROC({ dst->d[i] = mpMax(lVal->d[i], rVal->d[i]); });
 
+    case COMB_SPEC(kOpSll     , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] << (rVal->u[i] & 0x1F); });
+    case COMB_SPEC(kOpSrl     , kTypeInt   ): COMB_PROC({ dst->u[i] = lVal->u[i] >> (rVal->u[i] & 0x1F); });
+    case COMB_SPEC(kOpSra     , kTypeInt   ): COMB_PROC({ dst->i[i] = lVal->i[i] >> (rVal->i[i] & 0x1F); });
+    case COMB_SPEC(kOpRol     , kTypeInt   ): COMB_PROC({ dst->u[i] = mpBitRol(lVal->u[i], rVal->u[i] & 0x1F); });
+    case COMB_SPEC(kOpRor     , kTypeInt   ): COMB_PROC({ dst->u[i] = mpBitRor(lVal->u[i], rVal->u[i] & 0x1F); });
+
+    case COMB_SPEC(kOpCopySign, kTypeFloat ): COMB_PROC({ dst->f[i] = mpCopySignF(lVal->f[i], rVal->f[i]); });
+    case COMB_SPEC(kOpCopySign, kTypeDouble): COMB_PROC({ dst->d[i] = mpCopySignD(lVal->d[i], rVal->d[i]); });
     case COMB_SPEC(kOpPow     , kTypeFloat ): COMB_PROC({ dst->f[i] = mpPowF(lVal->f[i], rVal->f[i]); });
     case COMB_SPEC(kOpPow     , kTypeDouble): COMB_PROC({ dst->d[i] = mpPowD(lVal->d[i], rVal->d[i]); });
     case COMB_SPEC(kOpAtan2   , kTypeFloat ): COMB_PROC({ dst->f[i] = mpAtan2F(lVal->f[i], rVal->f[i]); });
     case COMB_SPEC(kOpAtan2   , kTypeDouble): COMB_PROC({ dst->d[i] = mpAtan2D(lVal->d[i], rVal->d[i]); });
-    case COMB_SPEC(kOpCopySign, kTypeFloat ): COMB_PROC({ dst->f[i] = mpCopySignF(lVal->f[i], rVal->f[i]); });
-    case COMB_SPEC(kOpCopySign, kTypeDouble): COMB_PROC({ dst->d[i] = mpCopySignD(lVal->d[i], rVal->d[i]); });
 
     default:
       return MPSL_TRACE_ERROR(kErrorInvalidState);

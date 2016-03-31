@@ -14,6 +14,7 @@ Disclaimer
 
 This is a WORK-IN-PROGRESS library that is far from being complete. MPSL is a challenging and difficult project and I work on it mostly when I'm tired of other projects. Contact me if you found MPSL interesting and want to collaborate on its development - people joining this project are very welcome.
 
+
 Project Status
 --------------
 
@@ -34,9 +35,9 @@ What is a work-in-progress:
 Introduction
 ------------
 
-MPSL is a lightweight shader-like programming language written in C++. Its name is based on a sister project called [MathPresso](https://github.com/kobalicek/mathpresso), which provided the basic idea and building blocks. MPSL has been designed to be a safe programming language that can access CPU's SIMD capabilities by small programs compiled at runtime. The language is statically typed and allows to use up to 256-bit variables that map to CPU's SIMD registers (SSE, AVX, NEON, ...).
+MPSL is a lightweight shader-like programming language written in C++. Its name is based on a sister project called [MathPresso](https://github.com/kobalicek/mathpresso), which provided the basic idea and some building blocks. MPSL has been designed to be a safe programming language that can access CPU's SIMD capabilities through a shader-like programs compiled at runtime. The language is statically typed and allows to use up to 256-bit wide variables that map directly to CPU's SIMD registers (SSE, AVX, NEON, ...).
 
-MPSL has been designed to be lightweight and embeddable - it doesn't depend on huge libraries like LLVM, it only uses a very lightweight library called [AsmJit](https://github.com/kobalicek/asmjit) as a JIT backend. It implements its own abstract syntax tree (AST) and intermediate representation (IR) of the input program, and then uses an IRToAsm translator to produce machine code.
+MPSL has been designed to be lightweight and embeddable - it doesn't depend on huge libraries like LLVM, it only uses a very lightweight library called [AsmJit](https://github.com/kobalicek/asmjit) as a JIT backend. It implements its own abstract syntax tree (AST) and intermediate representation (IR) of the input program, and then uses an IRToAsm translator to convert IR to machine code.
 
 Check out a working [mp_tutorial.cpp](./src/app/mp_tutorial.cpp) to see how MPSL APIs are designed and how MPSL engine is embedded and used within an application.
 
@@ -271,7 +272,14 @@ Where `a`, `b`, and a hidden return variable are provided by the embedder (inclu
 MPSL C++ API 
 ------------
 
-MPSL is written in C++ and provides C++ APIs for embedders. To use MPSL from your C++ code you must first include `mpsl/mpsl.h` to make all public APIs available within `mpsl` namespace. The following concepts are provided:
+MPSL is written in C++ and provides C++ APIs for embedders. Here is a summary of MPSL's design choices:
+
+  * MPSL is written in C++ and exposes a simple C++ interface for embedders. It's possible to wrap it in a pure C interface, but it's not planned to be part of a MPSL project at the moment.
+  * MPSL uses error codes, not exceptions, and guarantees that every failure is propagated to the embedder as an error code. MPSL never aborts on out-of-memory condition, never throws, and clean ups all resources in case of error properly.
+  * MPSL has its own pooled memory allocator, which uses the OS allocator to allocate larger blocks of memory, which are then split into smaller chunks and pools. It's very fast and prevents memory fragmentation.
+  * MPSL allows embedder to specify a data-layout of his own structures, which means that embedders generally don't have to change their data structures to use MPSL.
+
+To use MPSL from your C++ code you must first include `mpsl/mpsl.h` to make all public APIs available within `mpsl` namespace. The following concepts are provided:
 
   * `mpsl::Isolate` - This is an expression's environment (in MathPresso library this used to be a `Context`). A program cannot be created without having an `Isolate`. `Isolate` also manages virtual memory that is used by shaders.
   * `mpsl::Program[1-4]<>` - Program represents a compiled MPSL shader. The `[1-4]` is a number of data arguments passed to the shader. Here the data argument doesn't represent variables used in a shader, it represents number of "pointers" passed to the shader, where each pointer can contain variables the shader has access to.

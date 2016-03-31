@@ -69,6 +69,9 @@ struct AstOptimizer : public AstVisitor<AstOptimizer> {
     Value* dVal, uint32_t dTypeInfo,
     const Value* sVal, uint32_t sTypeInfo) noexcept;
 
+  MPSL_NOAPI Error foldSwizzle(uint32_t position, Value* dVal,
+    const Value* sVal, uint32_t typeInfo, uint32_t swizzleMask) noexcept;
+
   MPSL_NOAPI Error foldUnaryOp(uint32_t position, Value* dVal,
     const Value* sVal, uint32_t typeInfo, uint32_t op) noexcept;
 

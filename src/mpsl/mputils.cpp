@@ -175,11 +175,11 @@ _Done:
   return sb;
 }
 
-StringBuilder& Utils::formatType(StringBuilder& sb, uint32_t type) noexcept {
-  uint32_t typeId = type & kTypeIdMask;
+StringBuilder& Utils::formatType(StringBuilder& sb, uint32_t typeInfo) noexcept {
+  uint32_t typeId = typeInfo & kTypeIdMask;
   const char* typeName = "<unknown>";
 
-  switch (type & kTypeRW) {
+  switch (typeInfo & kTypeRW) {
     case kTypeRO: sb.appendString("const ", 6); break;
     case kTypeWO: sb.appendString("out ", 6); break;
   }
@@ -189,24 +189,24 @@ StringBuilder& Utils::formatType(StringBuilder& sb, uint32_t type) noexcept {
 
   sb.appendString(typeName);
 
-  uint32_t nVec = (type & kTypeVecMask) >> kTypeVecShift;
-  if (nVec > 0)
-    sb.appendInt(nVec);
+  uint32_t count = TypeInfo::elementsOf(typeInfo);
+  if (count > 0)
+    sb.appendInt(count);
 
-  if (type & kTypeRef)
+  if (typeInfo & kTypeRef)
     sb.appendString(" &", 2);
 
   return sb;
 }
 
-StringBuilder& Utils::formatValue(StringBuilder& sb, uint32_t type, const Value* value_) noexcept {
-  uint32_t id = type & kTypeIdMask;
-  uint32_t vec = type & kTypeVecMask;
+StringBuilder& Utils::formatValue(StringBuilder& sb, uint32_t typeInfo, const Value* value_) noexcept {
+  uint32_t id = typeInfo & kTypeIdMask;
+  uint32_t count = TypeInfo::elementsOf(typeInfo);
 
   uint32_t i = 0;
   const uint8_t* value = reinterpret_cast<const uint8_t*>(value_);
 
-  if (vec > 1)
+  if (count > 1)
     sb.appendChar('{');
 
   for (;;) {
@@ -271,13 +271,13 @@ StringBuilder& Utils::formatValue(StringBuilder& sb, uint32_t type, const Value*
       }
     }
 
-    if (++i >= vec)
+    if (++i >= count)
       break;
 
     sb.appendString(", ");
   }
 
-  if (vec > 1)
+  if (count > 1)
     sb.appendChar('}');
 
   return sb;

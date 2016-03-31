@@ -44,7 +44,8 @@ enum TypeFlags {
 enum OpType {
   kOpNone = 0,
 
-  kOpCast,              // (a)b
+  kOpCast,              // (cast)a
+  kOpSwizzle,           // (swizzle)a
 
   kOpPreInc,            // ++a
   kOpPreDec,            // --a
@@ -115,6 +116,8 @@ enum OpType {
   kOpAnd,               // a & b
   kOpOr,                // a | b
   kOpXor,               // a ^ b
+  kOpMin,               // min(a, b)
+  kOpMax,               // max(a, b)
 
   kOpSll,               // a << b
   kOpSrl,               // a >>> b
@@ -122,11 +125,9 @@ enum OpType {
   kOpRol,               // rol(a, b)
   kOpRor,               // ror(a, b)
 
-  kOpMin,               // min(a, b)
-  kOpMax,               // max(a, b)
+  kOpCopySign,          // copysign(a, b)
   kOpPow,               // pow(a, b)
   kOpAtan2,             // atan2(a, b)
-  kOpCopySign,          // copysign(a, b)
 
   // TODO:
   // kOpBlend,          // blend(a, b, mask)
@@ -174,12 +175,21 @@ enum OpType {
   kOpVsrad,             // vsrad(a, b)
   kOpVsllq,             // vsllq(a, b)
   kOpVsrlq,             // vsrlq(a, b)
+  kOpVmaddwd,           // vmaddwd(a, b)
   kOpVcmpeqb,           // vcmpeqb(a, b)
   kOpVcmpeqw,           // vcmpeqw(a, b)
   kOpVcmpeqd,           // vcmpeqd(a, b)
   kOpVcmpgtb,           // vcmpgtb(a, b)
   kOpVcmpgtw,           // vcmpgtw(a, b)
   kOpVcmpgtd,           // vcmpgtd(a, b)
+  kOpVmovsxbw,          // vmovsxbw(a, b)
+  kOpVmovzxbw,          // vmovzxbw(a, b)
+  kOpVmovsxwd,          // vmovsxwd(a, b)
+  kOpVmovzxwd,          // vmovzxwd(a, b)
+  kOpVpacksswb,         // vpacksswb(a, b)
+  kOpVpackuswb,         // vpackuswb(a, b)
+  kOpVpackssdw,         // vpackssdw(a, b)
+  kOpVpackusdw,         // vpackusdw(a, b)
 
   //! \internal
   //!
@@ -237,6 +247,11 @@ enum OpFlags {
   kOpFlagIntFPOp       = kOpFlagIntOp | kOpFlagFloatOp,
   //! The operator is defined for `int`, `float`, and `bool` types.
   kOpFlagAnyOp         = kOpFlagIntOp | kOpFlagFloatOp | kOpFlagBoolOp,
+
+  //! Operator does unpacking (i.e. it doubles the output width).
+  kOpFlagUnpack        = 0x00100000,
+  //! Operator does packing (i.e. it halves the output width).
+  kOpFlagPack          = 0x00200000,
 
   kOpFlagNopIfL0       = 0x10000000,
   kOpFlagNopIfR0       = 0x20000000,
@@ -357,12 +372,12 @@ enum InstCode {
   kInstCodeAtanf,
   kInstCodeAtand,
 
+  kInstCodeCopysignf,
+  kInstCodeCopysignd,
   kInstCodePowf,
   kInstCodePowd,
   kInstCodeAtan2f,
   kInstCodeAtan2d,
-  kInstCodeCopysignf,
-  kInstCodeCopysignd,
 
   kInstCodeAddi,
   kInstCodeAddf,
@@ -463,12 +478,21 @@ enum InstCode {
   kInstCodeVsrad,
   kInstCodeVsllq,
   kInstCodeVsrlq,
+  kInstCodeVmaddwd,
   kInstCodeVcmpeqb,
   kInstCodeVcmpeqw,
   kInstCodeVcmpeqd,
   kInstCodeVcmpgtb,
   kInstCodeVcmpgtw,
   kInstCodeVcmpgtd,
+  kInstCodeVmovsxbw,
+  kInstCodeVmovzxbw,
+  kInstCodeVmovsxwd,
+  kInstCodeVmovzxwd,
+  kInstCodeVpacksswb,
+  kInstCodeVpackuswb,
+  kInstCodeVpackssdw,
+  kInstCodeVpackusdw,
 
   kInstCodeCount,
 
@@ -635,6 +659,7 @@ struct OpInfo {
   MPSL_INLINE bool isRightToLeft() const noexcept { return (flags & kOpFlagRightToLeft) != 0; }
 
   MPSL_INLINE bool isCast() const noexcept { return type == kOpCast; }
+  MPSL_INLINE bool isSwizzle() const noexcept { return type == kOpSwizzle; }
   MPSL_INLINE bool isIntrinsic() const noexcept { return (flags & kOpFlagIntrinsic) != 0; }
 
   MPSL_INLINE bool isAssignment() const noexcept { return (flags & kOpFlagAssign) != 0; }
@@ -659,9 +684,9 @@ struct OpInfo {
   MPSL_INLINE uint32_t getInstByTypeId(uint32_t typeId) const noexcept {
     switch (typeId) {
       case kTypeBool  :
-      case kTypeInt   : return insti;
-      case kTypeFloat : return instf;
-      case kTypeDouble: return instf + 1;
+      case kTypeInt   : return static_cast<uint32_t>(insti);
+      case kTypeFloat : return static_cast<uint32_t>(instf);
+      case kTypeDouble: return static_cast<uint32_t>(instf) + (instf != 0);
       default:
         return kInstCodeNone;
     }

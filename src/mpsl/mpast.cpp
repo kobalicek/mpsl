@@ -80,7 +80,7 @@ AstBuilder::~AstBuilder() noexcept {}
 
 AstScope* AstBuilder::newScope(AstScope* parent, uint32_t scopeType) noexcept {
   void* p = _allocator->alloc(sizeof(AstScope));
-  if (p == nullptr)
+  if (MPSL_UNLIKELY(p == nullptr))
     return nullptr;
   return new(p) AstScope(this, parent, scopeType);
 }
@@ -94,7 +94,7 @@ AstSymbol* AstBuilder::newSymbol(const StringRef& key, uint32_t hVal, uint32_t s
   size_t kLen = key.getLength();
   void* p = _allocator->alloc(sizeof(AstSymbol) + kLen + 1);
 
-  if (p == nullptr)
+  if (MPSL_UNLIKELY(p == nullptr))
     return nullptr;
 
   char* kStr = static_cast<char*>(p) + sizeof(AstSymbol);
