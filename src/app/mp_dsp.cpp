@@ -55,10 +55,10 @@ int main(int argc, char* argv[]) {
     args.alpha.set(0x00800080);
 
     err = program.run(&args);
-    if (err == mpsl::kErrorOk)
-      printf("Return=%08X %08X %08X %08X\n", args.result[0], args.result[1], args.result[2], args.result[3]);
-    else
+    if (err)
       printf("Execution failed: ERROR %0.8X\n", static_cast<unsigned int>(err));
+    else
+      printf("Return=%08X %08X %08X %08X\n", args.result[0], args.result[1], args.result[2], args.result[3]);
   }
 
   return 0;

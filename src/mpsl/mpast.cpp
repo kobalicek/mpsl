@@ -727,8 +727,7 @@ Error AstDump::onVarDecl(AstVarDecl* node) noexcept {
   AstSymbol* sym = node->getSymbol();
 
   nest("%s [VarDecl:%{Type}]",
-    sym ? sym->getName() : static_cast<const char*>(nullptr),
-    sym ? sym->getTypeInfo() : kTypeVoid);
+    sym ? sym->getName() : static_cast<const char*>(nullptr), node->getTypeInfo());
 
   if (node->hasChild())
     MPSL_PROPAGATE(onNode(node->getChild()));
@@ -759,8 +758,14 @@ Error AstDump::onImm(AstImm* node) noexcept {
 Error AstDump::onUnaryOp(AstUnaryOp* node) noexcept {
   uint32_t typeInfo = node->getTypeInfo();
 
-  if (node->getOp() == kOpCast)
+  if (node->getOp() == kOpCast) {
     nest("(%{Type})", typeInfo);
+  }
+  else if (node->getOp() == kOpSwizzle) {
+    char swizzle[32];
+    Utils::formatSwizzle(swizzle, node->getSwizzleMask(), TypeInfo::elementsOf(typeInfo));
+    nest("(.%s) [%{Type}]", swizzle, typeInfo);
+  }
   else
     nest("%s [%{Type}]", OpInfo::get(node->getOp()).name, typeInfo);
 

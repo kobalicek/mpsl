@@ -372,13 +372,6 @@ enum InstCode {
   kInstCodeAtanf,
   kInstCodeAtand,
 
-  kInstCodeCopysignf,
-  kInstCodeCopysignd,
-  kInstCodePowf,
-  kInstCodePowd,
-  kInstCodeAtan2f,
-  kInstCodeAtan2d,
-
   kInstCodeAddi,
   kInstCodeAddf,
   kInstCodeAddd,
@@ -434,6 +427,15 @@ enum InstCode {
   kInstCodeCmpgei,
   kInstCodeCmpgef,
   kInstCodeCmpged,
+
+  kInstCodeShuf,
+
+  kInstCodeCopysignf,
+  kInstCodeCopysignd,
+  kInstCodePowf,
+  kInstCodePowd,
+  kInstCodeAtan2f,
+  kInstCodeAtan2d,
 
   kInstCodeVabsb,
   kInstCodeVabsw,
@@ -525,6 +527,7 @@ enum InstFlags {
   kInstInfoJxx     = 0x0100,
   kInstInfoRet     = 0x0200,
   kInstInfoCall    = 0x0400,
+  kInstInfoImm     = 0x0800,
   kInstInfoComplex = 0x8000
 };
 
@@ -733,18 +736,20 @@ struct InstInfo {
   MPSL_INLINE bool getNumOps() const noexcept { return numOps; }
   MPSL_INLINE const char* getName() const noexcept { return name; }
 
-  MPSL_INLINE bool isI32() const noexcept { return flags & kInstInfoI32; }
-  MPSL_INLINE bool isF32() const noexcept { return flags & kInstInfoF32; }
-  MPSL_INLINE bool isF64() const noexcept { return flags & kInstInfoF64; }
-  MPSL_INLINE bool isCvt() const noexcept { return flags & kInstInfoCvt; }
+  MPSL_INLINE bool isI32() const noexcept { return (flags & kInstInfoI32) != 0; }
+  MPSL_INLINE bool isF32() const noexcept { return (flags & kInstInfoF32) != 0; }
+  MPSL_INLINE bool isF64() const noexcept { return (flags & kInstInfoF64) != 0; }
+  MPSL_INLINE bool isCvt() const noexcept { return (flags & kInstInfoCvt) != 0; }
 
-  MPSL_INLINE bool isFetch() const noexcept { return flags & kInstInfoFetch; }
-  MPSL_INLINE bool isStore() const noexcept { return flags & kInstInfoStore; }
+  MPSL_INLINE bool isFetch() const noexcept { return (flags & kInstInfoFetch) != 0; }
+  MPSL_INLINE bool isStore() const noexcept { return (flags & kInstInfoStore) != 0; }
 
-  MPSL_INLINE bool isJxx() const noexcept { return flags & kInstInfoJxx; }
-  MPSL_INLINE bool isRet() const noexcept { return flags & kInstInfoRet; }
-  MPSL_INLINE bool isCall() const noexcept { return flags & kInstInfoCall; }
-  MPSL_INLINE bool isComplex() const noexcept { return flags & kInstInfoComplex; }
+  MPSL_INLINE bool isJxx() const noexcept { return (flags & kInstInfoJxx) != 0; }
+  MPSL_INLINE bool isRet() const noexcept { return (flags & kInstInfoRet) != 0; }
+  MPSL_INLINE bool isCall() const noexcept { return (flags & kInstInfoCall) != 0; }
+  MPSL_INLINE bool isComplex() const noexcept { return (flags & kInstInfoComplex) != 0; }
+
+  MPSL_INLINE bool hasImm() const noexcept { return (flags & kInstInfoImm) != 0; }
 
   // --------------------------------------------------------------------------
   // [Members]

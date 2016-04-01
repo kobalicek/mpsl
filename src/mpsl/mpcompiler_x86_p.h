@@ -52,10 +52,12 @@ struct JitCompiler {
   // --------------------------------------------------------------------------
 
   MPSL_NOAPI void prepareConstPool();
+
   MPSL_NOAPI X86Mem getConstantU64(uint64_t value);
   MPSL_NOAPI X86Mem getConstantU64AsPD(uint64_t value);
   MPSL_NOAPI X86Mem getConstantD64(double value);
   MPSL_NOAPI X86Mem getConstantD64AsPD(double value);
+  MPSL_NOAPI X86Mem getConstantByValue(const Value& value, uint32_t width);
 
   // --------------------------------------------------------------------------
   // [Compile]

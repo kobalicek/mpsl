@@ -99,7 +99,8 @@ struct AstToIR : public AstVisitorWithArgs<AstToIR, AstToIRArgs&> {
   MPSL_NOAPI Error newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept;
   MPSL_NOAPI Error newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeInfo) noexcept;
   MPSL_NOAPI Error addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) noexcept;
-  MPSL_NOAPI Error asVar(IRPair<IRVar>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept;
+
+  MPSL_NOAPI Error asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept;
 
   MPSL_NOAPI Error emitMove(IRPair<IRVar> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept;
   MPSL_NOAPI Error emitStore(IRPair<IRObject> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept

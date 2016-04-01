@@ -288,11 +288,13 @@ Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
     return out.result.set(result);
   }
   else {
-    uint32_t instCode = kInstCodeNone;
+    MPSL_PROPAGATE(newVar(out.result, typeInfo));
 
     if (op.isCast()) {
       // TODO: Vector casting doesn't work right now.
       uint32_t fromId = node->getChild()->getTypeInfo() & kTypeIdMask;
+      uint32_t instCode = kInstCodeNone;
+
       switch (COMBINE_OP_CAST(typeInfo & kTypeIdMask, fromId)) {
         case COMBINE_OP_CAST(kTypeFloat , kTypeDouble): instCode = kInstCodeCvtdtof; break;
         case COMBINE_OP_CAST(kTypeFloat , kTypeInt   ): instCode = kInstCodeCvtdtoi; break;
@@ -304,15 +306,30 @@ Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
         default:
           return MPSL_TRACE_ERROR(kErrorInvalidState);
       }
+      MPSL_PROPAGATE(emitInst2(instCode, out.result, tmp.result, typeInfo));
+    }
+    else if (op.isSwizzle()) {
+      uint32_t width = TypeInfo::widthOf(typeInfo);
+      uint32_t swizzleMask = node->getSwizzleMask();
+
+      Value swizzleValue;
+      swizzleValue.q.set(0);
+
+      if (needSplit(width)) {
+        // TODO:
+      }
+      else {
+        swizzleValue.i[0] = swizzleMask;
+        IRImm* msk = getIR()->newImm(swizzleValue, kIRRegNone, 4);
+        MPSL_PROPAGATE(getIR()->emitInst(getBlock(), kInstCodeShuf, out.result.lo, tmp.result.lo, msk));
+      }
     }
     else {
-      instCode = op.getInstByTypeId(typeInfo & kTypeIdMask);
+      uint32_t instCode = op.getInstByTypeId(typeInfo & kTypeIdMask);
       if (MPSL_UNLIKELY(instCode == kInstCodeNone))
         return MPSL_TRACE_ERROR(kErrorInvalidState);
+      MPSL_PROPAGATE(emitInst2(instCode, out.result, tmp.result, typeInfo));
     }
-
-    MPSL_PROPAGATE(newVar(out.result, typeInfo));
-    MPSL_PROPAGATE(emitInst2(instCode, out.result, tmp.result, typeInfo));
   }
 
   return kErrorOk;
@@ -331,7 +348,9 @@ Error AstToIR::onBinaryOp(AstBinaryOp* node, Args& out) noexcept {
   uint32_t typeInfo = node->getTypeInfo();
   const OpInfo& op = OpInfo::get(node->getOp());
 
-  IRPair<IRVar> result, lVar, rVar;
+  IRPair<IRVar> result;
+  IRPair<IRVar> lVar;
+  IRPair<IRVar> rVar;
   MPSL_PROPAGATE(newVar(result, typeInfo));
 
   uint32_t instCode = op.getInstByTypeId(typeInfo & kTypeIdMask);
@@ -369,9 +388,19 @@ Error AstToIR::onBinaryOp(AstBinaryOp* node, Args& out) noexcept {
     if (MPSL_UNLIKELY(instCode == kInstCodeNone))
       return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-    MPSL_PROPAGATE(asVar(lVar, lValue.result, typeInfo));
-    MPSL_PROPAGATE(asVar(rVar, rValue.result, typeInfo));
-    MPSL_PROPAGATE(emitInst3(instCode, result, lVar, rVar, typeInfo));
+    if (op.isShift()) {
+      if (rValue.result.lo->isImm())
+        rValue.result.hi = rValue.result.lo;
+
+      MPSL_PROPAGATE(asVar(lVar, lValue.result, typeInfo));
+      MPSL_PROPAGATE(emitInst3(instCode, result, lVar, rValue.result, typeInfo));
+    }
+    else {
+      MPSL_PROPAGATE(asVar(lVar, lValue.result, typeInfo));
+      MPSL_PROPAGATE(asVar(rVar, rValue.result, typeInfo));
+      MPSL_PROPAGATE(emitInst3(instCode, result, lVar, rVar, typeInfo));
+    }
+
     out.result.set(result);
   }
 
@@ -392,7 +421,7 @@ Error AstToIR::onCall(AstCall* node, Args& out) noexcept {
 // ============================================================================
 
 Error AstToIR::mapVarToAst(AstSymbol* sym, IRPair<IRVar> var) noexcept {
-  MPSL_ASSERT(_varMap.has(sym));
+  MPSL_ASSERT(!_varMap.has(sym));
   return _varMap.put(sym, var);
 }
 
@@ -473,14 +502,14 @@ Error AstToIR::addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) 
   return kErrorOk;
 }
 
-Error AstToIR::asVar(IRPair<IRVar>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept {
+Error AstToIR::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept {
   if (in.lo == nullptr && in.hi == nullptr)
     return out.set(nullptr, nullptr);
 
   uint32_t ti[2] = { typeInfo, kTypeVoid };
   uint32_t width = TypeInfo::widthOf(typeInfo);
 
-  if (width > 16 && !hasV256())
+  if (needSplit(width))
     mpSplitTypeInfo(ti[0], ti[1], typeInfo);
 
   for (uint32_t i = 0; i < 2; i++) {

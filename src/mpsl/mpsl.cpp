@@ -14,6 +14,8 @@
 #include "./mpasttoir_p.h"
 #include "./mpatomic_p.h"
 #include "./mpcompiler_x86_p.h"
+#include "./mpir_p.h"
+#include "./mpirpass_p.h"
 #include "./mplang_p.h"
 #include "./mpparser_p.h"
 #include "./mputils_p.h"
@@ -431,6 +433,14 @@ Error Isolate::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   if (options & kOptionDebugIR) {
     ir.dump(sbTmp);
     log->log(OutputLog::Info(OutputLog::kMessageIRInitial, 0, 0, sbTmp.getData(), sbTmp.getLength()));
+    sbTmp.clear();
+  }
+
+  MPSL_PROPAGATE(mpIRPass(&ir));
+
+  if (options & kOptionDebugIR) {
+    ir.dump(sbTmp);
+    log->log(OutputLog::Info(OutputLog::kMessageIRFinal, 0, 0, sbTmp.getData(), sbTmp.getLength()));
     sbTmp.clear();
   }
 

@@ -88,6 +88,16 @@ asmjit::X86Mem JitCompiler::getConstantD64AsPD(double value) {
   return getConstantU64AsPD(bits.u);
 }
 
+asmjit::X86Mem JitCompiler::getConstantByValue(const Value& value, uint32_t width) {
+  prepareConstPool();
+
+  size_t offset;
+  if (_constPool.add(&value, width, offset) != asmjit::kErrorOk)
+    return asmjit::X86Mem();
+
+  return asmjit::x86::ptr(_constPtr, static_cast<int>(offset));
+}
+
 // ============================================================================
 // [mpsl::JitCompiler - Compile]
 // ============================================================================
@@ -205,10 +215,10 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
           // TODO:
           IRImm* imm = static_cast<IRImm*>(irOp);
 
-          if (info.isI32() && !info.isCvt())
-            ;
+          if ((info.hasImm() && i == count - 1) || (info.isI32() && !info.isCvt()))
+            asmOp[i] = asmjit::imm(imm->getValue().i[0]);
           else
-            asmOp[i] = getConstantU64(imm->_value.q[0]);
+            asmOp[i] = getConstantByValue(imm->getValue(), imm->getWidth());
 
           break;
         }
@@ -365,6 +375,9 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
       case OP_X(Cmpgef): emit3f(asmjit::kX86InstIdCmpps, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
       case OP_1(Cmpged): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
       case OP_X(Cmpged): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
+
+      case OP_1(Shuf):
+      case OP_X(Shuf): emit3d(asmjit::kX86InstIdPshufd, asmOp[0], asmOp[1], asmOp[2]); break;
 
       case OP_1(Vaddb):
       case OP_X(Vaddb): emit3i(asmjit::kX86InstIdPaddb, asmOp[0], asmOp[1], asmOp[2]); break;

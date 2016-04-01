@@ -178,9 +178,12 @@ Error AstAnalysis::onReturn(AstReturn* node) noexcept {
 }
 
 Error AstAnalysis::onVarDecl(AstVarDecl* node) noexcept {
+  uint32_t typeInfo = node->getSymbol()->getTypeInfo();
+  node->setTypeInfo(typeInfo);
+
   if (node->hasChild()) {
     MPSL_PROPAGATE(onNode(node->getChild()));
-    MPSL_PROPAGATE(implicitCast(node, node->getChild(), node->getSymbol()->getTypeInfo()));
+    MPSL_PROPAGATE(implicitCast(node, node->getChild(), typeInfo));
   }
 
   return kErrorOk;

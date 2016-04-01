@@ -468,6 +468,32 @@ struct IRBlock : IRObject {
     return inst;
   }
 
+  MPSL_INLINE IRInst* remove(IRInst* inst) noexcept {
+    MPSL_ASSERT(inst->_block == this);
+
+    IRInst* prev = inst->getPrev();
+    IRInst* next = inst->getNext();
+
+    if (prev != nullptr) {
+      prev->_next = next;
+      inst->_prev = nullptr;
+    }
+    else {
+      _firstChild = next;
+    }
+
+    if (next != nullptr) {
+      next->_prev = prev;
+      inst->_next = nullptr;
+    }
+    else {
+      _lastChild = prev;
+    }
+
+    inst->_block = NULL;
+    return inst;
+  }
+
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------

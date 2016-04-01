@@ -283,6 +283,21 @@ StringBuilder& Utils::formatValue(StringBuilder& sb, uint32_t typeInfo, const Va
   return sb;
 }
 
+void Utils::formatSwizzle(char* dst, uint32_t swizzleMask, uint32_t count) noexcept {
+  const char* letters = mpVectorIdentifiers[0].letters;
+  uint32_t i, max = 8;
+
+  for (i = 0; i < count; i++, swizzleMask >>= 4) {
+    uint32_t pos = swizzleMask & 0xF;
+    if (pos < max)
+      dst[i] = letters[pos];
+    else
+      dst[i] = (pos == 0xF) ? '0' : '?';
+  }
+
+  dst[i] = '\0';
+}
+
 } // mpsl namespace
 
 // [Api-End]
