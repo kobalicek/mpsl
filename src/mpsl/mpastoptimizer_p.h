@@ -62,24 +62,6 @@ struct AstOptimizer : public AstVisitor<AstOptimizer> {
   MPSL_INLINE uint8_t isLocalScope() const noexcept { return _isLocalScope; }
 
   // --------------------------------------------------------------------------
-  // [Utilities]
-  // --------------------------------------------------------------------------
-
-  MPSL_NOAPI Error foldCast(uint32_t position,
-    Value* dVal, uint32_t dTypeInfo,
-    const Value* sVal, uint32_t sTypeInfo) noexcept;
-
-  MPSL_NOAPI Error foldSwizzle(uint32_t position, Value* dVal,
-    const Value* sVal, uint32_t typeInfo, uint32_t swizzleMask) noexcept;
-
-  MPSL_NOAPI Error foldUnaryOp(uint32_t position, Value* dVal,
-    const Value* sVal, uint32_t typeInfo, uint32_t op) noexcept;
-
-  MPSL_NOAPI Error foldBinaryOp(uint32_t position, Value* dst,
-    const Value* lVal, uint32_t lTypeInfo,
-    const Value* rVal, uint32_t rTypeInfo, uint32_t op) noexcept;
-
-  // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 

@@ -24,6 +24,18 @@
 // [Dependencies - AsmJit]
 #include <asmjit/asmjit.h>
 
+// [Dependencies - SSE2]
+#if MPSL_ARCH_X64 || (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(__SSE2__)
+# define MPSL_USE_SSE2 1
+#else
+# define MPSL_USE_SSE2 0
+#endif
+
+#if MPSL_USE_SSE2
+# include <xmmintrin.h>
+# include <emmintrin.h>
+#endif
+
 // [Api-Begin]
 #include "./mpsl_apibegin.h"
 

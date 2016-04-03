@@ -13,12 +13,12 @@
 #include "./mpastoptimizer_p.h"
 #include "./mpasttoir_p.h"
 #include "./mpatomic_p.h"
-#include "./mpcompiler_x86_p.h"
+#include "./mpformatutils_p.h"
 #include "./mpir_p.h"
 #include "./mpirpass_p.h"
+#include "./mpirtox86_p.h"
 #include "./mplang_p.h"
 #include "./mpparser_p.h"
-#include "./mputils_p.h"
 
 // [Api-Begin]
 #include "./mpsl_apibegin.h"
@@ -62,7 +62,7 @@ MPSL_INLINE void mpObjectRelease(T* self) noexcept {
 }
 
 // Declared in public "mpsl.h" header.
-MPSL_INLINE void Isolate::Impl::destroy() noexcept {
+MPSL_INLINE void Context::Impl::destroy() noexcept {
   RuntimeData* rt = static_cast<RuntimeData*>(_runtimeData);
 
   mpObjectRelease(rt);
@@ -261,34 +261,34 @@ Error Layout::_add(const char* name, size_t len, uint32_t typeInfo, int32_t offs
 }
 
 // ============================================================================
-// [mpsl::Isolate - Construction / Destruction]
+// [mpsl::Context - Construction / Destruction]
 // ============================================================================
 
-static const Isolate::Impl mpIsolateNull = { 0, nullptr };
+static const Context::Impl mpContextNull = { 0, nullptr };
 
-Isolate::Isolate() noexcept
-  : _d(const_cast<Impl*>(&mpIsolateNull)) {}
+Context::Context() noexcept
+  : _d(const_cast<Impl*>(&mpContextNull)) {}
 
-Isolate::Isolate(const Isolate& other) noexcept
+Context::Context(const Context& other) noexcept
   : _d(mpObjectAddRef(other._d)) {}
 
-Isolate::~Isolate() noexcept {
+Context::~Context() noexcept {
   mpObjectRelease(_d);
 }
 
-Isolate Isolate::create() noexcept {
+Context Context::create() noexcept {
   Impl* d = static_cast<Impl*>(::malloc(sizeof(Impl)));
 
   if (d == nullptr) {
     // Allocation failure.
-    d = const_cast<Impl*>(&mpIsolateNull);
+    d = const_cast<Impl*>(&mpContextNull);
   }
   else {
     RuntimeData* rt = static_cast<RuntimeData*>(::malloc(sizeof(RuntimeData)));
     if (rt == nullptr) {
       // Allocation failure.
       ::free(d);
-      d = const_cast<Impl*>(&mpIsolateNull);
+      d = const_cast<Impl*>(&mpContextNull);
     }
     else {
       d->_refCount = 1;
@@ -296,38 +296,38 @@ Isolate Isolate::create() noexcept {
     }
   }
 
-  return Isolate(d);
+  return Context(d);
 }
 
 // ============================================================================
-// [mpsl::Isolate - Reset]
+// [mpsl::Context - Reset]
 // ============================================================================
 
-Error Isolate::reset() noexcept {
+Error Context::reset() noexcept {
   mpObjectRelease(mpAtomicSetXchgT<Impl*>(
-    &_d, const_cast<Impl*>(&mpIsolateNull)));
+    &_d, const_cast<Impl*>(&mpContextNull)));
 
   return kErrorOk;
 }
 
 // ============================================================================
-// [mpsl::Isolate - Clone / Freeze]
+// [mpsl::Context - Clone / Freeze]
 // ============================================================================
 
-Error Isolate::clone() noexcept {
+Error Context::clone() noexcept {
 
   // TODO:
   return kErrorOk;
 }
 
-Error Isolate::freeze() noexcept {
+Error Context::freeze() noexcept {
 
   // TODO:
   return kErrorOk;
 }
 
 // ============================================================================
-// [mpsl::Isolate - Compile]
+// [mpsl::Context - Compile]
 // ============================================================================
 
 #define MPSL_PROPAGATE_AND_HANDLE_COLLISION(...) \
@@ -344,7 +344,7 @@ Error Isolate::freeze() noexcept {
     } \
   } while (0)
 
-Error Isolate::_compile(Program& program, const CompileArgs& ca, OutputLog* log) noexcept {
+Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log) noexcept {
   const char* body = ca.body.getData();
   size_t len = ca.body.getLength();
 
@@ -461,7 +461,7 @@ Error Isolate::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
     if (options & kOptionDebugASM)
       a.setLogger(&asmlog);
 
-    JitCompiler compiler(&allocator, &c);
+    IRToX86 compiler(&allocator, &c);
     if (options & kOptionDisableSSE4_1)
       compiler._enableSSE4_1 = false;
     MPSL_PROPAGATE(compiler.compileIRAsFunc(&ir));
@@ -502,10 +502,10 @@ Error Isolate::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
 }
 
 // ============================================================================
-// [mpsl::Isolate - Operator Overload]
+// [mpsl::Context - Operator Overload]
 // ============================================================================
 
-Isolate& Isolate::operator=(const Isolate& other) noexcept {
+Context& Context::operator=(const Context& other) noexcept {
   mpObjectRelease(
     mpAtomicSetXchgT<Impl*>(
       &_d, mpObjectAddRef(other._d)));
@@ -600,10 +600,9 @@ void ErrorReporter::onWarning(uint32_t position, const char* fmt, ...) noexcept 
 
     va_list ap;
     va_start(ap, fmt);
-
-    Utils::vformat(sb, fmt, ap);
-
+    FormatUtils::vformat(sb, fmt, ap);
     va_end(ap);
+
     onWarning(position, sb);
   }
 }
@@ -622,10 +621,9 @@ Error ErrorReporter::onError(Error error, uint32_t position, const char* fmt, ..
 
     va_list ap;
     va_start(ap, fmt);
-
-    Utils::vformat(sb, fmt, ap);
-
+    FormatUtils::vformat(sb, fmt, ap);
     va_end(ap);
+
     return onError(error, position, sb);
   }
   else {

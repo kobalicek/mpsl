@@ -281,7 +281,7 @@ MPSL is written in C++ and provides C++ APIs for embedders. Here is a summary of
 
 To use MPSL from your C++ code you must first include `mpsl/mpsl.h` to make all public APIs available within `mpsl` namespace. The following concepts are provided:
 
-  * `mpsl::Isolate` - This is an expression's environment (in MathPresso library this used to be a `Context`). A program cannot be created without having an `Isolate`. `Isolate` also manages virtual memory that is used by shaders.
+  * `mpsl::Context` - This is an expression's environment. A program cannot be created without having a `Context` associated. `Context` also manages virtual memory that is used by shaders.
   * `mpsl::Program[1-4]<>` - Program represents a compiled MPSL shader. The `[1-4]` is a number of data arguments passed to the shader. Here the data argument doesn't represent variables used in a shader, it represents number of "pointers" passed to the shader, where each pointer can contain variables the shader has access to.
   * `mpsl::Layout` - A layout of data arguments passed to the shader. Each data argument (or sometimes called slot) has its own `Layout` definition.
   * `mpsl::LayoutTmp<N>` - A layout that uses `N` bytes of stack before it allocates dynamic memory. Since `Layout` instances are short-lived it's beneficial to allocate them on stack.
@@ -310,7 +310,7 @@ struct Data {
 
 int main(int argc, char* argv[]) {
   // Create the shader environment.
-  mpsl::Isolate isolate = mpsl::Isolate::create();
+  mpsl::Context context = mpsl::Context::create();
 
   // Create the `Data` layout and register all variables that the shader has
   // access to. Special variables like `@ret` have always `@` prefix to prevent
@@ -328,7 +328,7 @@ int main(int argc, char* argv[]) {
   // that the program accepts one data argument of type `Data`. You can just use
   // `Program1<>` if you want the argument untyped (void).
   mpsl::Program1<Data> program;
-  mpsl::Error err = program.compile(isolate, body, mpsl::kNoOptions, layout);
+  mpsl::Error err = program.compile(context, body, mpsl::kNoOptions, layout);
 
   if (err) {
     printf("Compilation failed: ERROR 0x%0.8X\n", static_cast<unsigned int>(err));
@@ -346,7 +346,7 @@ int main(int argc, char* argv[]) {
       printf("Return=%g\n", data.result);
   }
 
-  // RAII - `Isolate` and `Program` are ref-counted and will
+  // RAII - `Context` and `Program` are ref-counted and will
   // be automatically destroyed when they go out of scope.
   return 0;
 }

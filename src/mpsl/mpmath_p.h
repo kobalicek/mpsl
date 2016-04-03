@@ -12,7 +12,6 @@
 #include "./mpsl_p.h"
 
 // [Dependencies - C]
-#include <float.h>
 #include <math.h>
 
 // [Api-Begin]
@@ -41,8 +40,12 @@ union FloatBits {
   MPSL_INLINE bool isInf() const noexcept { return (u & 0x7FFFFFFFU) == 0x7F800000U; }
   MPSL_INLINE bool isFinite() const noexcept { return (u & 0x7F800000U) != 0x7F800000U; }
 
-  MPSL_INLINE void setNan() noexcept { u = 0x7FC00000U; }
-  MPSL_INLINE void setInf() noexcept { u = 0x7F800000; }
+  MPSL_INLINE FloatBits& setNan() noexcept { u = 0x7FC00000U; return *this; }
+  MPSL_INLINE FloatBits& setInf() noexcept { u = 0x7F800000U; return *this; }
+
+  MPSL_INLINE FloatBits& invSign() noexcept { u ^= 0x80000000U; return *this; }
+  MPSL_INLINE FloatBits& setSign() noexcept { u |= 0x80000000U; return *this; }
+  MPSL_INLINE FloatBits& clearSign() noexcept { u &= ~0x80000000U; return *this; }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -92,8 +95,12 @@ union DoubleBits {
       return (hi & 0x7FF00000U) != 0x7FF00000U;
   }
 
-  MPSL_INLINE void setNan() noexcept { u = MPSL_UINT64_C(0x7FF8000000000000); }
-  MPSL_INLINE void setInf() noexcept { u = MPSL_UINT64_C(0x7FF0000000000000); }
+  MPSL_INLINE DoubleBits& setNan() noexcept { u = MPSL_UINT64_C(0x7FF8000000000000); return *this; }
+  MPSL_INLINE DoubleBits& setInf() noexcept { u = MPSL_UINT64_C(0x7FF0000000000000); return *this; }
+
+  MPSL_INLINE DoubleBits& invSign() noexcept { hi ^= 0x80000000U; return *this; }
+  MPSL_INLINE DoubleBits& setSign() noexcept { hi |= 0x80000000U; return *this; }
+  MPSL_INLINE DoubleBits& clearSign() noexcept { hi&= ~0x80000000U; return *this; }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -112,32 +119,6 @@ union DoubleBits {
 };
 
 // ============================================================================
-// [mpsl::Math - Rotate]
-// ============================================================================
-
-template<typename T>
-static MPSL_INLINE T mpBitRor(T x, T y) noexcept {
-  unsigned int bits = sizeof(T) * 8;
-  unsigned int mask = bits - 1;
-
-  unsigned int l = static_cast<unsigned int>(y & mask);
-  unsigned int r = (bits - l) & mask;
-
-  return (x << l) | (x >> r);
-}
-
-template<typename T>
-static MPSL_INLINE T mpBitRol(T x, T y) noexcept {
-  unsigned int bits = sizeof(T) * 8;
-  unsigned int mask = bits - 1;
-
-  unsigned int r = static_cast<unsigned int>(y & mask);
-  unsigned int l = (bits - r) & mask;
-
-  return (x << l) | (x >> r);
-}
-
-// ============================================================================
 // [mpsl::Math - Min / Max]
 // ============================================================================
 
@@ -146,6 +127,11 @@ static MPSL_INLINE T mpBitRol(T x, T y) noexcept {
 // condition should be removed by C++ compiler.
 template<typename T> MPSL_INLINE T mpMin(T a, T b) noexcept { return (a != a) | (a < b) ? a : b; }
 template<typename T> MPSL_INLINE T mpMax(T a, T b) noexcept { return (a != a) | (a > b) ? a : b; }
+
+template<typename T> MPSL_INLINE T mpBound(T x, T xMin, T xMax) noexcept {
+  return x < xMin ? xMin :
+         x > xMax ? xMax : x;
+}
 
 // ============================================================================
 // [mpsl::Math - NaN / Inf]
@@ -178,13 +164,20 @@ static MPSL_INLINE double mpNormalizeD(double x) noexcept { return x + static_ca
 
 static MPSL_INLINE int32_t mpAbsI(int32_t x) noexcept {
   // To support `mpAbsI(-2147483648)` returning `-2147483648` we have
-  // to cast to unsigned integer to prevent an "undefined behavior".
+  // to cast to an unsigned integer to prevent "undefined behavior".
   uint32_t mask = static_cast<uint32_t>(-static_cast<int32_t>(x < 0));
   return static_cast<int32_t>((static_cast<uint32_t>(x) ^ mask) - mask);
 }
 
-static MPSL_INLINE float mpAbsF(float x) noexcept { return ::fabsf(x); }
-static MPSL_INLINE double mpAbsD(double x) noexcept { return ::fabs(x); }
+static MPSL_INLINE float mpAbsF(float x) noexcept { return FloatBits::fromFloat(x).clearSign().f; }
+static MPSL_INLINE double mpAbsD(double x) noexcept { return DoubleBits::fromDouble(x).clearSign().d; }
+
+// ============================================================================
+// [mpsl::Math - Neg]
+// ============================================================================
+
+static MPSL_INLINE float mpNegF(float x) noexcept { return FloatBits::fromFloat(x).invSign().f; }
+static MPSL_INLINE double mpNegD(double x) noexcept { return DoubleBits::fromDouble(x).invSign().d; }
 
 // ============================================================================
 // [mpsl::Math - Round]

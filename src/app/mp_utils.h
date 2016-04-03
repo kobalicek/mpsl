@@ -9,7 +9,7 @@
 
 #include "../mpsl/mpsl.h"
 
-struct CustomLog : public mpsl::OutputLog {
+struct TestLog : public mpsl::OutputLog {
   virtual void log(const Info& info) MPSL_NOEXCEPT {
     const mpsl::StringRef& msg = info.getMessage();
 

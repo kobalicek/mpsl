@@ -24,7 +24,7 @@ namespace mpsl {
 // [Forward Declarations]
 // ============================================================================
 
-struct Isolate;
+struct Context;
 struct Program;
 
 struct Layout;
@@ -115,12 +115,12 @@ enum ErrorCode {
   //! The members limit is specified in `Layout::kMaxMembers`.
   kErrorTooManyMembers,
 
-  //! Isolate is frozen and can't be modified anymore.
-  kErrorFrozenIsolate
+  //! Context is frozen and can't be modified anymore.
+  kErrorFrozenContext
 };
 
 // ============================================================================
-// [mpsl::TypeIdFlags]
+// [mpsl::Type]
 // ============================================================================
 
 enum TypeIdFlags {
@@ -139,7 +139,7 @@ enum TypeIdFlags {
   kTypeBool = 1,
   //! 64-bit boolean value or mask (used mostly internally, but provided).
   kTypeQBool = 2,
-  //! 32-bit integer.
+  //! 32-bit signed integer.
   kTypeInt = 3,
   //! 32-bit single-precision floating point.
   kTypeFloat = 4,
@@ -237,9 +237,9 @@ enum Options {
 
   //! Show messages and warnings.
   kOptionVerbose = 0x0001,
-  //! Debug AST (shows initial and final AST).
+  //! Debug AST and all AST-based transformations.
   kOptionDebugAST = 0x0002,
-  //! Debug IR (shows initial and final IR).
+  //! Debug IR and all IR-based transformations.
   kOptionDebugIR  = 0x0004,
   //! Debug assembly generated.
   kOptionDebugASM = 0x0008,
@@ -407,8 +407,23 @@ MPSL_DEFINE_TYPE_VEC_4(Double, double)
 #undef MPSL_DEFINE_TYPE_VEC_8
 #undef MPSL_DEFINE_TYPE_VEC_4
 
-//! Packed value that can hold MPSL variable of any type.
+//! Packed value of 256-bits that can hold a MPSL variable of any type.
 union Value {
+  // --------------------------------------------------------------------------
+  // [Interface]
+  // --------------------------------------------------------------------------
+
+  MPSL_INLINE void zero() noexcept {
+    q[0] = 0;
+    q[1] = 0;
+    q[2] = 0;
+    q[3] = 0;
+  }
+
+  // --------------------------------------------------------------------------
+  // [Members]
+  // --------------------------------------------------------------------------
+
   Bool8 b;
   Int8 i;
   Float8 f;
@@ -417,6 +432,9 @@ union Value {
   Double4 d;
 
   uint32_t u[8];
+
+  //! Binary buffer representing the data.
+  char blob[32];
 };
 
 // ============================================================================
@@ -644,13 +662,14 @@ struct LayoutTmp : public Layout {
 };
 
 // ============================================================================
-// [mpsl::Isolate]
+// [mpsl::Context]
 // ============================================================================
 
-//! Isolate.
+//! Context.
 //!
-//! Isolate contains states/functions that are available to the shader program.
-struct Isolate {
+//! Contains a basic environment that is setup by the embedder. Contexts can be
+//! extended by embedder by custom constants, functions, and asmjit extensions.
+struct Context {
   // --------------------------------------------------------------------------
   // [Impl]
   // --------------------------------------------------------------------------
@@ -670,25 +689,25 @@ struct Isolate {
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  //! Create a weak-copy of null isolate (can't be used to create programs).
-  MPSL_API Isolate() noexcept;
-  //! Create a weak-copy of `other` isolate.
-  MPSL_API Isolate(const Isolate& other) noexcept;
-  //! Destroy the MPSL isolate.
-  MPSL_API ~Isolate() noexcept;
+  //! Create a weak-copy of null context (can't be used to create programs).
+  MPSL_API Context() noexcept;
+  //! Create a weak-copy of `other` context.
+  MPSL_API Context(const Context& other) noexcept;
+  //! Destroy the MPSL context.
+  MPSL_API ~Context() noexcept;
 
-  //! Create a new isolate.
-  static MPSL_API Isolate create() noexcept;
+  //! Create a new context.
+  static MPSL_API Context create() noexcept;
 
 #if defined(MPSL_EXPORTS)
-  explicit MPSL_INLINE Isolate(Impl* d) noexcept : _d(d) {}
+  explicit MPSL_INLINE Context(Impl* d) noexcept : _d(d) {}
 #endif // MPSL_EXPORTS
 
   // --------------------------------------------------------------------------
   // [Reset]
   // --------------------------------------------------------------------------
 
-  //! Reset the isolate.
+  //! Reset the context.
   MPSL_API Error reset() noexcept;
 
   // --------------------------------------------------------------------------
@@ -703,16 +722,16 @@ struct Isolate {
   // [Clone / Freeze]
   // --------------------------------------------------------------------------
 
-  //! Clone the isolate.
+  //! Clone the context.
   //!
-  //! Clone will create a deep copy of the isolate and unfreeze it; the isolate
+  //! Clone will create a deep copy of the context and unfreeze it; the context
   //! can be modified after it has been cloned regardless of being frozen or
   //! not before.
   MPSL_API Error clone() noexcept;
 
-  //! Freeze the isolate.
+  //! Freeze the context.
   //!
-  //! No modifications are allowed after the isolate is frozen. This is useful
+  //! No modifications are allowed after the context is frozen. This is useful
   //! when building a fixed environment for your programs that can't be modified
   //! after it has been created (it becomes immutable).
   MPSL_API Error freeze() noexcept;
@@ -746,19 +765,19 @@ struct Isolate {
   // [Operator Overload]
   // --------------------------------------------------------------------------
 
-  //! Assign a weak-copy of `other` isolate.
-  MPSL_API Isolate& operator=(const Isolate& other) noexcept;
+  //! Assign a weak-copy of `other` context.
+  MPSL_API Context& operator=(const Context& other) noexcept;
 
-  //! Equality, only true if `other` is the same weak-copy of the isolate.
-  MPSL_INLINE bool operator==(const Isolate& other) const noexcept { return _d == other._d; }
+  //! Equality, only true if `other` is the same weak-copy of the context.
+  MPSL_INLINE bool operator==(const Context& other) const noexcept { return _d == other._d; }
   //! Inequality.
-  MPSL_INLINE bool operator!=(const Isolate& other) const noexcept { return _d != other._d; }
+  MPSL_INLINE bool operator!=(const Context& other) const noexcept { return _d != other._d; }
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! Isolate data (private).
+  //! Context data (private).
   Impl* _d;
 };
 
@@ -788,7 +807,7 @@ struct Program {
 
     //! Reference count.
     uintptr_t _refCount;
-    //! Runtime data (set by \ref Isolate).
+    //! Runtime data (set by \ref Context).
     void* _runtimeData;
 
     //! Compiled `main()` entry-point.
@@ -863,22 +882,22 @@ struct Program1 : public Program {
   MPSL_INLINE Program1(const Program1& other) noexcept : Program(other) {}
   MPSL_INLINE ~Program1() noexcept {}
 
-  MPSL_INLINE Error compile(Isolate& isolate, const char* body, uint32_t options,
+  MPSL_INLINE Error compile(Context& context, const char* body, uint32_t options,
     const Layout& layout0,
     OutputLog* log) noexcept {
 
-    Isolate::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
+    Context::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
     args.layout[0] = &layout0;
-    return isolate._compile(*this, args, log);
+    return context._compile(*this, args, log);
   }
 
-  MPSL_INLINE Error compile(Isolate& isolate, const StringRef& body, uint32_t options,
+  MPSL_INLINE Error compile(Context& context, const StringRef& body, uint32_t options,
     const Layout& layout0,
     OutputLog* log) noexcept {
 
-    Isolate::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
+    Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
     args.layout[0] = &layout0;
-    return isolate._compile(*this, args, log);
+    return context._compile(*this, args, log);
   }
 
   MPSL_INLINE Error run(T0* a0) const noexcept {
@@ -903,26 +922,26 @@ struct Program2 : public Program {
   MPSL_INLINE Program2(const Program2& other) noexcept : Program(other) {}
   MPSL_INLINE ~Program2() noexcept {}
 
-  MPSL_INLINE Error compile(Isolate& isolate, const char* body, uint32_t options,
+  MPSL_INLINE Error compile(Context& context, const char* body, uint32_t options,
     const Layout& layout0,
     const Layout& layout1,
     OutputLog* log) noexcept {
 
-    Isolate::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
+    Context::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
-    return isolate._compile(*this, args, log);
+    return context._compile(*this, args, log);
   }
 
-  MPSL_INLINE Error compile(Isolate& isolate, const StringRef& body, uint32_t options,
+  MPSL_INLINE Error compile(Context& context, const StringRef& body, uint32_t options,
     const Layout& layout0,
     const Layout& layout1,
     OutputLog* log) noexcept {
 
-    Isolate::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
+    Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
-    return isolate._compile(*this, args, log);
+    return context._compile(*this, args, log);
   }
 
   MPSL_INLINE Error run(T0* a0, T1* a1) const noexcept {
@@ -947,30 +966,30 @@ struct Program3 : public Program {
   MPSL_INLINE Program3(const Program3& other) noexcept : Program(other) {}
   MPSL_INLINE ~Program3() noexcept {}
 
-  MPSL_INLINE Error compile(Isolate& isolate, const char* body, uint32_t options,
+  MPSL_INLINE Error compile(Context& context, const char* body, uint32_t options,
     const Layout& layout0,
     const Layout& layout1,
     const Layout& layout2,
     OutputLog* log) noexcept {
 
-    Isolate::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
+    Context::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
     args.layout[2] = &layout2;
-    return isolate._compile(*this, args, log);
+    return context._compile(*this, args, log);
   }
 
-  MPSL_INLINE Error compile(Isolate& isolate, const StringRef& body, uint32_t options,
+  MPSL_INLINE Error compile(Context& context, const StringRef& body, uint32_t options,
     const Layout& layout0,
     const Layout& layout1,
     const Layout& layout2,
     OutputLog* log) noexcept {
 
-    Isolate::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
+    Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
     args.layout[2] = &layout2;
-    return isolate._compile(*this, args, log);
+    return context._compile(*this, args, log);
   }
 
   MPSL_INLINE Error run(T1* a1, T2* a2, T3* a3) const noexcept {
@@ -995,34 +1014,34 @@ struct Program4 : public Program {
   MPSL_INLINE Program4(const Program4& other) noexcept : Program(other) {}
   MPSL_INLINE ~Program4() noexcept {}
 
-  MPSL_INLINE Error compile(Isolate& isolate, const char* body, uint32_t options,
+  MPSL_INLINE Error compile(Context& context, const char* body, uint32_t options,
     const Layout& layout0,
     const Layout& layout1,
     const Layout& layout2,
     const Layout& layout3,
     OutputLog* log) noexcept {
 
-    Isolate::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
+    Context::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
     args.layout[2] = &layout2;
     args.layout[3] = &layout3;
-    return isolate._compile(*this, args, log);
+    return context._compile(*this, args, log);
   }
 
-  MPSL_INLINE Error compile(Isolate& isolate, const StringRef& body, uint32_t options,
+  MPSL_INLINE Error compile(Context& context, const StringRef& body, uint32_t options,
     const Layout& layout0,
     const Layout& layout1,
     const Layout& layout2,
     const Layout& layout3,
     OutputLog* log) noexcept {
 
-    Isolate::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
+    Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
     args.layout[2] = &layout2;
     args.layout[3] = &layout3;
-    return isolate._compile(*this, args, log);
+    return context._compile(*this, args, log);
   }
 
   MPSL_INLINE Error run(T1* a1, T2* a2, T3* a3, T4* a4) const noexcept {

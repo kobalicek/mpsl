@@ -180,25 +180,27 @@ mpsl_add_source(MPSL_SRC mpsl
   mpasttoir.cpp
   mpasttoir_p.h
   mpatomic_p.h
-  mpcompiler_x86.cpp
-  mpcompiler_x86_p.h
-  mpmath.cpp
-  mpmath_p.h
+  mpfold.cpp
+  mpfold_p.h
+  mpformatutils.cpp
+  mpformatutils_p.h
   mphash.cpp
   mphash_p.h
   mpir.cpp
   mpir_p.h
   mpirpass.cpp
   mpirpass_p.h
+  mpirtox86.cpp
+  mpirtox86_p.h
   mplang.cpp
   mplang_p.h
+  mpmath.cpp
+  mpmath_p.h
   mpparser.cpp
   mpparser_p.h
   mpstrtod_p.h
   mptokenizer.cpp
   mptokenizer_p.h
-  mputils.cpp
-  mputils_p.h
 )
 
 # =============================================================================

@@ -286,11 +286,24 @@ Error AstAnalysis::onUnaryOp(AstUnaryOp* node) noexcept {
       // Promote to double if this is a floating point operator or intrinsic.
       if (TypeInfo::isFloatId(dstId)) {
         dstId = kTypeDouble;
+        srcId = kTypeDouble;
+
         dstType = dstId | (srcType & ~kTypeIdMask);
+        srcType = dstType;
 
         MPSL_PROPAGATE(implicitCast(node, child, dstType));
         child = node->getChild();
       }
+      else {
+        return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
+          "Operator '%s' doesn't support argument of type '%{Type}'", op.name, srcType);
+      }
+    }
+
+    // DSP-specific checks.
+    if (op.isDSP64() && (TypeInfo::widthOf(srcType) % 8) != 0) {
+      return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
+        "Operator '%s' doesn't support packed odd vectors, '%{Type}' is odd", op.name, srcType);
     }
 
     // TODO: This has been relaxed, but there should be some flag that can turn on.
@@ -446,6 +459,12 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
     else {
       // Results in a new temporary, clear the reference/write flags.
       dstTypeInfo = (dstTypeInfo | kTypeRead) & ~(kTypeRef | kTypeWrite);
+
+      // DSP-specific checks.
+      if (op.isDSP64() && (TypeInfo::widthOf(dstTypeInfo) % 8) != 0) {
+        return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
+          "Operator '%s' doesn't support packed odd vectors, '%{Type}' is odd", op.name, dstTypeInfo);
+      }
     }
 
     node->setTypeInfo(dstTypeInfo);

@@ -8,7 +8,7 @@
 #define MPSL_EXPORTS
 
 // [Dependencies - MPSL]
-#include "./mpcompiler_x86_p.h"
+#include "./mpirtox86_p.h"
 #include "./mpmath_p.h"
 
 // [Api-Begin]
@@ -21,10 +21,10 @@ static MPSL_INLINE bool mpIsGp(const asmjit::Operand& op) {
 }
 
 // ============================================================================
-// [mpsl::JitCompiler - Construction / Destruction]
+// [mpsl::IRToX86 - Construction / Destruction]
 // ============================================================================
 
-JitCompiler::JitCompiler(Allocator* allocator, X86Compiler* c)
+IRToX86::IRToX86(Allocator* allocator, X86Compiler* c)
   : _allocator(allocator),
     _c(c),
     _functionBody(nullptr),
@@ -37,13 +37,13 @@ JitCompiler::JitCompiler(Allocator* allocator, X86Compiler* c)
   _enableSSE4_1 = cpu.hasFeature(asmjit::CpuInfo::kX86FeatureSSE4_1);
 }
 
-JitCompiler::~JitCompiler() {}
+IRToX86::~IRToX86() {}
 
 // ============================================================================
-// [mpsl::JitCompiler - Const Pool]
+// [mpsl::IRToX86 - Const Pool]
 // ============================================================================
 
-void JitCompiler::prepareConstPool() {
+void IRToX86::prepareConstPool() {
   if (!_constLabel.isInitialized()) {
     _constLabel = _c->newLabel();
     _constPtr = _c->newIntPtr("constPool");
@@ -55,7 +55,7 @@ void JitCompiler::prepareConstPool() {
   }
 }
 
-asmjit::X86Mem JitCompiler::getConstantU64(uint64_t value) {
+asmjit::X86Mem IRToX86::getConstantU64(uint64_t value) {
   prepareConstPool();
 
   size_t offset;
@@ -65,7 +65,7 @@ asmjit::X86Mem JitCompiler::getConstantU64(uint64_t value) {
   return asmjit::x86::ptr(_constPtr, static_cast<int>(offset));
 }
 
-asmjit::X86Mem JitCompiler::getConstantU64AsPD(uint64_t value) {
+asmjit::X86Mem IRToX86::getConstantU64AsPD(uint64_t value) {
   prepareConstPool();
 
   size_t offset;
@@ -76,19 +76,19 @@ asmjit::X86Mem JitCompiler::getConstantU64AsPD(uint64_t value) {
   return asmjit::x86::ptr(_constPtr, static_cast<int>(offset));
 }
 
-asmjit::X86Mem JitCompiler::getConstantD64(double value) {
+asmjit::X86Mem IRToX86::getConstantD64(double value) {
   DoubleBits bits;
   bits.d = value;
   return getConstantU64(bits.u);
 }
 
-asmjit::X86Mem JitCompiler::getConstantD64AsPD(double value) {
+asmjit::X86Mem IRToX86::getConstantD64AsPD(double value) {
   DoubleBits bits;
   bits.d = value;
   return getConstantU64AsPD(bits.u);
 }
 
-asmjit::X86Mem JitCompiler::getConstantByValue(const Value& value, uint32_t width) {
+asmjit::X86Mem IRToX86::getConstantByValue(const Value& value, uint32_t width) {
   prepareConstPool();
 
   size_t offset;
@@ -99,10 +99,10 @@ asmjit::X86Mem JitCompiler::getConstantByValue(const Value& value, uint32_t widt
 }
 
 // ============================================================================
-// [mpsl::JitCompiler - Compile]
+// [mpsl::IRToX86 - Compile]
 // ============================================================================
 
-Error JitCompiler::compileIRAsFunc(IRBuilder* ir) {
+Error IRToX86::compileIRAsFunc(IRBuilder* ir) {
   uint32_t i;
   uint32_t numSlots = ir->getNumSlots();
 
@@ -136,7 +136,7 @@ Error JitCompiler::compileIRAsFunc(IRBuilder* ir) {
   return kErrorOk;
 }
 
-Error JitCompiler::compileIRAsPart(IRBuilder* ir) {
+Error IRToX86::compileIRAsPart(IRBuilder* ir) {
   // Compile the entry block and all other reacheable blocks.
   IRBlock* block = ir->getMainBlock();
   MPSL_PROPAGATE(compileConsecutiveBlocks(block));
@@ -152,7 +152,7 @@ Error JitCompiler::compileIRAsPart(IRBuilder* ir) {
   return kErrorOk;
 }
 
-Error JitCompiler::compileConsecutiveBlocks(IRBlock* block) {
+Error IRToX86::compileConsecutiveBlocks(IRBlock* block) {
   while (block != nullptr) {
     IRInst* inst = block->getLastChild();
     IRBlock* next = nullptr;
@@ -178,7 +178,7 @@ Error JitCompiler::compileConsecutiveBlocks(IRBlock* block) {
   return kErrorOk;
 }
 
-Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
+Error IRToX86::compileBasicBlock(IRBlock* block, IRBlock* next) {
   IRInst* inst = block->getFirstChild();
   asmjit::Operand asmOp[3];
 
@@ -284,22 +284,16 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
       case OP_1(Cvtdtoi): emit2x(asmjit::kX86InstIdCvttsd2si, asmOp[0], asmOp[1]); break;
       case OP_1(Cvtdtof): emit2x(asmjit::kX86InstIdCvtsd2ss, asmOp[0], asmOp[1]); break;
 
-      case OP_1(Addi): emit3i(asmjit::kX86InstIdAdd, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_X(Addi): emit3i(asmjit::kX86InstIdPaddd, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Addf): emit3f(asmjit::kX86InstIdAddss, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_X(Addf): emit3f(asmjit::kX86InstIdAddps, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Addd): emit3d(asmjit::kX86InstIdAddsd, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_X(Addd): emit3d(asmjit::kX86InstIdAddpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Subi): emit3i(asmjit::kX86InstIdSub, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_X(Subi): emit3i(asmjit::kX86InstIdPsubd, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Subf): emit3f(asmjit::kX86InstIdSubss, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_X(Subf): emit3f(asmjit::kX86InstIdSubps, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Subd): emit3d(asmjit::kX86InstIdSubsd, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_X(Subd): emit3d(asmjit::kX86InstIdSubpd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Muli): emit3i(asmjit::kX86InstIdImul, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_X(Muli): emit3i(asmjit::kX86InstIdPmulld, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Mulf): emit3f(asmjit::kX86InstIdMulss, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_X(Mulf): emit3f(asmjit::kX86InstIdMulps, asmOp[0], asmOp[1], asmOp[2]); break;
       case OP_1(Muld): emit3d(asmjit::kX86InstIdMulsd, asmOp[0], asmOp[1], asmOp[2]); break;
@@ -376,131 +370,131 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
       case OP_1(Cmpged): emit3d(asmjit::kX86InstIdCmpsd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
       case OP_X(Cmpged): emit3d(asmjit::kX86InstIdCmppd, asmOp[0], asmOp[2], asmOp[1], asmjit::kX86CmpLT); break;
 
-      case OP_1(Shuf):
-      case OP_X(Shuf): emit3d(asmjit::kX86InstIdPshufd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pshufd):
+      case OP_X(Pshufd): emit3d(asmjit::kX86InstIdPshufd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vaddb):
-      case OP_X(Vaddb): emit3i(asmjit::kX86InstIdPaddb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vaddw):
-      case OP_X(Vaddw): emit3i(asmjit::kX86InstIdPaddd, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vaddd):
-      case OP_X(Vaddd): emit3i(asmjit::kX86InstIdPaddq, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vaddq):
-      case OP_X(Vaddq): emit3i(asmjit::kX86InstIdPaddq, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vaddssb):
-      case OP_X(Vaddssb): emit3i(asmjit::kX86InstIdPaddsb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vaddusb):
-      case OP_X(Vaddusb): emit3i(asmjit::kX86InstIdPaddusb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vaddssw):
-      case OP_X(Vaddssw): emit3i(asmjit::kX86InstIdPaddsw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vaddusw):
-      case OP_X(Vaddusw): emit3i(asmjit::kX86InstIdPaddusw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmovsxbw):
+      case OP_X(Pmovsxbw): emit3i(asmjit::kX86InstIdPmovsxbw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmovzxbw):
+      case OP_X(Pmovzxbw): emit3i(asmjit::kX86InstIdPmovzxbw, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vsubb):
-      case OP_X(Vsubb): emit3i(asmjit::kX86InstIdPsubb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsubw):
-      case OP_X(Vsubw): emit3i(asmjit::kX86InstIdPsubd, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsubd):
-      case OP_X(Vsubd): emit3i(asmjit::kX86InstIdPsubq, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsubq):
-      case OP_X(Vsubq): emit3i(asmjit::kX86InstIdPsubq, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsubssb):
-      case OP_X(Vsubssb): emit3i(asmjit::kX86InstIdPsubsb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsubusb):
-      case OP_X(Vsubusb): emit3i(asmjit::kX86InstIdPsubusb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsubssw):
-      case OP_X(Vsubssw): emit3i(asmjit::kX86InstIdPsubsw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsubusw):
-      case OP_X(Vsubusw): emit3i(asmjit::kX86InstIdPsubusw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmovsxwd):
+      case OP_X(Pmovsxwd): emit3i(asmjit::kX86InstIdPmovsxwd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmovzxwd):
+      case OP_X(Pmovzxwd): emit3i(asmjit::kX86InstIdPmovzxwd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vmulw):
-      case OP_X(Vmulw): emit3i(asmjit::kX86InstIdPmullw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmulhsw):
-      case OP_X(Vmulhsw): emit3i(asmjit::kX86InstIdPmulhw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmulhuw):
-      case OP_X(Vmulhuw): emit3i(asmjit::kX86InstIdPmulhuw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmuld):
-      case OP_X(Vmuld): emit3i(asmjit::kX86InstIdPmulld, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Packsswb):
+      case OP_X(Packsswb): emit3i(asmjit::kX86InstIdPacksswb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Packuswb):
+      case OP_X(Packuswb): emit3i(asmjit::kX86InstIdPackuswb, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vminsb):
-      case OP_X(Vminsb): emit3i(asmjit::kX86InstIdPminsb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vminub):
-      case OP_X(Vminub): emit3i(asmjit::kX86InstIdPminub, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vminsw):
-      case OP_X(Vminsw): emit3i(asmjit::kX86InstIdPminsw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vminuw):
-      case OP_X(Vminuw): emit3i(asmjit::kX86InstIdPminuw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vminsd):
-      case OP_X(Vminsd): emit3i(asmjit::kX86InstIdPminsd, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vminud):
-      case OP_X(Vminud): emit3i(asmjit::kX86InstIdPminud, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Packssdw):
+      case OP_X(Packssdw): emit3i(asmjit::kX86InstIdPackssdw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Packusdw):
+      case OP_X(Packusdw): emit3i(asmjit::kX86InstIdPackusdw, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vmaxsb):
-      case OP_X(Vmaxsb): emit3i(asmjit::kX86InstIdPmaxsb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmaxub):
-      case OP_X(Vmaxub): emit3i(asmjit::kX86InstIdPmaxub, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmaxsw):
-      case OP_X(Vmaxsw): emit3i(asmjit::kX86InstIdPmaxsw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmaxuw):
-      case OP_X(Vmaxuw): emit3i(asmjit::kX86InstIdPmaxuw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmaxsd):
-      case OP_X(Vmaxsd): emit3i(asmjit::kX86InstIdPmaxsd, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmaxud):
-      case OP_X(Vmaxud): emit3i(asmjit::kX86InstIdPmaxud, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Paddb):
+      case OP_X(Paddb): emit3i(asmjit::kX86InstIdPaddb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Paddw):
+      case OP_X(Paddw): emit3i(asmjit::kX86InstIdPaddw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Paddd): emit3i(asmjit::kX86InstIdAdd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(Paddd): emit3i(asmjit::kX86InstIdPaddd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Paddq):
+      case OP_X(Paddq): emit3i(asmjit::kX86InstIdPaddq, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Paddssb):
+      case OP_X(Paddssb): emit3i(asmjit::kX86InstIdPaddsb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Paddusb):
+      case OP_X(Paddusb): emit3i(asmjit::kX86InstIdPaddusb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Paddssw):
+      case OP_X(Paddssw): emit3i(asmjit::kX86InstIdPaddsw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Paddusw):
+      case OP_X(Paddusw): emit3i(asmjit::kX86InstIdPaddusw, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vsllw):
-      case OP_X(Vsllw): emit3i(asmjit::kX86InstIdPsllw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsrlw):
-      case OP_X(Vsrlw): emit3i(asmjit::kX86InstIdPsrlw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsraw):
-      case OP_X(Vsraw): emit3i(asmjit::kX86InstIdPsraw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vslld):
-      case OP_X(Vslld): emit3i(asmjit::kX86InstIdPslld, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsrld):
-      case OP_X(Vsrld): emit3i(asmjit::kX86InstIdPsrld, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsrad):
-      case OP_X(Vsrad): emit3i(asmjit::kX86InstIdPsrad, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsllq):
-      case OP_X(Vsllq): emit3i(asmjit::kX86InstIdPsllq, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vsrlq):
-      case OP_X(Vsrlq): emit3i(asmjit::kX86InstIdPsrlq, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psubb):
+      case OP_X(Psubb): emit3i(asmjit::kX86InstIdPsubb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psubw):
+      case OP_X(Psubw): emit3i(asmjit::kX86InstIdPsubw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psubd): emit3i(asmjit::kX86InstIdSub, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(Psubd): emit3i(asmjit::kX86InstIdPsubd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psubq):
+      case OP_X(Psubq): emit3i(asmjit::kX86InstIdPsubq, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psubssb):
+      case OP_X(Psubssb): emit3i(asmjit::kX86InstIdPsubsb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psubusb):
+      case OP_X(Psubusb): emit3i(asmjit::kX86InstIdPsubusb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psubssw):
+      case OP_X(Psubssw): emit3i(asmjit::kX86InstIdPsubsw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psubusw):
+      case OP_X(Psubusw): emit3i(asmjit::kX86InstIdPsubusw, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vmaddwd):
-      case OP_X(Vmaddwd): emit3i(asmjit::kX86InstIdPmaddwd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmulw):
+      case OP_X(Pmulw): emit3i(asmjit::kX86InstIdPmullw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmulhsw):
+      case OP_X(Pmulhsw): emit3i(asmjit::kX86InstIdPmulhw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmulhuw):
+      case OP_X(Pmulhuw): emit3i(asmjit::kX86InstIdPmulhuw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmuld): emit3i(asmjit::kX86InstIdImul, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_X(Pmuld): emit3i(asmjit::kX86InstIdPmulld, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vcmpeqb):
-      case OP_X(Vcmpeqb): emit3i(asmjit::kX86InstIdPcmpeqb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vcmpeqw):
-      case OP_X(Vcmpeqw): emit3i(asmjit::kX86InstIdPcmpeqw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vcmpeqd):
-      case OP_X(Vcmpeqd): emit3i(asmjit::kX86InstIdPcmpeqd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pminsb):
+      case OP_X(Pminsb): emit3i(asmjit::kX86InstIdPminsb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pminub):
+      case OP_X(Pminub): emit3i(asmjit::kX86InstIdPminub, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pminsw):
+      case OP_X(Pminsw): emit3i(asmjit::kX86InstIdPminsw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pminuw):
+      case OP_X(Pminuw): emit3i(asmjit::kX86InstIdPminuw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pminsd):
+      case OP_X(Pminsd): emit3i(asmjit::kX86InstIdPminsd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pminud):
+      case OP_X(Pminud): emit3i(asmjit::kX86InstIdPminud, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vcmpgtb):
-      case OP_X(Vcmpgtb): emit3i(asmjit::kX86InstIdPcmpgtb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vcmpgtw):
-      case OP_X(Vcmpgtw): emit3i(asmjit::kX86InstIdPcmpgtw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vcmpgtd):
-      case OP_X(Vcmpgtd): emit3i(asmjit::kX86InstIdPcmpgtd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmaxsb):
+      case OP_X(Pmaxsb): emit3i(asmjit::kX86InstIdPmaxsb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmaxub):
+      case OP_X(Pmaxub): emit3i(asmjit::kX86InstIdPmaxub, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmaxsw):
+      case OP_X(Pmaxsw): emit3i(asmjit::kX86InstIdPmaxsw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmaxuw):
+      case OP_X(Pmaxuw): emit3i(asmjit::kX86InstIdPmaxuw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmaxsd):
+      case OP_X(Pmaxsd): emit3i(asmjit::kX86InstIdPmaxsd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmaxud):
+      case OP_X(Pmaxud): emit3i(asmjit::kX86InstIdPmaxud, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vmovsxbw):
-      case OP_X(Vmovsxbw): emit3i(asmjit::kX86InstIdPmovsxbw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmovzxbw):
-      case OP_X(Vmovzxbw): emit3i(asmjit::kX86InstIdPmovzxbw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psllw):
+      case OP_X(Psllw): emit3i(asmjit::kX86InstIdPsllw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psrlw):
+      case OP_X(Psrlw): emit3i(asmjit::kX86InstIdPsrlw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psraw):
+      case OP_X(Psraw): emit3i(asmjit::kX86InstIdPsraw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pslld):
+      case OP_X(Pslld): emit3i(asmjit::kX86InstIdPslld, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psrld):
+      case OP_X(Psrld): emit3i(asmjit::kX86InstIdPsrld, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psrad):
+      case OP_X(Psrad): emit3i(asmjit::kX86InstIdPsrad, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psllq):
+      case OP_X(Psllq): emit3i(asmjit::kX86InstIdPsllq, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Psrlq):
+      case OP_X(Psrlq): emit3i(asmjit::kX86InstIdPsrlq, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vmovsxwd):
-      case OP_X(Vmovsxwd): emit3i(asmjit::kX86InstIdPmovsxwd, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vmovzxwd):
-      case OP_X(Vmovzxwd): emit3i(asmjit::kX86InstIdPmovzxwd, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pmaddwd):
+      case OP_X(Pmaddwd): emit3i(asmjit::kX86InstIdPmaddwd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vpacksswb):
-      case OP_X(Vpacksswb): emit3i(asmjit::kX86InstIdPacksswb, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vpackuswb):
-      case OP_X(Vpackuswb): emit3i(asmjit::kX86InstIdPackuswb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pcmpeqb):
+      case OP_X(Pcmpeqb): emit3i(asmjit::kX86InstIdPcmpeqb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pcmpeqw):
+      case OP_X(Pcmpeqw): emit3i(asmjit::kX86InstIdPcmpeqw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pcmpeqd):
+      case OP_X(Pcmpeqd): emit3i(asmjit::kX86InstIdPcmpeqd, asmOp[0], asmOp[1], asmOp[2]); break;
 
-      case OP_1(Vpackssdw):
-      case OP_X(Vpackssdw): emit3i(asmjit::kX86InstIdPackssdw, asmOp[0], asmOp[1], asmOp[2]); break;
-      case OP_1(Vpackusdw):
-      case OP_X(Vpackusdw): emit3i(asmjit::kX86InstIdPackusdw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pcmpgtb):
+      case OP_X(Pcmpgtb): emit3i(asmjit::kX86InstIdPcmpgtb, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pcmpgtw):
+      case OP_X(Pcmpgtw): emit3i(asmjit::kX86InstIdPcmpgtw, asmOp[0], asmOp[1], asmOp[2]); break;
+      case OP_1(Pcmpgtd):
+      case OP_X(Pcmpgtd): emit3i(asmjit::kX86InstIdPcmpgtd, asmOp[0], asmOp[1], asmOp[2]); break;
 
       default:
         // TODO:
@@ -517,7 +511,7 @@ Error JitCompiler::compileBasicBlock(IRBlock* block, IRBlock* next) {
   return kErrorOk;
 }
 
-void JitCompiler::emit3i(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2) {
+void IRToX86::emit3i(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2) {
   // Intercept instructions that are disabled for the current target and
   // substitute them with a sequential code that is compatible. It's easier
   // to deal with it here than dealing with it in `compileBasicBlock()`.
@@ -553,38 +547,38 @@ void JitCompiler::emit3i(uint32_t instId, const Operand& o0, const Operand& o1, 
   _c->emit(instId, o0, o2);
 }
 
-void JitCompiler::emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2) {
+void IRToX86::emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2) {
   if (o0.getId() != o1.getId())
     _c->emit(o1.isVar() ? asmjit::kX86InstIdMovaps : asmjit::kX86InstIdMovss, o0, o1);
   _c->emit(instId, o0, o2);
 }
 
-void JitCompiler::emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm) {
+void IRToX86::emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm) {
   if (o0.getId() != o1.getId())
     _c->emit(o1.isVar() ? asmjit::kX86InstIdMovaps : asmjit::kX86InstIdMovss, o0, o1);
   _c->emit(instId, o0, o2, imm);
 }
 
-void JitCompiler::emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2) {
+void IRToX86::emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2) {
   if (o0.getId() != o1.getId())
     _c->emit(o1.isVar() ? asmjit::kX86InstIdMovapd : asmjit::kX86InstIdMovsd, o0, o1);
   _c->emit(instId, o0, o2);
 }
 
-void JitCompiler::emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm) {
+void IRToX86::emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm) {
   if (o0.getId() != o1.getId())
     _c->emit(o1.isVar() ? asmjit::kX86InstIdMovapd : asmjit::kX86InstIdMovsd, o0, o1);
   _c->emit(instId, o0, o2, imm);
 }
 
-X86GpVar JitCompiler::varAsPtr(IRVar* irVar) {
+X86GpVar IRToX86::varAsPtr(IRVar* irVar) {
   uint32_t id = irVar->getJitId();
   MPSL_ASSERT(id != kInvalidValue);
 
   return _c->getIntPtrById(id);
 }
 
-X86GpVar JitCompiler::varAsI32(IRVar* irVar) {
+X86GpVar IRToX86::varAsI32(IRVar* irVar) {
   uint32_t id = irVar->getJitId();
 
   if (id == kInvalidValue) {
@@ -597,7 +591,7 @@ X86GpVar JitCompiler::varAsI32(IRVar* irVar) {
   }
 }
 
-X86XmmVar JitCompiler::varAsXmm(IRVar* irVar) {
+X86XmmVar IRToX86::varAsXmm(IRVar* irVar) {
   uint32_t id = irVar->getJitId();
 
   if (id == kInvalidValue) {

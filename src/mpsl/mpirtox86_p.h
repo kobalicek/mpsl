@@ -5,8 +5,8 @@
 // Zlib - See LICENSE.md file in the package.
 
 // [Guard]
-#ifndef _MPSL_MPCOMPILER_X86_P_H
-#define _MPSL_MPCOMPILER_X86_P_H
+#ifndef _MPSL_MPIRTOX86_P_H
+#define _MPSL_MPIRTOX86_P_H
 
 // [Dependencies - MPSL]
 #include "./mpast_p.h"
@@ -34,18 +34,18 @@ using asmjit::kConstScopeLocal;
 using asmjit::kConstScopeGlobal;
 
 // ============================================================================
-// [mpsl::JitCompiler]
+// [mpsl::IRToX86]
 // ============================================================================
 
-struct JitCompiler {
-  MPSL_NO_COPY(JitCompiler)
+struct IRToX86 {
+  MPSL_NO_COPY(IRToX86)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI JitCompiler(Allocator* allocator, X86Compiler* c);
-  MPSL_NOAPI ~JitCompiler();
+  MPSL_NOAPI IRToX86(Allocator* allocator, X86Compiler* c);
+  MPSL_NOAPI ~IRToX86();
 
   // --------------------------------------------------------------------------
   // [Const Pool]
@@ -106,4 +106,4 @@ struct JitCompiler {
 #include "./mpsl_apiend.h"
 
 // [Guard]
-#endif // _MPSL_MPCOMPILER_X86_P_H
+#endif // _MPSL_MPIRTOX86_P_H

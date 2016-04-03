@@ -9,9 +9,9 @@
 
 // [Dependencies - MPSL]
 #include "./mpast_p.h"
+#include "./mpformatutils_p.h"
 #include "./mphash_p.h"
 #include "./mpmath_p.h"
-#include "./mputils_p.h"
 
 // [Api-Begin]
 #include "./mpsl_apibegin.h"
@@ -763,7 +763,7 @@ Error AstDump::onUnaryOp(AstUnaryOp* node) noexcept {
   }
   else if (node->getOp() == kOpSwizzle) {
     char swizzle[32];
-    Utils::formatSwizzle(swizzle, node->getSwizzleMask(), TypeInfo::elementsOf(typeInfo));
+    FormatUtils::formatSwizzle(swizzle, node->getSwizzleMask(), TypeInfo::elementsOf(typeInfo));
     nest("(.%s) [%{Type}]", swizzle, typeInfo);
   }
   else
@@ -807,7 +807,7 @@ Error AstDump::info(const char* fmt, ...) noexcept {
   va_start(ap, fmt);
 
   _sb.appendChars(' ', static_cast<size_t>(_level) * 2);
-  Utils::vformat(_sb, fmt, ap);
+  FormatUtils::vformat(_sb, fmt, ap);
   _sb.appendChar('\n');
 
   va_end(ap);
@@ -819,7 +819,7 @@ Error AstDump::nest(const char* fmt, ...) noexcept {
   va_start(ap, fmt);
 
   _sb.appendChars(' ', static_cast<size_t>(_level) * 2);
-  Utils::vformat(_sb, fmt, ap);
+  FormatUtils::vformat(_sb, fmt, ap);
   _sb.appendChar('\n');
 
   va_end(ap);

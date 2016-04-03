@@ -8,8 +8,8 @@
 #define MPSL_EXPORTS
 
 // [Dependencies - MPSL]
+#include "./mpformatutils_p.h"
 #include "./mplang_p.h"
-#include "./mputils_p.h"
 
 // [Api-Begin]
 #include "./mpsl_apibegin.h"
@@ -32,17 +32,17 @@ static const EnumString mpAstSymbolType[] = {
 // [mpsl::Utils]
 // ============================================================================
 
-StringBuilder& Utils::sformat(StringBuilder& sb, const char* fmt, ...) noexcept {
+StringBuilder& FormatUtils::sformat(StringBuilder& sb, const char* fmt, ...) noexcept {
   va_list ap;
   va_start(ap, fmt);
 
-  Utils::vformat(sb, fmt, ap);
+  vformat(sb, fmt, ap);
 
   va_end(ap);
   return sb;
 }
 
-StringBuilder& Utils::vformat(StringBuilder& sb, const char* fmt, va_list ap) noexcept {
+StringBuilder& FormatUtils::vformat(StringBuilder& sb, const char* fmt, va_list ap) noexcept {
   const char kFormatChar = '%';
 
   const char* p = fmt;
@@ -107,7 +107,7 @@ StringBuilder& Utils::vformat(StringBuilder& sb, const char* fmt, va_list ap) no
       if (ext.eq("Type", 4)) {
         unsigned int type = va_arg(ap, unsigned int);
 
-        Utils::formatType(sb, type);
+        formatType(sb, type);
         continue;
       }
 
@@ -116,7 +116,7 @@ StringBuilder& Utils::vformat(StringBuilder& sb, const char* fmt, va_list ap) no
         unsigned int type = va_arg(ap, unsigned int);
         const Value* value = va_arg(ap, const Value*);
 
-        Utils::formatValue(sb, type, value);
+        formatValue(sb, type, value);
         continue;
       }
 
@@ -175,7 +175,7 @@ _Done:
   return sb;
 }
 
-StringBuilder& Utils::formatType(StringBuilder& sb, uint32_t typeInfo) noexcept {
+StringBuilder& FormatUtils::formatType(StringBuilder& sb, uint32_t typeInfo) noexcept {
   uint32_t typeId = typeInfo & kTypeIdMask;
   const char* typeName = "<unknown>";
 
@@ -199,7 +199,7 @@ StringBuilder& Utils::formatType(StringBuilder& sb, uint32_t typeInfo) noexcept 
   return sb;
 }
 
-StringBuilder& Utils::formatValue(StringBuilder& sb, uint32_t typeInfo, const Value* value_) noexcept {
+StringBuilder& FormatUtils::formatValue(StringBuilder& sb, uint32_t typeInfo, const Value* value_) noexcept {
   uint32_t id = typeInfo & kTypeIdMask;
   uint32_t count = TypeInfo::elementsOf(typeInfo);
 
@@ -283,7 +283,7 @@ StringBuilder& Utils::formatValue(StringBuilder& sb, uint32_t typeInfo, const Va
   return sb;
 }
 
-void Utils::formatSwizzle(char* dst, uint32_t swizzleMask, uint32_t count) noexcept {
+void FormatUtils::formatSwizzle(char* dst, uint32_t swizzleMask, uint32_t count) noexcept {
   const char* letters = mpVectorIdentifiers[0].letters;
   uint32_t i, max = 8;
 

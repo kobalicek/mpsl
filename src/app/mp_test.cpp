@@ -26,7 +26,7 @@ static mpsl::Value makeDVal(double x, double y = 0.0, double z = 0.0, double w =
 
 struct Test {
   Test()
-    : _isolate(mpsl::Isolate::create()),
+    : _context(mpsl::Context::create()),
       _succeeded(true) {
     a[0] = 1; a[1] = 2; a[2] = 3; a[3] = 4;
     b[0] = 9; b[1] = 8; b[2] = 7; b[3] = 6;
@@ -145,10 +145,10 @@ struct Test {
     args.d4c.set(double(c[0]), double(c[1]), double(c[2]), double(c[3]));
 
     printf("INPUT: %s\n", body);
-    CustomLog log;
+    TestLog log;
 
     mpsl::Program1<Args> program;
-    mpsl::Error err = program.compile(_isolate, body, options, layout, &log);
+    mpsl::Error err = program.compile(_context, body, options, layout, &log);
 
     if (err != mpsl::kErrorOk) {
       printf("ERROR: Compilation failed 0x%0.8X.\n", static_cast<unsigned int>(err));
@@ -218,7 +218,7 @@ checkDouble:
     return isOk;
   }
 
-  mpsl::Isolate _isolate;
+  mpsl::Context _context;
   int a[4];
   int b[4];
   int c[4];

@@ -1161,12 +1161,12 @@ _UnaryPostfixOp: {
       }
 
       // Parse a binary operator.
-      case kTokenEq       : op = kOpEq       ; goto _Binary;
-      case kTokenNe       : op = kOpNe       ; goto _Binary;
-      case kTokenGt       : op = kOpGt       ; goto _Binary;
-      case kTokenGe       : op = kOpGe       ; goto _Binary;
-      case kTokenLt       : op = kOpLt       ; goto _Binary;
-      case kTokenLe       : op = kOpLe       ; goto _Binary;
+      case kTokenEq       : op = kOpCmpEq    ; goto _Binary;
+      case kTokenNe       : op = kOpCmpNe    ; goto _Binary;
+      case kTokenGt       : op = kOpCmpGt    ; goto _Binary;
+      case kTokenGe       : op = kOpCmpGe    ; goto _Binary;
+      case kTokenLt       : op = kOpCmpLt    ; goto _Binary;
+      case kTokenLe       : op = kOpCmpLe    ; goto _Binary;
       case kTokenLogAnd   : op = kOpLogAnd   ; goto _Binary;
       case kTokenLogOr    : op = kOpLogOr    ; goto _Binary;
       case kTokenAdd      : op = kOpAdd      ; goto _Binary;

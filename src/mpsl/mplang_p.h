@@ -57,13 +57,10 @@ enum OpType {
   kOpNeg,               // -a
   kOpNot,               // !a
 
-  kOpLzcnt,             // lzcnt(a)
-  kOpPopcnt,            // popcnt(a)
-  kOpSignBit,           // signbit(a)
-
   kOpIsNan,             // isnan(a)
   kOpIsInf,             // isinf(a)
   kOpIsFinite,          // isfinite(a)
+  kOpSignMask,          // signmask(a)
 
   kOpRound,             // round(a)
   kOpRoundEven,         // roundeven(a)
@@ -85,6 +82,12 @@ enum OpType {
   kOpAcos,              // acos(a)
   kOpAtan,              // atan(a)
 
+  kOpPabsb,             // pabsb(a)
+  kOpPabsw,             // pabsw(a)
+  kOpPabsd,             // pabsd(a)
+  kOpLzcnt,             // lzcnt(a)
+  kOpPopcnt,            // popcnt(a)
+
   kOpAssign,            // a = b
   kOpAssignAdd,         // a += b
   kOpAssignSub,         // a -= b
@@ -97,16 +100,6 @@ enum OpType {
   kOpAssignSll,         // a <<= b
   kOpAssignSrl,         // a >>>= b
   kOpAssignSra,         // a >>= b
-
-  kOpEq,                // a == b
-  kOpNe,                // a != b
-  kOpLt,                // a <  b
-  kOpLe,                // a <= b
-  kOpGt,                // a >  b
-  kOpGe,                // a >= b
-
-  kOpLogAnd,            // a && b
-  kOpLogOr,             // a || b
 
   kOpAdd,               // a + b
   kOpSub,               // a - b
@@ -129,67 +122,86 @@ enum OpType {
   kOpPow,               // pow(a, b)
   kOpAtan2,             // atan2(a, b)
 
+  kOpLogAnd,            // a && b
+  kOpLogOr,             // a || b
+
+  kOpCmpEq,             // a == b
+  kOpCmpNe,             // a != b
+  kOpCmpLt,             // a <  b
+  kOpCmpLe,             // a <= b
+  kOpCmpGt,             // a >  b
+  kOpCmpGe,             // a >= b
+
   // TODO:
   // kOpBlend,          // blend(a, b, mask)
 
-  kOpVabsb,             // vabsb(a)
-  kOpVabsw,             // vabsw(a)
-  kOpVabsd,             // vabsd(a)
-  kOpVaddb,             // vaddb(a, b)
-  kOpVaddw,             // vaddw(a, b)
-  kOpVaddd,             // vaddd(a, b)
-  kOpVaddq,             // vaddq(a, b)
-  kOpVaddssb,           // vaddssb(a, b)
-  kOpVaddusb,           // vaddusb(a, b)
-  kOpVaddssw,           // vaddssw(a, b)
-  kOpVaddusw,           // vaddusw(a, b)
-  kOpVsubb,             // vsubb(a, b)
-  kOpVsubw,             // vsubw(a, b)
-  kOpVsubd,             // vsubd(a, b)
-  kOpVsubq,             // vsubq(a, b)
-  kOpVsubssb,           // vsubssb(a, b)
-  kOpVsubusb,           // vsubusb(a, b)
-  kOpVsubssw,           // vsubssw(a, b)
-  kOpVsubusw,           // vsubusw(a, b)
-  kOpVmulw,             // vmulw(a, b)
-  kOpVmulhsw,           // vmulhsw(a, b)
-  kOpVmulhuw,           // vmulhuw(a, b)
-  kOpVmuld,             // vmuld(a, b)
-  kOpVminsb,            // vminsb(a, b)
-  kOpVminub,            // vminub(a, b)
-  kOpVminsw,            // vminsw(a, b)
-  kOpVminuw,            // vminuw(a, b)
-  kOpVminsd,            // vminsd(a, b)
-  kOpVminud,            // vminud(a, b)
-  kOpVmaxsb,            // vmaxsb(a, b)
-  kOpVmaxub,            // vmaxub(a, b)
-  kOpVmaxsw,            // vmaxsw(a, b)
-  kOpVmaxuw,            // vmaxuw(a, b)
-  kOpVmaxsd,            // vmaxsd(a, b)
-  kOpVmaxud,            // vmaxud(a, b)
-  kOpVsllw,             // vsllw(a, b)
-  kOpVsrlw,             // vsrlw(a, b)
-  kOpVsraw,             // vsraw(a, b)
-  kOpVslld,             // vslld(a, b)
-  kOpVsrld,             // vsrld(a, b)
-  kOpVsrad,             // vsrad(a, b)
-  kOpVsllq,             // vsllq(a, b)
-  kOpVsrlq,             // vsrlq(a, b)
-  kOpVmaddwd,           // vmaddwd(a, b)
-  kOpVcmpeqb,           // vcmpeqb(a, b)
-  kOpVcmpeqw,           // vcmpeqw(a, b)
-  kOpVcmpeqd,           // vcmpeqd(a, b)
-  kOpVcmpgtb,           // vcmpgtb(a, b)
-  kOpVcmpgtw,           // vcmpgtw(a, b)
-  kOpVcmpgtd,           // vcmpgtd(a, b)
-  kOpVmovsxbw,          // vmovsxbw(a, b)
-  kOpVmovzxbw,          // vmovzxbw(a, b)
-  kOpVmovsxwd,          // vmovsxwd(a, b)
-  kOpVmovzxwd,          // vmovzxwd(a, b)
-  kOpVpacksswb,         // vpacksswb(a, b)
-  kOpVpackuswb,         // vpackuswb(a, b)
-  kOpVpackssdw,         // vpackssdw(a, b)
-  kOpVpackusdw,         // vpackusdw(a, b)
+  kOpPmovsxbw,          // pmovsxbw(a, b)
+  kOpPmovzxbw,          // pmovzxbw(a, b)
+  kOpPmovsxwd,          // pmovsxwd(a, b)
+  kOpPmovzxwd,          // pmovzxwd(a, b)
+  kOpPacksswb,          // ppacksswb(a, b)
+  kOpPackuswb,          // ppackuswb(a, b)
+  kOpPackssdw,          // ppackssdw(a, b)
+  kOpPackusdw,          // ppackusdw(a, b)
+  kOpPaddb,             // paddb(a, b)
+  kOpPaddw,             // paddw(a, b)
+  kOpPaddd,             // paddd(a, b)
+  kOpPaddq,             // paddq(a, b)
+  kOpPaddssb,           // paddssb(a, b)
+  kOpPaddusb,           // paddusb(a, b)
+  kOpPaddssw,           // paddssw(a, b)
+  kOpPaddusw,           // paddusw(a, b)
+  kOpPsubb,             // psubb(a, b)
+  kOpPsubw,             // psubw(a, b)
+  kOpPsubd,             // psubd(a, b)
+  kOpPsubq,             // psubq(a, b)
+  kOpPsubssb,           // psubssb(a, b)
+  kOpPsubusb,           // psubusb(a, b)
+  kOpPsubssw,           // psubssw(a, b)
+  kOpPsubusw,           // psubusw(a, b)
+  kOpPmulw,             // pmulw(a, b)
+  kOpPmulhsw,           // pmulhsw(a, b)
+  kOpPmulhuw,           // pmulhuw(a, b)
+  kOpPmuld,             // pmuld(a, b)
+  kOpPminsb,            // pminsb(a, b)
+  kOpPminub,            // pminub(a, b)
+  kOpPminsw,            // pminsw(a, b)
+  kOpPminuw,            // pminuw(a, b)
+  kOpPminsd,            // pminsd(a, b)
+  kOpPminud,            // pminud(a, b)
+  kOpPmaxsb,            // pmaxsb(a, b)
+  kOpPmaxub,            // pmaxub(a, b)
+  kOpPmaxsw,            // pmaxsw(a, b)
+  kOpPmaxuw,            // pmaxuw(a, b)
+  kOpPmaxsd,            // pmaxsd(a, b)
+  kOpPmaxud,            // pmaxud(a, b)
+  kOpPsllw,             // psllw(a, b)
+  kOpPsrlw,             // psrlw(a, b)
+  kOpPsraw,             // psraw(a, b)
+  kOpPslld,             // pslld(a, b)
+  kOpPsrld,             // psrld(a, b)
+  kOpPsrad,             // psrad(a, b)
+  kOpPsllq,             // psllq(a, b)
+  kOpPsrlq,             // psrlq(a, b)
+  kOpPmaddwd,           // pmaddwd(a, b)
+  kOpPcmpeqb,           // pcmpeqb(a, b)
+  kOpPcmpeqw,           // pcmpeqw(a, b)
+  kOpPcmpeqd,           // pcmpeqd(a, b)
+  kOpPcmpneb,           // pcmpneb(a, b)
+  kOpPcmpnew,           // pcmpnew(a, b)
+  kOpPcmpned,           // pcmpned(a, b)
+  kOpPcmpltb,           // pcmpltb(a, b)
+  kOpPcmpltw,           // pcmpltw(a, b)
+  kOpPcmpltd,           // pcmpltd(a, b)
+  kOpPcmpleb,           // pcmpleb(a, b)
+  kOpPcmplew,           // pcmplew(a, b)
+  kOpPcmpled,           // pcmpled(a, b)
+  kOpPcmpgtb,           // pcmpgtb(a, b)
+  kOpPcmpgtw,           // pcmpgtw(a, b)
+  kOpPcmpgtd,           // pcmpgtd(a, b)
+  kOpPcmpgeb,           // pcmpgeb(a, b)
+  kOpPcmpgew,           // pcmpgew(a, b)
+  kOpPcmpged,           // pcmpged(a, b)
 
   //! \internal
   //!
@@ -229,29 +241,31 @@ enum OpFlags {
   kOpFlagConditional   = 0x00000800,
   //! The operator calculates a trigonometric function (float-only).
   kOpFlagTrigonometric = 0x00001000,
-  //! The operator is a special DSP intrinsic function.
-  kOpFlagDSP           = 0x00002000,
 
   //! Bit shift or rotation (integer-only).
-  kOpFlagShift         = 0x00004000,
+  kOpFlagShift         = 0x00002000,
   //! Bitwise operation (AND, OR, XOR, NOT).
-  kOpFlagBitwise       = 0x00008000,
+  kOpFlagBitwise       = 0x00004000,
+
+  //! The operator is a special DSP intrinsic function.
+  kOpFlagDSP           = 0x00010000,
+  //! DSP intrinsic that requires 64-bit elements (`int2`, `int4`, or `int8`).
+  kOpFlagDSP64         = 0x00020000,
+  //! Operator does unpacking (i.e. it doubles the output width).
+  kOpFlagUnpack        = 0x00040000,
+  //! Operator does packing (i.e. it halves the output width).
+  kOpFlagPack          = 0x00080000,
 
   //! The operator is defined for boolean operands.
-  kOpFlagBoolOp        = 0x00010000,
+  kOpFlagBoolOp        = 0x00100000,
   //! The operator is defined for ineger operands.
-  kOpFlagIntOp         = 0x00020000,
+  kOpFlagIntOp         = 0x00200000,
   //! The operator is defined for floating-point operands.
-  kOpFlagFloatOp       = 0x00040000,
+  kOpFlagFloatOp       = 0x00400000,
   //! The operator is defined for `int`, `float` types.
   kOpFlagIntFPOp       = kOpFlagIntOp | kOpFlagFloatOp,
   //! The operator is defined for `int`, `float`, and `bool` types.
   kOpFlagAnyOp         = kOpFlagIntOp | kOpFlagFloatOp | kOpFlagBoolOp,
-
-  //! Operator does unpacking (i.e. it doubles the output width).
-  kOpFlagUnpack        = 0x00100000,
-  //! Operator does packing (i.e. it halves the output width).
-  kOpFlagPack          = 0x00200000,
 
   kOpFlagNopIfL0       = 0x10000000,
   kOpFlagNopIfR0       = 0x20000000,
@@ -309,7 +323,6 @@ enum InstCode {
   kInstCodeCvtdtoi,
   kInstCodeCvtdtof,
 
-  kInstCodeAbsi,
   kInstCodeAbsf,
   kInstCodeAbsd,
   kInstCodeBitnegi,
@@ -321,12 +334,9 @@ enum InstCode {
   kInstCodeNoti,
   kInstCodeNotf,
   kInstCodeNotd,
-  kInstCodeSignbiti,
-  kInstCodeSignbitf,
-  kInstCodeSignbitd,
-
-  kInstCodeLzcnti,
-  kInstCodePopcnti,
+  kInstCodeSignmaski,
+  kInstCodeSignmaskf,
+  kInstCodeSignmaskd,
 
   kInstCodeIsnanf,
   kInstCodeIsnand,
@@ -372,19 +382,20 @@ enum InstCode {
   kInstCodeAtanf,
   kInstCodeAtand,
 
-  kInstCodeAddi,
+  kInstCodePabsb,
+  kInstCodePabsw,
+  kInstCodePabsd,
+  kInstCodeLzcnti,
+  kInstCodePopcnti,
+
   kInstCodeAddf,
   kInstCodeAddd,
-  kInstCodeSubi,
   kInstCodeSubf,
   kInstCodeSubd,
-  kInstCodeMuli,
   kInstCodeMulf,
   kInstCodeMuld,
-  kInstCodeDivi,
   kInstCodeDivf,
   kInstCodeDivd,
-  kInstCodeModi,
   kInstCodeModf,
   kInstCodeModd,
   kInstCodeAndi,
@@ -396,39 +407,26 @@ enum InstCode {
   kInstCodeXori,
   kInstCodeXorf,
   kInstCodeXord,
-  kInstCodeMini,
   kInstCodeMinf,
   kInstCodeMind,
-  kInstCodeMaxi,
   kInstCodeMaxf,
   kInstCodeMaxd,
 
-  kInstCodeSlli,
-  kInstCodeSrli,
-  kInstCodeSrai,
   kInstCodeRoli,
   kInstCodeRori,
 
-  kInstCodeCmpeqi,
   kInstCodeCmpeqf,
   kInstCodeCmpeqd,
-  kInstCodeCmpnei,
   kInstCodeCmpnef,
   kInstCodeCmpned,
-  kInstCodeCmplti,
   kInstCodeCmpltf,
   kInstCodeCmpltd,
-  kInstCodeCmplei,
   kInstCodeCmplef,
   kInstCodeCmpled,
-  kInstCodeCmpgti,
   kInstCodeCmpgtf,
   kInstCodeCmpgtd,
-  kInstCodeCmpgei,
   kInstCodeCmpgef,
   kInstCodeCmpged,
-
-  kInstCodeShuf,
 
   kInstCodeCopysignf,
   kInstCodeCopysignd,
@@ -437,69 +435,85 @@ enum InstCode {
   kInstCodeAtan2f,
   kInstCodeAtan2d,
 
-  kInstCodeVabsb,
-  kInstCodeVabsw,
-  kInstCodeVabsd,
-  kInstCodeVaddb,
-  kInstCodeVaddw,
-  kInstCodeVaddd,
-  kInstCodeVaddq,
-  kInstCodeVaddssb,
-  kInstCodeVaddusb,
-  kInstCodeVaddssw,
-  kInstCodeVaddusw,
-  kInstCodeVsubb,
-  kInstCodeVsubw,
-  kInstCodeVsubd,
-  kInstCodeVsubq,
-  kInstCodeVsubssb,
-  kInstCodeVsubusb,
-  kInstCodeVsubssw,
-  kInstCodeVsubusw,
-  kInstCodeVmulw,
-  kInstCodeVmulhsw,
-  kInstCodeVmulhuw,
-  kInstCodeVmuld,
-  kInstCodeVminsb,
-  kInstCodeVminub,
-  kInstCodeVminsw,
-  kInstCodeVminuw,
-  kInstCodeVminsd,
-  kInstCodeVminud,
-  kInstCodeVmaxsb,
-  kInstCodeVmaxub,
-  kInstCodeVmaxsw,
-  kInstCodeVmaxuw,
-  kInstCodeVmaxsd,
-  kInstCodeVmaxud,
-  kInstCodeVsllw,
-  kInstCodeVsrlw,
-  kInstCodeVsraw,
-  kInstCodeVslld,
-  kInstCodeVsrld,
-  kInstCodeVsrad,
-  kInstCodeVsllq,
-  kInstCodeVsrlq,
-  kInstCodeVmaddwd,
-  kInstCodeVcmpeqb,
-  kInstCodeVcmpeqw,
-  kInstCodeVcmpeqd,
-  kInstCodeVcmpgtb,
-  kInstCodeVcmpgtw,
-  kInstCodeVcmpgtd,
-  kInstCodeVmovsxbw,
-  kInstCodeVmovzxbw,
-  kInstCodeVmovsxwd,
-  kInstCodeVmovzxwd,
-  kInstCodeVpacksswb,
-  kInstCodeVpackuswb,
-  kInstCodeVpackssdw,
-  kInstCodeVpackusdw,
+  kInstCodePshufd,
+
+  kInstCodePmovsxbw,
+  kInstCodePmovzxbw,
+  kInstCodePmovsxwd,
+  kInstCodePmovzxwd,
+  kInstCodePacksswb,
+  kInstCodePackuswb,
+  kInstCodePackssdw,
+  kInstCodePackusdw,
+  kInstCodePaddb,
+  kInstCodePaddw,
+  kInstCodePaddd,
+  kInstCodePaddq,
+  kInstCodePaddssb,
+  kInstCodePaddusb,
+  kInstCodePaddssw,
+  kInstCodePaddusw,
+  kInstCodePsubb,
+  kInstCodePsubw,
+  kInstCodePsubd,
+  kInstCodePsubq,
+  kInstCodePsubssb,
+  kInstCodePsubusb,
+  kInstCodePsubssw,
+  kInstCodePsubusw,
+  kInstCodePmulw,
+  kInstCodePmulhsw,
+  kInstCodePmulhuw,
+  kInstCodePmuld,
+  kInstCodePdivsd,
+  kInstCodePmodsd,
+  kInstCodePminsb,
+  kInstCodePminub,
+  kInstCodePminsw,
+  kInstCodePminuw,
+  kInstCodePminsd,
+  kInstCodePminud,
+  kInstCodePmaxsb,
+  kInstCodePmaxub,
+  kInstCodePmaxsw,
+  kInstCodePmaxuw,
+  kInstCodePmaxsd,
+  kInstCodePmaxud,
+  kInstCodePsllw,
+  kInstCodePsrlw,
+  kInstCodePsraw,
+  kInstCodePslld,
+  kInstCodePsrld,
+  kInstCodePsrad,
+  kInstCodePsllq,
+  kInstCodePsrlq,
+  kInstCodePmaddwd,
+  kInstCodePcmpeqb,
+  kInstCodePcmpeqw,
+  kInstCodePcmpeqd,
+  kInstCodePcmpneb,
+  kInstCodePcmpnew,
+  kInstCodePcmpned,
+  kInstCodePcmpltb,
+  kInstCodePcmpltw,
+  kInstCodePcmpltd,
+  kInstCodePcmpleb,
+  kInstCodePcmplew,
+  kInstCodePcmpled,
+  kInstCodePcmpgtb,
+  kInstCodePcmpgtw,
+  kInstCodePcmpgtd,
+  kInstCodePcmpgeb,
+  kInstCodePcmpgew,
+  kInstCodePcmpged,
 
   kInstCodeCount,
 
   //! Specifies how wide the SIMD operation is (if not specified it's scalar).
   kInstVecMask = 0xC000,
+  //! Shift to get the instruction width:
+  //!   `first bit of kInstVecMask` - `number of shifts to get 16`).
+  kInstVecShift = 14 - 4,
   //! The operation is scalar.
   kInstVec0    = 0x0000,
   //! The operation is 128-bit wide.
@@ -675,6 +689,9 @@ struct OpInfo {
   MPSL_INLINE bool isShift() const noexcept { return (flags & kOpFlagShift) != 0; }
   MPSL_INLINE bool isBitwise() const noexcept { return (flags & kOpFlagBitwise) != 0; }
 
+  MPSL_INLINE bool isDSP() const noexcept { return (flags & kOpFlagDSP) != 0; }
+  MPSL_INLINE bool isDSP64() const noexcept { return (flags & kOpFlagDSP64) != 0; }
+
   MPSL_INLINE bool isIntOp() const noexcept { return (flags & kOpFlagIntOp) != 0; }
   MPSL_INLINE bool isBoolOp() const noexcept { return (flags & kOpFlagBoolOp) != 0; }
   MPSL_INLINE bool isFloatOp() const noexcept { return (flags & kOpFlagFloatOp) != 0; }
@@ -752,6 +769,16 @@ struct InstInfo {
   MPSL_INLINE bool hasImm() const noexcept { return (flags & kInstInfoImm) != 0; }
 
   // --------------------------------------------------------------------------
+  // [WidthOf]
+  // --------------------------------------------------------------------------
+
+  static MPSL_INLINE const InstInfo& get(uint32_t instId) noexcept;
+
+  static MPSL_INLINE uint32_t widthOf(uint32_t inst) noexcept {
+    return (inst & kInstVecMask) >> kInstVecShift;
+  }
+
+  // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
@@ -774,6 +801,11 @@ MPSL_INLINE const TypeInfo& TypeInfo::get(uint32_t typeId) noexcept {
 MPSL_INLINE const OpInfo& OpInfo::get(uint32_t op) noexcept {
   MPSL_ASSERT(op < kOpCount);
   return mpOpInfo[op];
+}
+
+MPSL_INLINE const InstInfo& InstInfo::get(uint32_t instId) noexcept {
+  MPSL_ASSERT(instId < kInstCodeCount);
+  return mpInstInfo[instId];
 }
 
 static MPSL_INLINE bool mpCanImplicitCast(uint32_t dTypeId, uint32_t sTypeId) noexcept {

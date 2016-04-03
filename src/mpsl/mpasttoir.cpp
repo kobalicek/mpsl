@@ -321,7 +321,7 @@ Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
       else {
         swizzleValue.i[0] = swizzleMask;
         IRImm* msk = getIR()->newImm(swizzleValue, kIRRegNone, 4);
-        MPSL_PROPAGATE(getIR()->emitInst(getBlock(), kInstCodeShuf, out.result.lo, tmp.result.lo, msk));
+        MPSL_PROPAGATE(getIR()->emitInst(getBlock(), kInstCodePshufd, out.result.lo, tmp.result.lo, msk));
       }
     }
     else {

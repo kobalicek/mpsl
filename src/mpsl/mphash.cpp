@@ -36,7 +36,7 @@ uint32_t HashUtils::hashString(const char* kStr, size_t kLen) noexcept {
     return hVal;
 
   do {
-    hVal = HashUtils::hashChar(hVal, static_cast<unsigned char>(*kStr++));
+    hVal = hashChar(hVal, static_cast<unsigned char>(*kStr++));
   } while (--kLen);
 
   return hVal;

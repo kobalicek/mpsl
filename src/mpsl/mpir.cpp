@@ -8,9 +8,9 @@
 #define MPSL_EXPORTS
 
 // [Dependencies - MPSL]
+#include "./mpformatutils_p.h"
 #include "./mpir_p.h"
 #include "./mpmath_p.h"
-#include "./mputils_p.h"
 
 // [Api-Begin]
 #include "./mpsl_apibegin.h"
@@ -317,7 +317,7 @@ MPSL_NOAPI Error IRBuilder::dump(StringBuilder& sb) noexcept {
 
           case IRObject::kTypeImm: {
             IRImm* imm = static_cast<IRImm*>(op);
-            Utils::formatValue(sb, imm->getTypeInfo(), &imm->_value);
+            FormatUtils::formatValue(sb, imm->getTypeInfo(), &imm->_value);
             break;
           }
 

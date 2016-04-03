@@ -1,5 +1,5 @@
-// [MathPresso]
-// Mathematical Expression Parser and JIT Compiler.
+// [MPSL]
+// MathPresso's Shading Language with JIT Engine for C++.
 //
 // [License]
 // Zlib - See LICENSE.md file in the package.
@@ -26,7 +26,7 @@
 namespace mpsl {
 
 // ============================================================================
-// [mathpresso::Parser]
+// [mpsl::StrToD]
 // ============================================================================
 
 struct StrToD {
