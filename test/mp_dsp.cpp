@@ -5,7 +5,7 @@
 // Zlib - See LICENSE.md file in the package.
 
 // [Dependencies]
-#include "../mpsl/mpsl.h"
+#include "./mpsl.h"
 #include "./mp_utils.h"
 
 #include <math.h>
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
 
     err = program.run(&args);
     if (err)
-      printf("Execution failed: ERROR %0.8X\n", static_cast<unsigned int>(err));
+      printf("Execution failed: ERROR %08X\n", static_cast<unsigned int>(err));
     else
       printf("Return=%08X %08X %08X %08X\n", args.result[0], args.result[1], args.result[2], args.result[3]);
   }

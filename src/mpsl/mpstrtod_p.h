@@ -16,6 +16,7 @@
 # include <locale.h>
 #else
 # define MPSL_STRTOD_XLOCALE
+# include <stdlib.h>
 # include <locale.h>
 # include <xlocale.h>
 #endif
@@ -30,7 +31,7 @@ namespace mpsl {
 // ============================================================================
 
 struct StrToD {
-  MPSL_NO_COPY(StrToD)
+  MPSL_NONCOPYABLE(StrToD)
 
 #if defined(MPSL_STRTOD_MSLOCALE)
   MPSL_INLINE StrToD() noexcept {

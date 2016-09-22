@@ -27,17 +27,17 @@ static const uint32_t mpPrimeTable[] = {
 // [mpsl::HashUtils]
 // ============================================================================
 
-uint32_t HashUtils::hashString(const char* kStr, size_t kLen) noexcept {
-  if (kLen == 0)
+uint32_t HashUtils::hashString(const char* str, size_t len) noexcept {
+  if (len == 0)
     return 0;
 
-  uint32_t hVal = *kStr++;
-  if (--kLen == 0)
+  uint32_t hVal = *str++;
+  if (--len == 0)
     return hVal;
 
   do {
-    hVal = hashChar(hVal, static_cast<unsigned char>(*kStr++));
-  } while (--kLen);
+    hVal = hashChar(hVal, static_cast<unsigned char>(*str++));
+  } while (--len);
 
   return hVal;
 }
@@ -58,11 +58,11 @@ uint32_t HashUtils::closestPrime(uint32_t x) noexcept {
 // ============================================================================
 
 void HashBase::_rehash(uint32_t newCount) noexcept {
-  Allocator* allocator = _allocator;
+  ZoneHeap* heap = _heap;
 
   HashNode** oldData = _data;
   HashNode** newData = static_cast<HashNode**>(
-    allocator->allocZeroed(
+    heap->allocZeroed(
       static_cast<size_t>(newCount + kExtraCount) * sizeof(void*)));
 
   if (newData == nullptr)
@@ -73,7 +73,7 @@ void HashBase::_rehash(uint32_t newCount) noexcept {
 
   for (i = 0; i < oldCount; i++) {
     HashNode* node = oldData[i];
-    while (node != nullptr) {
+    while (node) {
       HashNode* next = node->_next;
       uint32_t hMod = node->_hVal % newCount;
 
@@ -96,7 +96,7 @@ void HashBase::_rehash(uint32_t newCount) noexcept {
 
   _data = newData;
   if (oldData != _embedded)
-    allocator->release(oldData,
+    heap->release(oldData,
       static_cast<size_t>(oldCount + kExtraCount) * sizeof(void*));
 }
 
@@ -110,14 +110,13 @@ void HashBase::_mergeToInvisibleSlot(HashBase& other) noexcept {
   // Find the `first` node.
   for (i = 0; i < count; i++) {
     first = data[i];
-    if (first != nullptr)
-      break;
+    if (first) break;
   }
 
-  if (first != nullptr) {
+  if (first) {
     // Initialize `first` and `last`.
     last = first;
-    while (last->_next != nullptr)
+    while (last->_next)
       last = last->_next;
     data[i] = nullptr;
 
@@ -125,17 +124,17 @@ void HashBase::_mergeToInvisibleSlot(HashBase& other) noexcept {
     // is updated to the last node added.
     while (++i < count) {
       HashNode* node = data[i];
-      if (node != nullptr) {
+      if (node) {
         last->_next = node;
         last = node;
-        while (last->_next != nullptr)
+        while (last->_next)
           last = last->_next;
         data[i] = nullptr;
       }
     }
 
     // Link with ours.
-    if (last != nullptr) {
+    if (last) {
       i = _bucketsCount + kExtraFirst;
       last->_next = _data[i];
       _data[i] = first;
@@ -169,7 +168,7 @@ HashNode* HashBase::_del(HashNode* node) noexcept {
   HashNode** pPrev = &_data[hMod];
   HashNode* p = *pPrev;
 
-  while (p != nullptr) {
+  while (p) {
     if (p == node) {
       *pPrev = p->_next;
       return node;

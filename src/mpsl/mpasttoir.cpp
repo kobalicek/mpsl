@@ -21,7 +21,7 @@ static uint32_t mpRegSizeFromTypeInfo(uint32_t typeInfo) noexcept {
   return size * TypeInfo::elementsOf(typeInfo);
 }
 
-static MPSL_INLINE uint32_t mpGetSIMDFlags(uint32_t typeInfo) noexcept {
+static MPSL_INLINE uint32_t mpGetVecFlags(uint32_t typeInfo) noexcept {
   if ((typeInfo & kTypeVecMask) < kTypeVec2)
     return 0;
   else
@@ -79,13 +79,15 @@ static MPSL_INLINE bool mpIsValueLoHiEqual(const Value& val) noexcept {
 AstToIR::AstToIR(AstBuilder* ast, IRBuilder* ir) noexcept
   : AstVisitorWithArgs<AstToIR, Args&>(ast),
     _ir(ir),
-    _retPriv(nullptr),
     _block(nullptr),
-    _blockLevel(0),
+    _functionLevel(0),
     _hasV256(false),
-    _varMap(ir->getAllocator()),
-    _memMap(ir->getAllocator()) {
-  _retPriv = ast->getGlobalScope()->resolveSymbol(StringRef("@ret", 4));
+    _hiddenRet(nullptr),
+    _currentRet(),
+    _nestedFunctions(ir->getHeap()),
+    _varMap(ir->getHeap()),
+    _memMap(ir->getHeap()) {
+  _hiddenRet = ast->getGlobalScope()->resolveSymbol(StringRef("@ret", 4));
 }
 AstToIR::~AstToIR() noexcept {}
 
@@ -97,13 +99,13 @@ Error AstToIR::onProgram(AstProgram* node, Args& out) noexcept {
   AstNode** children = node->getChildren();
   uint32_t i, count = node->getLength();
 
-  // Find the "main()" function and call onFunction() with it.
+  // Find the "main()" function and use it as an entry point.
   for (i = 0; i < count; i++) {
     AstNode* child = children[i];
     if (child->getNodeType() == AstNode::kTypeFunction) {
       AstFunction* func = static_cast<AstFunction*>(child);
       if (func->getFunc()->eq("main", 4)) {
-        MPSL_PROPAGATE(_ir->initMainBlock());
+        MPSL_PROPAGATE(_ir->initEntryBlock());
         _block = _ir->getMainBlock();
         return onFunction(func, out);
       }
@@ -113,11 +115,13 @@ Error AstToIR::onProgram(AstProgram* node, Args& out) noexcept {
   return MPSL_TRACE_ERROR(kErrorNoEntryPoint);
 }
 
-// NOTE: This is only called once with "main()" function `node`. Other
-// functions are simply inlined during the AST to IR translation.
+// NOTE: This is only called once per "main()". Other functions are simply
+// inlined during the AST to IR translation.
 Error AstToIR::onFunction(AstFunction* node, Args& out) noexcept {
-  if (node->hasBody())
+  if (node->hasBody()) {
+    MPSL_PROPAGATE(_nestedFunctions.put(node));
     MPSL_PROPAGATE(onNode(node->getBody(), out));
+  }
 
   return kErrorOk;
 }
@@ -169,15 +173,20 @@ Error AstToIR::onReturn(AstReturn* node, Args& out) noexcept {
     Args val(true);
     MPSL_PROPAGATE(onNode(node->getChild(), val));
 
-    uint32_t typeInfo = _retPriv->getTypeInfo();
+    uint32_t typeInfo = _hiddenRet->getTypeInfo();
     uint32_t width = TypeInfo::widthOf(typeInfo);
 
-    IRPair<IRVar> var;
-    MPSL_PROPAGATE(asVar(var, val.result, typeInfo));
+    if (_functionLevel == 0) {
+      IRPair<IRVar> var;
+      MPSL_PROPAGATE(asVar(var, val.result, typeInfo));
 
-    IRPair<IRMem> mem;
-    MPSL_PROPAGATE(addrOfData(mem, DataSlot(_retPriv->getDataSlot(), _retPriv->getDataOffset()), width));
-    MPSL_PROPAGATE(emitStore(mem, var, typeInfo));
+      IRPair<IRMem> mem;
+      MPSL_PROPAGATE(addrOfData(mem, DataSlot(_hiddenRet->getDataSlot(), _hiddenRet->getDataOffset()), width));
+      MPSL_PROPAGATE(emitStore(mem, var, typeInfo));
+    }
+    else {
+      _currentRet = val.result;
+    }
   }
 
   return kErrorOk;
@@ -411,8 +420,67 @@ Error AstToIR::onBinaryOp(AstBinaryOp* node, Args& out) noexcept {
 #undef COMBINE_OP_CAST
 
 Error AstToIR::onCall(AstCall* node, Args& out) noexcept {
-  // TODO:
-  MPSL_ASSERT(!"Implemented");
+  uint32_t i;
+
+  AstSymbol* fSym = node->getSymbol();
+  if (MPSL_UNLIKELY(!fSym))
+    return MPSL_TRACE_ERROR(kErrorInvalidState);
+
+  AstFunction* func = static_cast<AstFunction*>(fSym->getNode());
+  if (MPSL_UNLIKELY(!func) || func->getNodeType() != AstNode::kTypeFunction)
+    return MPSL_TRACE_ERROR(kErrorInvalidState);
+
+  if (MPSL_UNLIKELY(_nestedFunctions.has(func)))
+    return MPSL_TRACE_ERROR(kErrorRecursionNotAllowed);
+
+
+  AstBlock* fArgsDecl = func->getArgs();
+  bool argsUsed = func->hasBody();
+
+  uint32_t fArgsCount = func->getArgs()->getLength();
+  uint32_t cArgsCount = node->getLength();
+
+  if (MPSL_UNLIKELY(fArgsCount < cArgsCount))
+    return MPSL_TRACE_ERROR(kErrorInvalidState);
+
+  // Translate all function arguments to IR.
+  for (i = 0; i < cArgsCount; i++) {
+    Args value(argsUsed);
+
+    AstVarDecl* argDecl = static_cast<AstVarDecl*>(fArgsDecl->getAt(i));
+    MPSL_PROPAGATE(onNode(node->getAt(i), value));
+
+    IRPair<IRVar> var;
+    MPSL_PROPAGATE(asVar(var, value.result, argDecl->getTypeInfo()));
+
+    mapVarToAst(argDecl->getSymbol(), var);
+  }
+
+  // Map all function arguments to `varMap`.
+  while (i < fArgsCount) {
+    Args value(argsUsed);
+
+    AstVarDecl* argDecl = static_cast<AstVarDecl*>(fArgsDecl->getAt(i));
+    MPSL_PROPAGATE(onNode(argDecl, value));
+
+    IRPair<IRVar> var;
+    MPSL_PROPAGATE(asVar(var, value.result, argDecl->getTypeInfo()));
+
+    mapVarToAst(argDecl->getSymbol(), var);
+    i++;
+  }
+
+  // Emit the function body.
+  if (func->hasBody()) {
+    _functionLevel++;
+    MPSL_PROPAGATE(_nestedFunctions.put(func));
+    MPSL_PROPAGATE(onNode(func->getBody(), out));
+
+    _functionLevel--;
+    _nestedFunctions.del(func);
+    out.result = _currentRet;
+  }
+
   return kErrorOk;
 }
 
@@ -421,8 +489,13 @@ Error AstToIR::onCall(AstCall* node, Args& out) noexcept {
 // ============================================================================
 
 Error AstToIR::mapVarToAst(AstSymbol* sym, IRPair<IRVar> var) noexcept {
-  MPSL_ASSERT(!_varMap.has(sym));
-  return _varMap.put(sym, var);
+  IRPair<IRVar>* existing;
+
+  if (!_varMap.get(sym, &existing))
+    return _varMap.put(sym, var);
+
+  *existing = var;
+  return kErrorOk;
 }
 
 Error AstToIR::newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept {
@@ -594,12 +667,12 @@ Error AstToIR::emitInst2(uint32_t instCode,
     uint32_t loTI, hiTI;
     mpSplitTypeInfo(loTI, hiTI, typeInfo);
 
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetSIMDFlags(loTI), o0.lo, o1.lo));
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetSIMDFlags(hiTI), o0.hi, o1.hi));
+    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetVecFlags(loTI), o0.lo, o1.lo));
+    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetVecFlags(hiTI), o0.hi, o1.hi));
     return kErrorOk;
   }
   else {
-    return getIR()->emitInst(block, instCode | mpGetSIMDFlags(typeInfo), o0.lo, o1.lo);
+    return getIR()->emitInst(block, instCode | mpGetVecFlags(typeInfo), o0.lo, o1.lo);
   }
 }
 
@@ -615,12 +688,12 @@ Error AstToIR::emitInst3(uint32_t instCode,
     uint32_t loTI, hiTI;
     mpSplitTypeInfo(loTI, hiTI, typeInfo);
 
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetSIMDFlags(loTI), o0.lo, o1.lo, o2.lo));
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetSIMDFlags(hiTI), o0.hi, o1.hi, o2.hi));
+    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetVecFlags(loTI), o0.lo, o1.lo, o2.lo));
+    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetVecFlags(hiTI), o0.hi, o1.hi, o2.hi));
     return kErrorOk;
   }
   else {
-    return getIR()->emitInst(block, instCode | mpGetSIMDFlags(typeInfo), o0.lo, o1.lo, o2.lo);
+    return getIR()->emitInst(block, instCode | mpGetVecFlags(typeInfo), o0.lo, o1.lo, o2.lo);
   }
 }
 
@@ -666,7 +739,6 @@ Error AstToIR::emitFetchX(IRVar* dst, IRMem* src, uint32_t typeInfo) noexcept {
 
   return getIR()->emitInst(getBlock(), instCode, dst, src);
 }
-
 
 Error AstToIR::emitStoreX(IRMem* dst, IRVar* src, uint32_t typeInfo) noexcept {
   uint32_t instCode = kInstCodeNone;

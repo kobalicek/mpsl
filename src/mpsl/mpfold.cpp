@@ -58,51 +58,6 @@ static MPSL_INLINE T imod(T x, T y) noexcept {
   return static_cast<T>(mpModD(xd, yd));
 }
 
-#define FOLD_FN2(fn, dsttype, srctype, worktype, ...) \
-static MPSL_INLINE void fn(void* _pd, const void* _ps, uint32_t width) noexcept { \
-  uint32_t i = 0; \
-  uint32_t count = width / static_cast<uint32_t>(sizeof(dsttype)); \
-  \
-  dsttype* pd = static_cast<dsttype*>(_pd); \
-  const srctype* ps = static_cast<const srctype*>(_ps); \
-  \
-  do { \
-    worktype s = static_cast<worktype>(ps[i]); \
-    pd[i] = static_cast<dsttype>(__VA_ARGS__); \
-  } while (++i < count); \
-}
-
-#define FOLD_FN3(fn, dsttype, srctype, worktype, ...) \
-static MPSL_INLINE void fn(void* _pd, const void* _pl, const void* _pr, uint32_t width) noexcept { \
-  uint32_t i = 0; \
-  uint32_t count = width / static_cast<uint32_t>(sizeof(dsttype)); \
-  \
-  dsttype* pd = static_cast<dsttype*>(_pd); \
-  const srctype* pl = static_cast<const srctype*>(_pl); \
-  const srctype* pr = static_cast<const srctype*>(_pr); \
-  \
-  do { \
-    worktype l = static_cast<worktype>(pl[i]); \
-    worktype r = static_cast<worktype>(pr[i]); \
-    pd[i] = static_cast<dsttype>(__VA_ARGS__); \
-  } while (++i < count); \
-}
-
-#define FOLD_IMM(fn, dsttype, srctype, worktype, ...) \
-static MPSL_INLINE void fn(void* _pd, const void* _pl, const void* _pr, uint32_t width) noexcept { \
-  uint32_t i = 0; \
-  uint32_t count = width / static_cast<uint32_t>(sizeof(dsttype)); \
-  \
-  dsttype* pd = static_cast<dsttype*>(_pd); \
-  const srctype* pl = static_cast<const srctype*>(_pl); \
-  uint32_t r = static_cast<const uint32_t*>(_pr)[0]; \
-  \
-  do { \
-    worktype l = static_cast<worktype>(pl[i]); \
-    pd[i] = static_cast<dsttype>(__VA_ARGS__); \
-  } while (++i < count); \
-}
-
 static MPSL_INLINE uint32_t lzcnt_kernel(uint32_t x) noexcept {
 #if MPSL_CC_MSC_GE(14, 0, 0) && (MPSL_ARCH_X86 || MPSL_ARCH_X64 || MPSL_ARCH_ARM32 || MPSL_ARCH_ARM64)
   DWORD i;
@@ -143,7 +98,7 @@ static MPSL_INLINE uint32_t vmaddwd_kernel(uint32_t x, uint32_t y) noexcept {
   return static_cast<uint32_t>(xLo * yLo) + static_cast<uint32_t>(xHi * yHi);
 }
 
-static MPSL_INLINE void pshufd(void* _pd, const void* _pl, const void* _pr, uint32_t width) noexcept { \
+static MPSL_INLINE void pshufd(void* _pd, const void* _pl, const void* _pr, uint32_t width) noexcept {
   uint32_t i = 0;
   uint32_t count = width / 4;
 
@@ -155,6 +110,57 @@ static MPSL_INLINE void pshufd(void* _pd, const void* _pl, const void* _pr, uint
     pd[i] = pl[sel & 0xF];
     sel >>= 4;
   } while (++i < count);
+}
+
+#define FOLD_FN2(fn, dsttype, srctype, worktype, ...)                          \
+static MPSL_INLINE void fn(                                                    \
+  void* _pd, const void* _ps, uint32_t width) noexcept {                       \
+                                                                               \
+  uint32_t i = 0;                                                              \
+  uint32_t count = width / static_cast<uint32_t>(sizeof(dsttype));             \
+                                                                               \
+  dsttype* pd = static_cast<dsttype*>(_pd);                                    \
+  const srctype* ps = static_cast<const srctype*>(_ps);                        \
+                                                                               \
+  do {                                                                         \
+    worktype s = static_cast<worktype>(ps[i]);                                 \
+    pd[i] = static_cast<dsttype>(__VA_ARGS__);                                 \
+  } while (++i < count);                                                       \
+}
+
+#define FOLD_FN3(fn, dsttype, srctype, worktype, ...)                          \
+static MPSL_INLINE void fn(                                                    \
+  void* _pd, const void* _pl, const void* _pr, uint32_t width) noexcept {      \
+                                                                               \
+  uint32_t i = 0;                                                              \
+  uint32_t count = width / static_cast<uint32_t>(sizeof(dsttype));             \
+                                                                               \
+  dsttype* pd = static_cast<dsttype*>(_pd);                                    \
+  const srctype* pl = static_cast<const srctype*>(_pl);                        \
+  const srctype* pr = static_cast<const srctype*>(_pr);                        \
+                                                                               \
+  do {                                                                         \
+    worktype l = static_cast<worktype>(pl[i]);                                 \
+    worktype r = static_cast<worktype>(pr[i]);                                 \
+    pd[i] = static_cast<dsttype>(__VA_ARGS__);                                 \
+  } while (++i < count);                                                       \
+}
+
+#define FOLD_IMM(fn, dsttype, srctype, worktype, ...)                          \
+static MPSL_INLINE void fn(                                                    \
+  void* _pd, const void* _pl, const void* _pr, uint32_t width) noexcept {      \
+                                                                               \
+  uint32_t i = 0;                                                              \
+  uint32_t count = width / static_cast<uint32_t>(sizeof(dsttype));             \
+                                                                               \
+  dsttype* pd = static_cast<dsttype*>(_pd);                                    \
+  const srctype* pl = static_cast<const srctype*>(_pl);                        \
+  uint32_t r = static_cast<const uint32_t*>(_pr)[0];                           \
+                                                                               \
+  do {                                                                         \
+    worktype l = static_cast<worktype>(pl[i]);                                 \
+    pd[i] = static_cast<dsttype>(__VA_ARGS__);                                 \
+  } while (++i < count);                                                       \
 }
 
 FOLD_FN2(pcopy32   , uint32_t, uint32_t, uint32_t, s)
@@ -337,6 +343,10 @@ FOLD_FN3(pcmpgtd   , int32_t , int32_t , int32_t , l >  r ? -1 : 0)
 FOLD_FN3(pcmpgeb   , int8_t  , int8_t  , int32_t , l >= r ? -1 : 0)
 FOLD_FN3(pcmpgew   , int16_t , int16_t , int32_t , l >= r ? -1 : 0)
 FOLD_FN3(pcmpged   , int32_t , int32_t , int32_t , l >= r ? -1 : 0)
+
+#undef FOLD_IMM
+#undef FOLD_FN3
+#undef FOLD_FN2
 
 static Error foldInternal(uint32_t instCode, uint32_t width, Value& dVal, const Value& sVal) noexcept {
   // Instruction code without SIMD flags.

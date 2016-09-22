@@ -21,7 +21,8 @@ namespace mpsl {
 // [mpsl::AstToIR]
 // ============================================================================
 
-struct AstToIRArgs {
+class AstToIRArgs {
+public:
   MPSL_INLINE AstToIRArgs(bool dependsOnResult = true) noexcept {
     this->result.reset();
     this->dependsOnResult = dependsOnResult;
@@ -36,10 +37,15 @@ struct AstToIRArgs {
 };
 
 //! \internal
-struct AstToIR : public AstVisitorWithArgs<AstToIR, AstToIRArgs&> {
-  MPSL_NO_COPY(AstToIR)
+class AstToIR : public AstVisitorWithArgs<AstToIR, AstToIRArgs&> {
+public:
+  MPSL_NONCOPYABLE(AstToIR)
 
   typedef AstToIRArgs Args;
+
+  typedef Set< AstFunction* > FunctionSet;
+  typedef Map< AstSymbol*, IRPair<IRVar> > VarMap;
+  typedef Map< AstSymbol*, IRMem*        > MemMap;
 
   struct DataSlot {
     MPSL_INLINE DataSlot(uint32_t slot, int32_t offset) noexcept
@@ -83,8 +89,7 @@ struct AstToIR : public AstVisitorWithArgs<AstToIR, AstToIRArgs&> {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE IRBuilder* getIR() const noexcept { return _ir; }
-  MPSL_INLINE Allocator* getAllocator() const noexcept { return _ir->getAllocator(); }
-
+  MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _ir->getHeap(); }
   MPSL_INLINE IRBlock* getBlock() const noexcept { return _block; }
 
   MPSL_INLINE bool hasV256() const noexcept { return _hasV256; }
@@ -103,8 +108,7 @@ struct AstToIR : public AstVisitorWithArgs<AstToIR, AstToIRArgs&> {
   MPSL_NOAPI Error asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept;
 
   MPSL_NOAPI Error emitMove(IRPair<IRVar> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept;
-  MPSL_NOAPI Error emitStore(IRPair<IRObject> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept
-   ;
+  MPSL_NOAPI Error emitStore(IRPair<IRObject> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept;
   MPSL_NOAPI Error emitInst2(uint32_t instCode,
     IRPair<IRObject> o0,
     IRPair<IRObject> o1, uint32_t typeInfo) noexcept;
@@ -122,21 +126,18 @@ struct AstToIR : public AstVisitorWithArgs<AstToIR, AstToIRArgs&> {
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! IR builder.
-  IRBuilder* _ir;
-  //! A hidden return variable internally named `@ret`.
-  AstSymbol* _retPriv;
-  //! Current block.
-  IRBlock* _block;
+  IRBuilder* _ir;                        //!< IR builder.
+  IRBlock* _block;                       //!< Current block.
 
-  //! Current block level (0 if root).
-  int _blockLevel;
-  bool _hasV256;
+  int _functionLevel;                    //!< Current function level (0 if main).
+  bool _hasV256;                         //!< Use 256-bit SIMD instructions.
 
-  //! Mapping of `AstVar` to `IRPair<IRVar>`.
-  Map<AstSymbol*, IRPair<IRVar> > _varMap;
-  //! Mapping of `AstVarMemb` to `IRMem`.
-  Map<AstSymbol*, IRMem*> _memMap;
+  AstSymbol* _hiddenRet;                 //!< A hidden return variable internally named `@ret`.
+  IRPair<IRObject> _currentRet;          //!< Current return, required by \ref onReturn().
+
+  FunctionSet _nestedFunctions;          //!< Hash of all nested functions.
+  VarMap _varMap;                        //!< Mapping of `AstVar` to `IRPair<IRVar>`.
+  MemMap _memMap;                        //!< Mapping of `AstVarMemb` to `IRMem`.
 };
 
 } // mpsl namespace

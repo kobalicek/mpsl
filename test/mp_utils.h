@@ -7,7 +7,7 @@
 #ifndef _TEST_MP_UTILS_H
 #define _TEST_MP_UTILS_H
 
-#include "../mpsl/mpsl.h"
+#include "./mpsl.h"
 
 struct TestLog : public mpsl::OutputLog {
   virtual void log(const Info& info) MPSL_NOEXCEPT {

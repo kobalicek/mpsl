@@ -67,8 +67,8 @@ static const AstNodeSize mpAstNodeSize[] = {
 // [mpsl::AstBuilder - Construction / Destruction]
 // ============================================================================
 
-AstBuilder::AstBuilder(Allocator* allocator) noexcept
-  : _allocator(allocator),
+AstBuilder::AstBuilder(ZoneHeap* heap) noexcept
+  : _heap(heap),
     _globalScope(nullptr),
     _programNode(nullptr),
     _mainFunction(nullptr) {}
@@ -79,7 +79,7 @@ AstBuilder::~AstBuilder() noexcept {}
 // ============================================================================
 
 AstScope* AstBuilder::newScope(AstScope* parent, uint32_t scopeType) noexcept {
-  void* p = _allocator->alloc(sizeof(AstScope));
+  void* p = _heap->alloc(sizeof(AstScope));
   if (MPSL_UNLIKELY(p == nullptr))
     return nullptr;
   return new(p) AstScope(this, parent, scopeType);
@@ -87,12 +87,12 @@ AstScope* AstBuilder::newScope(AstScope* parent, uint32_t scopeType) noexcept {
 
 void AstBuilder::deleteScope(AstScope* scope) noexcept {
   scope->~AstScope();
-  _allocator->release(scope, sizeof(AstScope));
+  _heap->release(scope, sizeof(AstScope));
 }
 
 AstSymbol* AstBuilder::newSymbol(const StringRef& key, uint32_t hVal, uint32_t symbolType, uint32_t scopeType) noexcept {
   size_t kLen = key.getLength();
-  void* p = _allocator->alloc(sizeof(AstSymbol) + kLen + 1);
+  void* p = _heap->alloc(sizeof(AstSymbol) + kLen + 1);
 
   if (MPSL_UNLIKELY(p == nullptr))
     return nullptr;
@@ -107,7 +107,7 @@ AstSymbol* AstBuilder::newSymbol(const StringRef& key, uint32_t hVal, uint32_t s
 void AstBuilder::deleteSymbol(AstSymbol* symbol) noexcept {
   size_t kLen = symbol->getLength();
   symbol->~AstSymbol();
-  _allocator->release(symbol, sizeof(AstSymbol) + kLen + 1);
+  _heap->release(symbol, sizeof(AstSymbol) + kLen + 1);
 }
 
 void AstBuilder::deleteNode(AstNode* node) noexcept {
@@ -116,8 +116,7 @@ void AstBuilder::deleteNode(AstNode* node) noexcept {
 
   for (uint32_t i = 0; i < length; i++) {
     AstNode* child = children[i];
-    if (child != nullptr)
-      deleteNode(child);
+    if (child) deleteNode(child);
   }
 
   uint32_t nodeType = node->getNodeType();
@@ -144,7 +143,7 @@ void AstBuilder::deleteNode(AstNode* node) noexcept {
     case AstNode::kTypeCall     : static_cast<AstCall*     >(node)->destroy(this); break;
   }
 
-  _allocator->release(node, mpAstNodeSize[nodeType].getNodeSize());
+  _heap->release(node, mpAstNodeSize[nodeType].getNodeSize());
 }
 
 // ============================================================================
@@ -292,7 +291,7 @@ Error AstBuilder::addBuiltInObject(uint32_t slot, const Layout* layout, AstSymbo
   uint32_t hVal = HashUtils::hashString(name);
   AstSymbol* symbol = scope->getSymbol(name, hVal);
 
-  if (symbol != nullptr) {
+  if (symbol) {
     *collidedSymbol = symbol;
     return MPSL_TRACE_ERROR(kErrorSymbolCollision);
   }
@@ -324,7 +323,7 @@ Error AstBuilder::addBuiltInObject(uint32_t slot, const Layout* layout, AstSymbo
       hVal = HashUtils::hashString(name);
 
       symbol = scope->getSymbol(name, hVal);
-      if (symbol != nullptr) {
+      if (symbol) {
         *collidedSymbol = symbol;
         return MPSL_TRACE_ERROR(kErrorSymbolCollision);
       }
@@ -358,7 +357,8 @@ Error AstBuilder::dump(StringBuilder& sb) noexcept {
 // [mpsl::AstScope - Construction / Destruction]
 // ============================================================================
 
-struct AstScopeReleaseHandler {
+class AstScopeReleaseHandler {
+public:
   MPSL_INLINE AstScopeReleaseHandler(AstBuilder* ast) noexcept : _ast(ast) {}
   MPSL_INLINE void release(AstSymbol* node) noexcept { _ast->deleteSymbol(node); }
 
@@ -368,7 +368,7 @@ struct AstScopeReleaseHandler {
 AstScope::AstScope(AstBuilder* ast, AstScope* parent, uint32_t scopeType) noexcept
   : _ast(ast),
     _parent(parent),
-    _symbols(ast->getAllocator()),
+    _symbols(ast->getHeap()),
     _scopeType(static_cast<uint8_t>(scopeType)) {}
 
 AstScope::~AstScope() noexcept {
@@ -388,9 +388,7 @@ AstSymbol* AstScope::resolveSymbol(const StringRef& name, uint32_t hVal, AstScop
     symbol = scope->_symbols.get(name, hVal);
   } while (symbol == nullptr && (scope = scope->getParent()) != nullptr);
 
-  if (scopeOut != nullptr)
-    *scopeOut = scope;
-
+  if (scopeOut) *scopeOut = scope;
   return symbol;
 }
 
@@ -408,16 +406,12 @@ AstNode* AstNode::replaceNode(AstNode* refNode, AstNode* node) noexcept {
 
   for (uint32_t i = 0; i < length; i++) {
     AstNode* child = children[i];
-
-    if (child != refNode)
-      continue;
+    if (child != refNode) continue;
 
     children[i] = node;
     refNode->_parent = nullptr;
 
-    if (node != nullptr)
-      node->_parent = this;
-
+    if (node) node->_parent = this;
     return refNode;
   }
 
@@ -428,11 +422,8 @@ AstNode* AstNode::replaceAt(uint32_t index, AstNode* node) noexcept {
   AstNode* child = getAt(index);
   _children[index] = node;
 
-  if (child != nullptr)
-    child->_parent = nullptr;
-
-  if (node != nullptr)
-    node->_parent = this;
+  if (child) child->_parent = nullptr;
+  if (node) node->_parent = this;
 
   return child;
 }
@@ -446,9 +437,7 @@ AstNode* AstNode::injectNode(AstNode* refNode, AstUnary* node) noexcept {
 
   for (uint32_t i = 0; i < length; i++) {
     AstNode* child = children[i];
-
-    if (child != refNode)
-      continue;
+    if (child != refNode) continue;
 
     children[i] = node;
     refNode->_parent = node;
@@ -503,10 +492,10 @@ static Error mpBlockNodeGrow(AstBlock* self) noexcept {
   else
     newCapacity += 256;
 
-  Allocator* allocator = self->getAst()->getAllocator();
+  ZoneHeap* heap = self->getAst()->getHeap();
 
   AstNode** oldArray = self->getChildren();
-  AstNode** newArray = static_cast<AstNode**>(allocator->alloc(newCapacity * sizeof(AstNode), newCapacity));
+  AstNode** newArray = static_cast<AstNode**>(heap->alloc(newCapacity * sizeof(AstNode), newCapacity));
 
   MPSL_NULLCHECK(newArray);
   newCapacity /= sizeof(AstNode*);
@@ -516,7 +505,7 @@ static Error mpBlockNodeGrow(AstBlock* self) noexcept {
 
   if (oldCapacity != 0) {
     ::memcpy(newArray, oldArray, length * sizeof(AstNode*));
-    allocator->release(oldArray, oldCapacity * sizeof(AstNode*));
+    heap->release(oldArray, oldCapacity * sizeof(AstNode*));
   }
 
   return kErrorOk;

@@ -47,7 +47,7 @@ Error AstAnalysis::onFunction(AstFunction* node) noexcept {
 
   // Link to the `_mainFunction` if this is `main()`.
   if (isMain) {
-    if (_ast->_mainFunction != nullptr)
+    if (_ast->_mainFunction)
       return MPSL_TRACE_ERROR(kErrorInvalidState);
     _ast->_mainFunction = node;
   }
@@ -61,7 +61,7 @@ Error AstAnalysis::onFunction(AstFunction* node) noexcept {
   _unreachable = false;
   MPSL_PROPAGATE(err);
 
-  if (retSymb != nullptr && !didReturn)
+  if (retSymb && !didReturn)
     return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
       "Function '%s()' has to return '%{Type}'.", node->getFunc()->getName(), retSymb->getTypeInfo());
 
@@ -161,7 +161,7 @@ Error AstAnalysis::onReturn(AstReturn* node) noexcept {
   }
 
   AstNode* child = node->getChild();
-  if (child != nullptr) {
+  if (child) {
     MPSL_PROPAGATE(onNode(child));
     child = node->getChild();
     srcType = child->getTypeInfo() & kTypeIdMask;
@@ -379,7 +379,7 @@ Error AstAnalysis::onBinaryOp(AstBinaryOp* node) noexcept {
       if (op.isFloatOnly() && (lTypeId != rTypeId || !TypeInfo::isFloatId(lTypeId))) {
         // This kind of conversion should never happen on assignment. This
         // should remain a runtime check to prevent undefined behavior in
-        // case of a bug in the `OpInfo table.
+        // case of a bug in the `OpInfo` table.
         if (op.isAssignment())
           return MPSL_TRACE_ERROR(kErrorInvalidState);
 

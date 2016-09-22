@@ -74,7 +74,7 @@ enum TokenChar {
   kTokenCharSingleCharTokenEnd = kTokenCharRPa
 };
 
-#define C(_Id_) kTokenChar##_Id_
+#define C(id) kTokenChar##id
 static const uint8_t mpCharClass[] = {
   C(Inv), C(Inv), C(Inv), C(Inv), C(Inv), C(Inv), C(Inv), C(Inv), // 000-007 ........ | All invalid.
   C(Inv), C(Spc), C(Spc), C(Spc), C(Spc), C(Spc), C(Inv), C(Inv), // 008-015 .     .. | Spaces: 0x9-0xD.

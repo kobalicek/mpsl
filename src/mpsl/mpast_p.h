@@ -9,7 +9,6 @@
 #define _MPSL_MPAST_P_H
 
 // [Dependencies - MPSL]
-#include "./mpallocator_p.h"
 #include "./mphash_p.h"
 #include "./mplang_p.h"
 
@@ -22,35 +21,35 @@ namespace mpsl {
 // [Forward Declarations]
 // ============================================================================
 
-struct AstBuilder;
-struct AstScope;
-struct AstSymbol;
+class AstBuilder;
+class AstScope;
+class AstSymbol;
 
-struct AstNode;
-struct AstFunction;
-struct AstProgram;
-struct AstUnary;
+class AstNode;
+class AstFunction;
+class AstProgram;
+class AstUnary;
 
 // ============================================================================
 // [mpsl::AstBuilder]
 // ============================================================================
 
 //! \internal
-struct AstBuilder {
-  MPSL_NO_COPY(AstBuilder)
+class AstBuilder {
+  MPSL_NONCOPYABLE(AstBuilder)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  AstBuilder(Allocator* allocator) noexcept;
+  AstBuilder(ZoneHeap* heap) noexcept;
   ~AstBuilder() noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE Allocator* getAllocator() const noexcept { return _allocator; }
+  MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _heap; }
 
   MPSL_INLINE AstScope* getGlobalScope() const noexcept { return _globalScope; }
   MPSL_INLINE AstProgram* getProgramNode() const noexcept { return _programNode; }
@@ -67,7 +66,7 @@ struct AstBuilder {
   void deleteSymbol(AstSymbol* symbol) noexcept;
 
 #define MPSL_ALLOC_AST_OBJECT(_Size_) \
-  void* obj = _allocator->alloc(_Size_); \
+  void* obj = _heap->alloc(_Size_); \
   if (MPSL_UNLIKELY(obj == nullptr)) return nullptr
 
   template<typename T>
@@ -93,7 +92,12 @@ struct AstBuilder {
   void deleteNode(AstNode* node) noexcept;
 
   MPSL_INLINE char* newString(const char* s, size_t sLen) noexcept {
-    return _allocator->allocString(s, sLen);
+    char* p = static_cast<char*>(_heap->alloc(sLen + 1));
+    if (MPSL_UNLIKELY(!p)) return p;
+
+    ::memcpy(p, s, sLen);
+    p[sLen] = '\0';
+    return p;
   }
 
   // --------------------------------------------------------------------------
@@ -116,43 +120,28 @@ struct AstBuilder {
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! Allocator.
-  Allocator* _allocator;
-  //! String builder to build possible output messages.
-  StringBuilder _sb;
-
-  //! Global scope.
-  AstScope* _globalScope;
-  //! Root node.
-  AstProgram* _programNode;
-
-  //! Program `main()` node.
-  AstFunction* _mainFunction;
+  ZoneHeap* _heap;                       //!< Heap.
+  StringBuilder _sb;                     //!< String builder to build possible output messages.
+  AstScope* _globalScope;                //!< Global scope.
+  AstProgram* _programNode;              //!< Root node.
+  AstFunction* _mainFunction;            //!< Program `main()` node.
 };
 
 // ============================================================================
 // [mpsl::AstSymbol]
 // ============================================================================
 
-struct AstSymbol : public HashNode {
-  MPSL_NO_COPY(AstSymbol)
-
-  // --------------------------------------------------------------------------
-  // [Enums]
-  // --------------------------------------------------------------------------
+class AstSymbol : public HashNode {
+public:
+  MPSL_NONCOPYABLE(AstSymbol)
 
   //! Symbol type.
   enum Type {
-    //! Not used.
-    kTypeNone = 0,
-    //! The symbol is a type-name.
-    kTypeTypeName,
-    //! The symbol is an intrinsic (converted to an operator internally).
-    kTypeIntrinsic,
-    //! The symbol is a variable.
-    kTypeVariable,
-    //! The symbol is a function.
-    kTypeFunction
+    kTypeNone       = 0,                 //!< Not used.
+    kTypeTypeName   = 1,                 //!< Type-name.
+    kTypeIntrinsic  = 2,                 //!< Intrinsic (converted to an operator internally).
+    kTypeVariable   = 3,                 //!< Variable.
+    kTypeFunction   = 4                  //!< Function.
   };
 
   //! Symbol flags.
@@ -210,7 +199,7 @@ struct AstSymbol : public HashNode {
 
   //! Check if the symbol has associated node with it.
   MPSL_INLINE bool hasNode() const noexcept { return _node != nullptr; }
-  //! Get node associated with the symbol (can be `nullptr` for built-ins).
+  //! Get node associated with the symbol (can be null for built-ins).
   MPSL_INLINE AstNode* getNode() const noexcept { return _node; }
   //! Associate node with the symbol (basically the node that declares it).
   MPSL_INLINE void setNode(AstNode* node) noexcept { _node = node; }
@@ -288,59 +277,38 @@ struct AstSymbol : public HashNode {
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! Symbol name (key).
-  const char* _name;
-  //! Symbol name length.
-  uint32_t _length;
+  const char* _name;                     //!< Symbol name (key).
+  uint32_t _length;                      //!< Symbol name length.
 
-  //! Type of the symbol, see \ref AstSymbolType.
-  uint8_t _symbolType;
-  //! Symbol flags, see \ref AstSymbolFlags.
-  uint8_t _symbolFlags;
-  //! Operator type (if the symbol is \ref kTypeIntrinsic).
-  uint8_t _opType;
-  //! Data slot (only if the symbol is mapped to a data object).
-  uint8_t _dataSlot;
+  uint8_t _symbolType;                   //!< Type of the symbol, see \ref Type.
+  uint8_t _symbolFlags;                  //!< Symbol flags, see \ref Flags.
+  uint8_t _opType;                       //!< Operator type (if the symbol is \ref kTypeIntrinsic).
+  uint8_t _dataSlot;                     //!< Data slot (only if the symbol is mapped to a data object).
 
-  //! TypeInfo of the symbol.
-  uint32_t _typeInfo;
-  //! Data offset (only if the symbol is mapped to a data object).
-  int32_t _dataOffset;
+  uint32_t _typeInfo;                    //!< TypeInfo of the symbol.
+  int32_t _dataOffset;                   //!< Data offset (only if the symbol is mapped to a data object).
 
-  //! Node where the symbol is defined (NULL if it's built-in or was defined
-  //! before program parsing). This is mostly used by error reporting.
-  AstNode* _node;
-
-  //! Link to the layout, only valid if the symbol is object.
-  const Layout* _layout;
-
-  //! The current value of the symbol (in case the symbol is immediate).
-  Value _value;
+  AstNode* _node;                        //!< Node where the symbol is defined (nullptr if built-in)
+  const Layout* _layout;                 //!< Link to the layout, only valid if the symbol is object.
+  Value _value;                          //!< The current value of the symbol (in case the symbol is immediate).
 };
 
 // ============================================================================
 // [mpsl::AstScope]
 // ============================================================================
 
-struct AstScope {
-  MPSL_NO_COPY(AstScope)
+class AstScope {
+public:
+  MPSL_NONCOPYABLE(AstScope)
 
   // --------------------------------------------------------------------------
   // [Enums]
   // --------------------------------------------------------------------------
 
   enum Type {
-    //! Global scope.
-    kTypeGlobal = 0,
-
-    //! Local scope.
-    kTypeLocal = 1,
-
-    //! Nested scope.
-    //!
-    //! Always statically allocated and merged with the local scope before the
-    //! scope is destroyed.
-    kTypeNested = 2
+    kTypeGlobal = 0,                     //!< Global scope.
+    kTypeLocal  = 1,                     //!< Local scope.
+    kTypeNested = 2                      //!< Nested scope (always statically allocated).
   };
 
   // --------------------------------------------------------------------------
@@ -393,46 +361,19 @@ struct AstScope {
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! AST builder.
-  AstBuilder* _ast;
-  //! Parent scope.
-  AstScope* _parent;
-
-  //! Symbols defined in this scope.
-  Hash<StringRef, AstSymbol> _symbols;
-
-  //! Scope type, see \ref AstScope::Type.
-  uint32_t _scopeType;
+  AstBuilder* _ast;                      //!< AST builder.
+  AstScope* _parent;                     //!< Parent scope.
+  Hash<StringRef, AstSymbol> _symbols;   //!< Symbols defined within this scope.
+  uint32_t _scopeType;                   //!< Scope type, see \ref Type.
 };
 
 // ============================================================================
 // [mpsl::AstNode]
 // ============================================================================
 
-#define MPSL_AST_CHILD(_Index_, _Type_, _Name_, _Memb_) \
-  MPSL_INLINE bool has##_Name_() const noexcept { return _Memb_ != nullptr; } \
-  MPSL_INLINE _Type_* get##_Name_() const noexcept { return _Memb_; } \
-  \
-  MPSL_INLINE _Type_* set##_Name_(_Type_* node) noexcept { \
-    return static_cast<_Type_*>(replaceAt(_Index_, node)); \
-  } \
-  \
-  MPSL_INLINE _Type_* unlink##_Name_() noexcept { \
-    _Type_* node = _Memb_; \
-    \
-    MPSL_ASSERT(node != nullptr); \
-    MPSL_ASSERT(node->_parent == this); \
-    \
-    node->_parent = nullptr; \
-    _Memb_ = nullptr; \
-    \
-    return node; \
-  } \
-  \
-  _Type_* _Memb_
-
-struct AstNode {
-  MPSL_NO_COPY(AstNode)
+class AstNode {
+public:
+  MPSL_NONCOPYABLE(AstNode)
 
   // --------------------------------------------------------------------------
   // [Enums]
@@ -440,50 +381,31 @@ struct AstNode {
 
   //! AST node type.
   enum Type {
-    //! Not used.
-    kTypeNone = 0,
+    kTypeNone = 0,                       //!< Not used.
 
-    //! Node is `AstProgram`.
-    kTypeProgram,
-    //! Node is `AstFunction`.
-    kTypeFunction,
-    //! Node is `AstBlock`.
-    kTypeBlock,
+    kTypeProgram,                        //!< Node is `AstProgram`.
+    kTypeFunction,                       //!< Node is `AstFunction`.
+    kTypeBlock,                          //!< Node is `AstBlock`.
 
-    //! Node is `AstBranch`.
-    kTypeBranch,
-    //! Node is `AstCondition`.
-    kTypeCondition,
+    kTypeBranch,                         //!< Node is `AstBranch`.
+    kTypeCondition,                      //!< Node is `AstCondition`.
 
-    //! Node is `AstLoop` describing `for () { ... }`.
-    kTypeFor,
-    //! Node is `AstLoop` describing `while () { ... }`.
-    kTypeWhile,
-    //! Node is `AstLoop` describing `do { ... } while ()`.
-    kTypeDoWhile,
+    kTypeFor,                            //!< Node is `AstLoop` describing `for () { ... }`.
+    kTypeWhile,                          //!< Node is `AstLoop` describing `while () { ... }`.
+    kTypeDoWhile,                        //!< Node is `AstLoop` describing `do { ... } while ()`.
 
-    //! Node is `AstBreak`.
-    kTypeBreak,
-    //! Node is `AstContinue`.
-    kTypeContinue,
-    //! Node is `AstReturn`.
-    kTypeReturn,
+    kTypeBreak,                          //!< Node is `AstBreak`.
+    kTypeContinue,                       //!< Node is `AstContinue`.
+    kTypeReturn,                         //!< Node is `AstReturn`.
 
-    //! Node is `AstVarDecl`.
-    kTypeVarDecl,
-    //! Node is `AstVarMemb`.
-    kTypeVarMemb,
-    //! Node is `AstVar`.
-    kTypeVar,
-    //! Node is `AstImm`.
-    kTypeImm,
+    kTypeVarDecl,                        //!< Node is `AstVarDecl`.
+    kTypeVarMemb,                        //!< Node is `AstVarMemb`.
+    kTypeVar,                            //!< Node is `AstVar`.
+    kTypeImm,                            //!< Node is `AstImm`.
 
-    //! Node is `AstUnaryOp`.
-    kTypeUnaryOp,
-    //! Node is `AstBinaryOp`.
-    kTypeBinaryOp,
-    //! Node is `AstCall`.
-    kTypeCall
+    kTypeUnaryOp,                        //!< Node is `AstUnaryOp`.
+    kTypeBinaryOp,                       //!< Node is `AstBinaryOp`.
+    kTypeCall                            //!< Node is `AstCall`.
   };
 
   //! AST node flags.
@@ -608,42 +530,49 @@ struct AstNode {
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! AST builder.
-  AstBuilder* _ast;
-  //! Parent node.
-  AstNode* _parent;
-  //! Child nodes.
-  AstNode** _children;
+  AstBuilder* _ast;                      //!< AST builder.
+  AstNode* _parent;                      //!< Parent node.
+  AstNode** _children;                   //!< Child nodes.
 
-  //! Node type, see `AstNode::Type`.
-  uint8_t _nodeType;
-  //! Node flags, see `AstNode::Flags`.
-  uint8_t _nodeFlags;
-  //! Operator, see `OpType`.
-  uint8_t _op;
-  //! \internal
-  uint8_t _reserved;
+  uint8_t _nodeType;                     //!< Node type, see \ref Type.
+  uint8_t _nodeFlags;                    //!< Node flags, see \ref Flags.
+  uint8_t _op;                           //!< Operator, see `OpType`.
+  uint8_t _reserved;                     //!< Reserved (padding).
 
-  //! Position (in characters) to the beginning of the program.
-  uint32_t _position;
-
-  //! Type-info of the node (mostly the result type).
-  //!
-  //! Initially set to `kTypeVoid`. It remains void only if there is no
-  //! result after the node is evaluated. The type-info is either parsed
-  //! (variables/numbers/cast) or deduced by using semantic analysis.
-  uint32_t _typeInfo;
-
-  //! Count of child-nodes.
-  uint32_t _length;
+  uint32_t _position;                    //!< Position (in chars) from the beginning of the source.
+  uint32_t _typeInfo;                    //!< Type-info of the node (initially kTypeVoid).
+  uint32_t _length;                      //!< Count of child-nodes.
 };
+
+#define MPSL_AST_CHILD(_Index_, _Type_, _Name_, _Memb_)                       \
+  MPSL_INLINE bool has##_Name_() const noexcept { return _Memb_ != nullptr; } \
+  MPSL_INLINE _Type_* get##_Name_() const noexcept { return _Memb_; }         \
+                                                                              \
+  MPSL_INLINE _Type_* set##_Name_(_Type_* node) noexcept {                    \
+    return static_cast<_Type_*>(replaceAt(_Index_, node));                    \
+  }                                                                           \
+                                                                              \
+  MPSL_INLINE _Type_* unlink##_Name_() noexcept {                             \
+    _Type_* node = _Memb_;                                                    \
+                                                                              \
+    MPSL_ASSERT(node != nullptr);                                             \
+    MPSL_ASSERT(node->_parent == this);                                       \
+                                                                              \
+    node->_parent = nullptr;                                                  \
+    _Memb_ = nullptr;                                                         \
+                                                                              \
+    return node;                                                              \
+  }                                                                           \
+                                                                              \
+  _Type_* _Memb_
 
 // ============================================================================
 // [mpsl::AstBlock]
 // ============================================================================
 
-struct AstBlock : public AstNode {
-  MPSL_NO_COPY(AstBlock)
+class AstBlock : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstBlock)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -722,8 +651,9 @@ struct AstBlock : public AstNode {
 // [mpsl::AstUnary]
 // ============================================================================
 
-struct AstUnary : public AstNode {
-  MPSL_NO_COPY(AstUnary)
+class AstUnary : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstUnary)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -750,8 +680,9 @@ struct AstUnary : public AstNode {
 // [mpsl::AstBinary]
 // ============================================================================
 
-struct AstBinary : public AstNode {
-  MPSL_NO_COPY(AstBinary)
+class AstBinary : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstBinary)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -780,8 +711,9 @@ struct AstBinary : public AstNode {
 // [mpsl::AstProgram]
 // ============================================================================
 
-struct AstProgram : public AstBlock {
-  MPSL_NO_COPY(AstProgram)
+class AstProgram : public AstBlock {
+public:
+  MPSL_NONCOPYABLE(AstProgram)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -795,8 +727,9 @@ struct AstProgram : public AstBlock {
 // [mpsl::AstFunction]
 // ============================================================================
 
-struct AstFunction : public AstNode {
-  MPSL_NO_COPY(AstFunction)
+class AstFunction : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstFunction)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -845,8 +778,9 @@ struct AstFunction : public AstNode {
 // [mpsl::AstBranch]
 // ============================================================================
 
-struct AstBranch : public AstBlock {
-  MPSL_NO_COPY(AstBranch)
+class AstBranch : public AstBlock {
+public:
+  MPSL_NONCOPYABLE(AstBranch)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -860,8 +794,9 @@ struct AstBranch : public AstBlock {
 // [mpsl::AstCondition]
 // ============================================================================
 
-struct AstCondition : public AstNode {
-  MPSL_NO_COPY(AstCondition)
+class AstCondition : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstCondition)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -893,8 +828,9 @@ struct AstCondition : public AstNode {
 // [mpsl::AstLoop]
 // ============================================================================
 
-struct AstLoop : public AstNode {
-  MPSL_NO_COPY(AstLoop)
+class AstLoop : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstLoop)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -927,8 +863,9 @@ struct AstLoop : public AstNode {
 // [mpsl::AstFlow]
 // ============================================================================
 
-struct AstFlow : public AstNode {
-  MPSL_NO_COPY(AstFlow)
+class AstFlow : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstFlow)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -948,8 +885,9 @@ struct AstFlow : public AstNode {
 // [mpsl::AstBreak]
 // ============================================================================
 
-struct AstBreak : public AstFlow {
-  MPSL_NO_COPY(AstBreak)
+class AstBreak : public AstFlow {
+public:
+  MPSL_NONCOPYABLE(AstBreak)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -963,8 +901,9 @@ struct AstBreak : public AstFlow {
 // [mpsl::AstContinue]
 // ============================================================================
 
-struct AstContinue : public AstFlow {
-  MPSL_NO_COPY(AstContinue)
+class AstContinue : public AstFlow {
+public:
+  MPSL_NONCOPYABLE(AstContinue)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -978,8 +917,9 @@ struct AstContinue : public AstFlow {
 // [mpsl::AstReturn]
 // ============================================================================
 
-struct AstReturn : public AstUnary {
-  MPSL_NO_COPY(AstReturn)
+class AstReturn : public AstUnary {
+public:
+  MPSL_NONCOPYABLE(AstReturn)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -993,8 +933,9 @@ struct AstReturn : public AstUnary {
 // [mpsl::AstVarDecl]
 // ============================================================================
 
-struct AstVarDecl : public AstUnary {
-  MPSL_NO_COPY(AstVarDecl)
+class AstVarDecl : public AstUnary {
+public:
+  MPSL_NONCOPYABLE(AstVarDecl)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1022,8 +963,9 @@ struct AstVarDecl : public AstUnary {
 // [mpsl::AstVarMemb]
 // ============================================================================
 
-struct AstVarMemb : public AstUnary {
-  MPSL_NO_COPY(AstVarMemb)
+class AstVarMemb : public AstUnary {
+public:
+  MPSL_NONCOPYABLE(AstVarMemb)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1057,8 +999,9 @@ struct AstVarMemb : public AstUnary {
 // [mpsl::AstVar]
 // ============================================================================
 
-struct AstVar : public AstNode {
-  MPSL_NO_COPY(AstVar)
+class AstVar : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstVar)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1086,8 +1029,9 @@ struct AstVar : public AstNode {
 // [mpsl::AstImm]
 // ============================================================================
 
-struct AstImm : public AstNode {
-  MPSL_NO_COPY(AstImm)
+class AstImm : public AstNode {
+public:
+  MPSL_NONCOPYABLE(AstImm)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1128,8 +1072,9 @@ struct AstImm : public AstNode {
 // [mpsl::AstUnaryOp]
 // ============================================================================
 
-struct AstUnaryOp : public AstUnary {
-  MPSL_NO_COPY(AstUnaryOp)
+class AstUnaryOp : public AstUnary {
+public:
+  MPSL_NONCOPYABLE(AstUnaryOp)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1166,8 +1111,9 @@ struct AstUnaryOp : public AstUnary {
 // [mpsl::AstBinaryOp]
 // ============================================================================
 
-struct AstBinaryOp : public AstBinary {
-  MPSL_NO_COPY(AstBinaryOp)
+class AstBinaryOp : public AstBinary {
+public:
+  MPSL_NONCOPYABLE(AstBinaryOp)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1183,8 +1129,9 @@ struct AstBinaryOp : public AstBinary {
 // [mpsl::AstCall]
 // ============================================================================
 
-struct AstCall : public AstBlock {
-  MPSL_NO_COPY(AstCall)
+class AstCall : public AstBlock {
+public:
+  MPSL_NONCOPYABLE(AstCall)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1213,8 +1160,9 @@ struct AstCall : public AstBlock {
 // ============================================================================
 
 template<typename Impl>
-struct AstVisitor {
-  MPSL_NO_COPY(AstVisitor<Impl>)
+class AstVisitor {
+public:
+  MPSL_NONCOPYABLE(AstVisitor<Impl>)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1271,8 +1219,9 @@ struct AstVisitor {
 // ============================================================================
 
 template<typename Impl, typename Args>
-struct AstVisitorWithArgs {
-  MPSL_NO_COPY(AstVisitorWithArgs<Impl, Args>)
+class AstVisitorWithArgs {
+public:
+  MPSL_NONCOPYABLE(AstVisitorWithArgs<Impl, Args>)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -1329,7 +1278,7 @@ struct AstVisitorWithArgs {
 // ============================================================================
 
 struct AstDump : public AstVisitor<AstDump> {
-  MPSL_NO_COPY(AstDump)
+  MPSL_NONCOPYABLE(AstDump)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]

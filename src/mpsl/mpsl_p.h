@@ -43,7 +43,7 @@ namespace mpsl {
 
 // ============================================================================
 // [MPSL_ASSERT]
-// ============================================================================
+// // ============================================================================
 
 //! \internal
 //! \def MPSL_ASSERT
@@ -117,6 +117,10 @@ using asmjit::AutoLock;
 using asmjit::StringBuilder;
 using asmjit::StringBuilderTmp;
 
+using asmjit::Zone;
+using asmjit::ZoneHeap;
+using asmjit::ZoneVector;
+
 // ============================================================================
 // [mpsl::Miscellaneous]
 // ============================================================================
@@ -140,7 +144,7 @@ static const uint64_t kB64_1 = MPSL_UINT64_C(0xFFFFFFFFFFFFFFFF);
 //! Compilation options MPSL uses internally.
 enum InternalOptions {
   //! Set if `OutputLog` is present. MPSL then checks only this flag to use it.
-  kInternalOptionLog = 0x00010000
+  kInternalOptionLog = 0x10000000
 };
 
 // ============================================================================
@@ -167,8 +171,9 @@ MPSL_NOAPI Error mpTraceError(Error error) noexcept;
 // [mpsl::RuntimeData]
 // ============================================================================
 
-struct RuntimeData {
-  MPSL_NO_COPY(RuntimeData)
+class RuntimeData {
+public:
+  MPSL_NONCOPYABLE(RuntimeData)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -200,10 +205,8 @@ struct RuntimeData {
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! Reference count.
-  uintptr_t _refCount;
-  //! JIT runtime (AsmJit).
-  asmjit::JitRuntime _runtime;
+  uintptr_t _refCount;                   //!< Reference count.
+  asmjit::JitRuntime _runtime;           //!< JIT runtime.
 };
 
 // ============================================================================

@@ -8,7 +8,7 @@
 #if defined(MPSL_API_SCOPE)
 # undef MPSL_API_SCOPE
 #else
-# error "MPSL - Api-Scope not active, forgot to include apibegin.h?"
+# error "MPSL - api-scope not active, forgot to include mpsl_apibegin.h?"
 #endif // MPSL_API_SCOPE
 
 // ============================================================================
@@ -44,33 +44,22 @@
 
 #if defined(_MSC_VER)
 # pragma warning(pop)
-
-# if defined(MPSL_UNDEF_VSNPRINTF)
-#  undef vsnprintf
-#  undef MPSL_UNDEF_VSNPRINTF
-# endif // MPSL_UNDEF_VSNPRINTF
-
-# if defined(MPSL_UNDEF_SNPRINTF)
-#  undef snprintf
-#  undef MPSL_UNDEF_SNPRINTF
-# endif // MPSL_UNDEF_SNPRINTF
-
+# if _MSC_VER < 1900
+#  if defined(MPSL_UNDEF_VSNPRINTF)
+#   undef vsnprintf
+#   undef MPSL_UNDEF_VSNPRINTF
+#  endif // MPSL_UNDEF_VSNPRINTF
+#  if defined(MPSL_UNDEF_SNPRINTF)
+#   undef snprintf
+#   undef MPSL_UNDEF_SNPRINTF
+#  endif // MPSL_UNDEF_SNPRINTF
+# endif
 #endif // _MSC_VER
 
 // ============================================================================
-// [CLang]
+// [Clang]
 // ============================================================================
 
 #if defined(__clang__)
 # pragma clang diagnostic pop
 #endif // __clang__
-
-// ============================================================================
-// [GCC]
-// ============================================================================
-
-#if defined(__GNUC__) && !defined(__clang__)
-# if __GNUC__ >= 4 && !defined(__MINGW32__)
-#  pragma GCC visibility pop
-# endif // GCC 4+
-#endif // __GNUC__

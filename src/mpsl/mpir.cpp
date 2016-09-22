@@ -18,12 +18,33 @@
 namespace mpsl {
 
 // ============================================================================
+// [mpsl::IRBlock - Utilities]
+// ============================================================================
+
+void IRBlock::_fixupAfterNeutering() noexcept {
+  size_t srcIndex = 0;
+  size_t dstIndex = 0;
+
+  IRInst** data = _body.getData();
+  size_t len = static_cast<uint32_t>(_body.getLength());
+
+  while (srcIndex < len) {
+    IRInst* inst = data[srcIndex++];
+    if (!inst) continue;
+    data[dstIndex++] = inst;
+  }
+
+  _body.truncate(dstIndex);
+  _neutered = false;
+}
+
+// ============================================================================
 // [mpsl::IRBuilder - Construction / Destruction]
 // ============================================================================
 
-IRBuilder::IRBuilder(Allocator* allocator, uint32_t numSlots) noexcept
-  : _allocator(allocator),
-    _mainBlock(nullptr),
+IRBuilder::IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept
+  : _heap(heap),
+    _entryBlock(nullptr),
     _blockFirst(nullptr),
     _blockLast(nullptr),
     _numSlots(numSlots),
@@ -106,7 +127,7 @@ IRBlock* IRBuilder::newBlock() noexcept {
   block->_id = ++_blockIdGen;
 
   // Add to the `_blockList`.
-  if (_blockLast != nullptr) {
+  if (_blockLast) {
     MPSL_ASSERT(_blockFirst != nullptr);
     block->_prevBlock = _blockLast;
     _blockLast->_nextBlock = block;
@@ -117,6 +138,18 @@ IRBlock* IRBuilder::newBlock() noexcept {
 
   _blockLast = block;
   return block;
+}
+
+void IRBuilder::deleteInst(IRInst* inst) noexcept {
+  IRObject** opArray = inst->getOpArray();
+  uint32_t count = inst->getOpCount();
+
+  for (uint32_t i = 0; i < count; i++) {
+    IRObject* op = opArray[i];
+    op->_usageCount--;
+  }
+
+  _heap->release(inst, sizeof(IRInst));
 }
 
 void IRBuilder::deleteObject(IRObject* obj) noexcept {
@@ -135,19 +168,18 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
 
     case IRObject::kTypeBlock: {
       IRBlock* block = static_cast<IRBlock*>(obj);
-      IRInst* inst = block->getFirstChild();
+      IRBody& body = block->getBody();
 
-      while (inst != nullptr) {
-        IRInst* next = inst->getNext();
-        deleteObject(inst);
-        inst = next;
+      for (size_t i = 0, len = body.getLength(); i < len; i++) {
+        IRInst* inst = body[i];
+        if (inst) deleteInst(inst);
       }
 
       // Delete from `_blockList`.
       IRBlock* prev = block->_prevBlock;
       IRBlock* next = block->_nextBlock;
 
-      if (prev != nullptr) {
+      if (prev) {
         MPSL_ASSERT(block != _blockFirst);
         prev->_nextBlock = next;
       }
@@ -156,7 +188,7 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
         _blockFirst = next;
       }
 
-      if (next != nullptr) {
+      if (next) {
         MPSL_ASSERT(block != _blockLast);
         next->_prevBlock = prev;
       }
@@ -169,40 +201,25 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
       break;
     }
 
-    case IRObject::kTypeInst: {
-      IRInst* inst = static_cast<IRInst*>(obj);
-
-      IRObject** opArray = inst->getOpArray();
-      uint32_t count = inst->getOpCount();
-
-      for (uint32_t i = 0; i < count; i++) {
-        IRObject* op = opArray[i];
-        op->_usageCount--;
-      }
-
-      objectSize = sizeof(IRInst);
-      break;
-    }
-
     default:
       MPSL_ASSERT(!"Reached");
   }
 
-  _allocator->release(obj, objectSize);
+  _heap->release(obj, objectSize);
 }
 
 // ============================================================================
 // [mpsl::IRBuilder - Init]
 // ============================================================================
 
-Error IRBuilder::initMainBlock() noexcept {
-  MPSL_ASSERT(_mainBlock == nullptr);
+Error IRBuilder::initEntryBlock() noexcept {
+  MPSL_ASSERT(_entryBlock == nullptr);
 
-  _mainBlock = newBlock();
-  MPSL_NULLCHECK(_mainBlock);
+  _entryBlock = newBlock();
+  MPSL_NULLCHECK(_entryBlock);
 
-  _mainBlock->_blockData._blockType = kIRBlockEntry;
-  _mainBlock->_usageCount = 1;
+  _entryBlock->_blockData._blockType = kIRBlockEntry;
+  _entryBlock->_usageCount = 1;
 
   return kErrorOk;
 }
@@ -214,25 +231,19 @@ Error IRBuilder::initMainBlock() noexcept {
 Error IRBuilder::emitInst(IRBlock* block, uint32_t instCode, IRObject* o0) noexcept {
   IRInst* node = newInst(instCode, o0);
   MPSL_NULLCHECK(node);
-
-  block->append(node);
-  return kErrorOk;
+  return block->append(node);
 }
 
 Error IRBuilder::emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObject* o1) noexcept {
   IRInst* node = newInst(instCode, o0, o1);
   MPSL_NULLCHECK(node);
-
-  block->append(node);
-  return kErrorOk;
+  return block->append(node);
 }
 
 Error IRBuilder::emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObject* o1, IRObject* o2) noexcept {
   IRInst* node = newInst(instCode, o0, o1, o2);
   MPSL_NULLCHECK(node);
-
-  block->append(node);
-  return kErrorOk;
+  return block->append(node);
 }
 
 Error IRBuilder::emitMove(IRBlock* block, IRVar* dst, IRVar* src) noexcept {
@@ -276,11 +287,13 @@ Error IRBuilder::emitFetch(IRBlock* block, IRVar* dst, IRObject* src) noexcept {
 MPSL_NOAPI Error IRBuilder::dump(StringBuilder& sb) noexcept {
   IRBlock* block = _blockFirst;
 
-  while (block != nullptr) {
+  while (block) {
     sb.appendFormat(".B%u\n", block->getId());
 
-    IRInst* inst = block->getFirstChild();
-    while (inst != nullptr) {
+    const IRBody& body = block->getBody();
+    for (size_t i = 0, len = body.getLength(); i < len; i++) {
+      IRInst* inst = body[i];
+
       uint32_t code = inst->getInstCode() & kInstCodeMask;
       uint32_t vec = inst->getInstCode() & kInstVecMask;
 
@@ -290,12 +303,12 @@ MPSL_NOAPI Error IRBuilder::dump(StringBuilder& sb) noexcept {
       if (vec == kInstVec256) sb.appendString("@256");
 
       IRObject** opArray = inst->getOpArray();
-      uint32_t i, count = inst->getOpCount();
+      size_t opIndex, count = inst->getOpCount();
 
-      for (i = 0; i < count; i++) {
-        IRObject* op = opArray[i];
+      for (opIndex = 0; opIndex < count; opIndex++) {
+        IRObject* op = opArray[opIndex];
 
-        if (i == 0)
+        if (opIndex == 0)
           sb.appendString(" ");
         else
           sb.appendString(", ");
@@ -330,7 +343,6 @@ MPSL_NOAPI Error IRBuilder::dump(StringBuilder& sb) noexcept {
       }
 
       sb.appendString("\n");
-      inst = inst->getNext();
     }
 
     block = block->_nextBlock;

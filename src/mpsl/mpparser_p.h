@@ -21,18 +21,19 @@ namespace mpsl {
 // [Forward Declaration]
 // ============================================================================
 
-struct AstBuilder;
-struct AstBlock;
-struct AstNode;
-struct AstProgram;
-struct AstVar;
+class AstBuilder;
+class AstBlock;
+class AstNode;
+class AstProgram;
+class AstVar;
 
 // ============================================================================
 // [mpsl::Parser]
 // ============================================================================
 
-struct Parser {
-  MPSL_NO_COPY(Parser)
+class Parser {
+public:
+  MPSL_NONCOPYABLE(Parser)
 
   enum Flags {
     kNoFlags = 0x00,

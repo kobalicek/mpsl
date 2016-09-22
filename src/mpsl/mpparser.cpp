@@ -16,14 +16,27 @@
 namespace mpsl {
 
 // ============================================================================
+// [mpsl::Parser - Macros]
+// ============================================================================
+
+#define MPSL_PARSER_WARNING(TOKEN, ...)                                       \
+  _errorReporter->onWarning(                                                  \
+    static_cast<uint32_t>(TOKEN.position), __VA_ARGS__)
+
+#define MPSL_PARSER_ERROR(TOKEN, ...)                                         \
+  return _errorReporter->onError(                                             \
+    kErrorInvalidSyntax, static_cast<uint32_t>(TOKEN.position), __VA_ARGS__)
+
+// ============================================================================
 // [mpsl::AstNestedScope]
 // ============================================================================
 
 //! \internal
 //!
 //! Nested scope used only by the parser and always allocated statically.
-struct AstNestedScope : public AstScope {
-  MPSL_NO_COPY(AstNestedScope)
+class AstNestedScope : public AstScope {
+public:
+  MPSL_NONCOPYABLE(AstNestedScope)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -49,18 +62,6 @@ struct AstNestedScope : public AstScope {
 
   Parser* _parser;
 };
-
-// ============================================================================
-// [mpsl::Parser - Macros]
-// ============================================================================
-
-#define MPSL_PARSER_WARNING(_Token_, ...) \
-  _errorReporter->onWarning( \
-    static_cast<uint32_t>((size_t)(_Token_.position)), __VA_ARGS__)
-
-#define MPSL_PARSER_ERROR(_Token_, ...) \
-  return _errorReporter->onError( \
-    kErrorInvalidSyntax, static_cast<uint32_t>((size_t)(_Token_.position)), __VA_ARGS__)
 
 // ============================================================================
 // [mpsl::Parser - Parse]
@@ -146,7 +147,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
   str.set(_tokenizer._start + token.position, token.length);
   AstSymbol* funcSym = localScope->resolveSymbol(str, token.hVal);
 
-  if (funcSym != nullptr)
+  if (funcSym)
     MPSL_PARSER_ERROR(token, "Attempt to redefine '%s'.", funcSym->getName());
 
   funcSym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeFunction, globalScope->getScopeType());
@@ -189,9 +190,9 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
       AstScope* argScope;
       AstSymbol* argSym = localScope->resolveSymbol(str, token.hVal, &argScope);
 
-      if (argSym != nullptr) {
+      if (argSym) {
         if (!argSym->isVariable())
-          MPSL_PARSER_ERROR(token, "Can't use %{SymbolType} '%s' as an argument name .",
+          MPSL_PARSER_ERROR(token, "Can't use %{SymbolType} '%s' as an argument name.",
             argSym->getSymbolType(), argSym->getName());
 
         if (argScope == localScope)
@@ -235,7 +236,9 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
   if (_tokenizer.peek(&token) != kTokenLCurl)
     MPSL_PARSER_ERROR(token, "Expected a function body starting with '{'.");
 
+  _currentScope = localScope;
   Error err = parseBlockOrStatement(body);
+  _currentScope = globalScope;
 
   // Make the function declared so it can be used after now.
   funcSym->setDeclared();
@@ -316,7 +319,7 @@ Error Parser::parseStatement(AstBlock* block, uint32_t flags) noexcept {
     StringRef str(_tokenizer._start + token.position, token.length);
     AstSymbol* sym = _currentScope->resolveSymbol(str, token.hVal);
 
-    if (sym != nullptr && sym->isTypeName()) {
+    if (sym && sym->isTypeName()) {
       if (!(flags & kEnableNewSymbols))
         MPSL_PARSER_ERROR(token, "Cannot declare a new variable here.");
       return parseVarDecl(block);
@@ -394,7 +397,7 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
   str.set(_tokenizer._start + token.position, token.length);
   AstSymbol* synonym = scope->resolveSymbol(str, token.hVal);
 
-  if (synonym != nullptr)
+  if (synonym)
     MPSL_PARSER_ERROR(token, "Attempt to redefine '%s'.", synonym->getName());
 
   synonym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeTypeName, scope->getScopeType());
@@ -643,7 +646,7 @@ Error Parser::parseFor(AstBlock* block) noexcept {
     StringRef str(_tokenizer._start + token.position, token.length);
     AstSymbol* sym = tmpScope.resolveSymbol(str, token.hVal);
 
-    if (sym != nullptr && sym->isTypeName()) {
+    if (sym && sym->isTypeName()) {
       MPSL_PROPAGATE(parseVarDecl(init));
       hasVarDecl = true;
     }
@@ -1011,7 +1014,7 @@ _Repeat1:
           StringRef str(_tokenizer._start + token.position, token.length);
           AstSymbol* sym = scope->resolveSymbol(str, token.hVal);
 
-          if (sym != nullptr && sym->isTypeName()) {
+          if (sym && sym->isTypeName()) {
             if (_tokenizer.consumeAndNext(&token) != kTokenRParen)
               MPSL_PARSER_ERROR(token, "Expected a ')' token.");
 
@@ -1087,7 +1090,7 @@ _Repeat2:
       case kTokenRParen: {
         _tokenizer.set(&token);
 
-        if (oNode != nullptr) {
+        if (oNode) {
           oNode->setRight(tNode);
           // Iterate to the top-most node.
           while (oNode->hasParent())

@@ -12,7 +12,7 @@
 #if !defined(MPSL_API_SCOPE)
 # define MPSL_API_SCOPE
 #else
-# error "MPSL - Api-Scope is already active, previous scope not closed by apiend.h?"
+# error "MPSL - api-scope is already active, previous scope not closed by mpsl_apiend.h?"
 #endif // MPSL_API_SCOPE
 
 // ============================================================================
@@ -61,21 +61,21 @@
 # pragma warning(disable: 4480) // specifying underlying type for enum
 # pragma warning(disable: 4800) // forcing value to bool 'true' or 'false'
 
-// TODO: Check if these defins are needed and for which version of MSC. There are
-// news about these as they are part of C99.
-# if !defined(vsnprintf)
-#  define MPSP_UNDEF_VSNPRINTF
-#  define vsnprintf _vsnprintf
-# endif // !vsnprintf
-# if !defined(snprintf)
-#  define MPSP_UNDEF_SNPRINTF
-#  define snprintf _snprintf
-# endif // !snprintf
+# if _MSC_VER < 1900
+#  if !defined(vsnprintf)
+#   define MPSP_UNDEF_VSNPRINTF
+#   define vsnprintf _vsnprintf
+#  endif // !vsnprintf
+#  if !defined(snprintf)
+#   define MPSP_UNDEF_SNPRINTF
+#   define snprintf _snprintf
+#  endif // !snprintf
+# endif
 
 #endif // _MSC_VER
 
 // ============================================================================
-// [CLang]
+// [Clang]
 // ============================================================================
 
 #if defined(__clang__)
@@ -83,13 +83,3 @@
 # pragma clang diagnostic ignored "-Wc++11-extensions"
 # pragma clang diagnostic ignored "-Wunnamed-type-template-args"
 #endif // __clang__
-
-// ============================================================================
-// [GCC]
-// ============================================================================
-
-#if defined(__GNUC__) && !defined(__clang__)
-# if __GNUC__ >= 4 && !defined(__MINGW32__)
-#  pragma GCC visibility push(hidden)
-# endif // GCC 4+
-#endif // __GNUC__

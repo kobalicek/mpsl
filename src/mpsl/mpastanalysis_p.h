@@ -23,8 +23,9 @@ namespace mpsl {
 //! \internal
 //!
 //! Visitor that does semantic analysis.
-struct AstAnalysis : public AstVisitor<AstAnalysis> {
-  MPSL_NO_COPY(AstAnalysis)
+class AstAnalysis : public AstVisitor<AstAnalysis> {
+public:
+  MPSL_NONCOPYABLE(AstAnalysis)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]

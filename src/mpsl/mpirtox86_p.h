@@ -20,13 +20,12 @@ namespace mpsl {
 
 using asmjit::Label;
 using asmjit::Operand;
-using asmjit::Var;
 
 using asmjit::X86Compiler;
-using asmjit::X86Var;
-using asmjit::X86GpVar;
-using asmjit::X86MmVar;
-using asmjit::X86XmmVar;
+using asmjit::X86Reg;
+using asmjit::X86Gp;
+using asmjit::X86Mm;
+using asmjit::X86Xmm;
 using asmjit::X86Mem;
 using asmjit::X86Util;
 
@@ -37,14 +36,15 @@ using asmjit::kConstScopeGlobal;
 // [mpsl::IRToX86]
 // ============================================================================
 
-struct IRToX86 {
-  MPSL_NO_COPY(IRToX86)
+class IRToX86 {
+public:
+  MPSL_NONCOPYABLE(IRToX86)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI IRToX86(Allocator* allocator, X86Compiler* c);
+  MPSL_NOAPI IRToX86(ZoneHeap* heap, X86Compiler* cc);
   MPSL_NOAPI ~IRToX86();
 
   // --------------------------------------------------------------------------
@@ -68,34 +68,34 @@ struct IRToX86 {
   MPSL_NOAPI Error compileConsecutiveBlocks(IRBlock* block);
   MPSL_NOAPI Error compileBasicBlock(IRBlock* block, IRBlock* next);
 
-  MPSL_INLINE void emit2x(uint32_t instId, const Operand& o0, const Operand& o1) { _c->emit(instId, o0, o1); }
+  MPSL_INLINE void emit2x(uint32_t instId, const Operand& o0, const Operand& o1) { _cc->emit(instId, o0, o1); }
   MPSL_NOAPI void emit3i(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
   MPSL_NOAPI void emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
   MPSL_NOAPI void emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
   MPSL_NOAPI void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
   MPSL_NOAPI void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
 
-  MPSL_NOAPI X86GpVar varAsPtr(IRVar* irVar);
-  MPSL_NOAPI X86GpVar varAsI32(IRVar* irVar);
-  MPSL_NOAPI X86XmmVar varAsXmm(IRVar* irVar);
+  MPSL_NOAPI X86Gp varAsPtr(IRVar* irVar);
+  MPSL_NOAPI X86Gp varAsI32(IRVar* irVar);
+  MPSL_NOAPI X86Xmm varAsXmm(IRVar* irVar);
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
-  Allocator* _allocator;
-  X86Compiler* _c;
+  ZoneHeap* _heap;
+  X86Compiler* _cc;
 
-  X86GpVar _data[Globals::kMaxArgumentsCount];
-  X86GpVar _ret;
+  X86Gp _data[Globals::kMaxArgumentsCount];
+  X86Gp _ret;
 
-  asmjit::HLNode* _functionBody;
+  asmjit::CBNode* _functionBody;
   asmjit::ConstPool _constPool;
   Label _constLabel;
-  X86GpVar _constPtr;
+  X86Gp _constPtr;
 
-  X86XmmVar _tmpXmm0;
-  X86XmmVar _tmpXmm1;
+  X86Xmm _tmpXmm0;
+  X86Xmm _tmpXmm1;
 
   bool _enableSSE4_1;
 };

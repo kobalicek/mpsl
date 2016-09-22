@@ -141,7 +141,7 @@ static MPSL_NOINLINE Error mpLayoutResize(Layout* self, uint32_t dataSize) noexc
   self->_dataSize = dataSize;
   self->_dataIndex = dataIndex;
 
-  if (oldData != nullptr && !mpLayoutIsEmbedded(self, oldData))
+  if (oldData && !mpLayoutIsEmbedded(self, oldData))
     ::free(oldData);
 
   return kErrorOk;
@@ -184,7 +184,7 @@ Layout::Layout(uint8_t* data, uint32_t dataSize) noexcept
 Layout::~Layout() noexcept {
   uint8_t* data = _data;
 
-  if (data != nullptr && !mpLayoutIsEmbedded(this, data))
+  if (data && !mpLayoutIsEmbedded(this, data))
     ::free(data);
 }
 
@@ -199,7 +199,7 @@ Error Layout::_configure(const char* name, size_t len) noexcept {
   if (len > Globals::kMaxIdentifierLength)
     return MPSL_TRACE_ERROR(kErrorInvalidArgument);
 
-  if (_name != nullptr)
+  if (_name)
     return MPSL_TRACE_ERROR(kErrorAlreadyConfigured);
 
   len++; // Include NULL terminator.
@@ -242,7 +242,7 @@ Error Layout::_add(const char* name, size_t len, uint32_t typeInfo, int32_t offs
     return MPSL_TRACE_ERROR(kErrorTooManyMembers);
 
   Member* member = mpLayoutFind(this, name, len);
-  if (member != nullptr)
+  if (member)
     return MPSL_TRACE_ERROR(kErrorAlreadyExists);
 
   MPSL_PROPAGATE(mpLayoutPrepareAdd(this, len + 1 + static_cast<uint32_t>(sizeof(Member))));
@@ -361,7 +361,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   // Init options first.
   options &= _kOptionsMask;
 
-  if (log != nullptr)
+  if (log)
     options |= kInternalOptionLog;
   else
     options &= ~(kOptionVerbose | kOptionDebugAST | kOptionDebugIR | kOptionDebugASM);
@@ -369,11 +369,12 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   if (len == Globals::kInvalidIndex)
     len = ::strlen(body);
 
-  Allocator allocator;
+  Zone zone(32768 - Zone::kZoneOverhead);
+  ZoneHeap heap(&zone);
   StringBuilderTmp<512> sbTmp;
 
-  AstBuilder ast(&allocator);
-  IRBuilder ir(&allocator, numArgs);
+  AstBuilder ast(&heap);
+  IRBuilder ir(&heap, numArgs);
 
   MPSL_PROPAGATE(ast.addProgramScope());
   MPSL_PROPAGATE(ast.addBuiltInTypes(mpTypeInfo, kTypeCount));
@@ -455,27 +456,27 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   void* func = nullptr;
   {
     asmjit::StringLogger asmlog;
-    asmjit::X86Assembler a(&rt->_runtime);
-    asmjit::X86Compiler c(&a);
+    asmjit::CodeHolder code;
+
+    code.init(rt->_runtime.getCodeInfo());
+    asmjit::X86Compiler c(&code);
 
     if (options & kOptionDebugASM)
-      a.setLogger(&asmlog);
+      code.setLogger(&asmlog);
 
-    IRToX86 compiler(&allocator, &c);
+    IRToX86 compiler(&heap, &c);
     if (options & kOptionDisableSSE4_1)
       compiler._enableSSE4_1 = false;
     MPSL_PROPAGATE(compiler.compileIRAsFunc(&ir));
 
     asmjit::Error err = c.finalize();
-    if (err)
-      return MPSL_TRACE_ERROR(kErrorJITFailed);
+    if (err) return MPSL_TRACE_ERROR(kErrorJITFailed);
 
-    func = a.make();
+    err = rt->_runtime.add(&func, &code);
+    if (err) return MPSL_TRACE_ERROR(kErrorJITFailed);
+
     if (options & kOptionDebugASM)
       log->log(OutputLog::Info(OutputLog::kMessageAsm, 0, 0, asmlog.getString(), asmlog.getLength()));
-
-    if (func == nullptr)
-      return MPSL_TRACE_ERROR(kErrorJITFailed);
   }
 
   if (programD->_refCount == 1 && static_cast<RuntimeData*>(programD->_runtimeData) == rt) {
@@ -485,7 +486,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   else {
     programD = static_cast<Program::Impl*>(::malloc(sizeof(Program::Impl)));
     if (programD == nullptr) {
-      rt->_runtime.release((void*)func);
+      rt->_runtime.release(func);
       return MPSL_TRACE_ERROR(kErrorNoMemory);
     }
 

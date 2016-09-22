@@ -172,7 +172,7 @@ struct Token {
 // ============================================================================
 
 struct Tokenizer {
-  MPSL_NO_COPY(Tokenizer)
+  MPSL_NONCOPYABLE(Tokenizer)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]

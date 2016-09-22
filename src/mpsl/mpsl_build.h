@@ -731,7 +731,7 @@ typedef unsigned __int64 uint64_t;
 // [mpsl::Build - MPSL-Specific]
 // ============================================================================
 
-#define MPSL_NO_COPY(...) \
+#define MPSL_NONCOPYABLE(...) \
 private: \
   MPSL_INLINE __VA_ARGS__(const __VA_ARGS__& other) MPSL_NOEXCEPT; \
   MPSL_INLINE __VA_ARGS__& operator=(const __VA_ARGS__& other) MPSL_NOEXCEPT; \

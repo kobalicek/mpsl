@@ -8,11 +8,16 @@ MathPresso's Shading Language with JIT Engine for C++.
   * [Official Chat (gitter)](https://gitter.im/kobalicek/mpsl)
   * [Permissive ZLIB license](./LICENSE.md)
 
+Important
+---------
+
+MPSL requires asmjit:next branch unless it's already merged with asmjit:master.
+
 
 Disclaimer
 ----------
 
-This is a WORK-IN-PROGRESS library that is far from being complete. MPSL is a challenging and difficult project and I work on it mostly when I'm tired of other projects. Contact me if you found MPSL interesting and want to collaborate on its development - people joining this project are very welcome.
+This is a WORK-IN-PROGRESS that is far from being complete. MPSL is a challenging and difficult project and I work on it mostly when I'm tired of other projects. Contact me if you found MPSL interesting and want to collaborate on its development - people joining this project are very welcome.
 
 
 Project Status
@@ -331,7 +336,7 @@ int main(int argc, char* argv[]) {
   mpsl::Error err = program.compile(context, body, mpsl::kNoOptions, layout);
 
   if (err) {
-    printf("Compilation failed: ERROR 0x%0.8X\n", static_cast<unsigned int>(err));
+    printf("Compilation failed: ERROR 0x%08X\n", static_cast<unsigned int>(err));
   }
   else {
     Data data;
@@ -341,7 +346,7 @@ int main(int argc, char* argv[]) {
 
     err = program.run(&data);
     if (err)
-      printf("Execution failed: ERROR 0x%0.8X\n", static_cast<unsigned int>(err));
+      printf("Execution failed: ERROR 0x%08X\n", static_cast<unsigned int>(err));
     else
       printf("Return=%g\n", data.result);
   }

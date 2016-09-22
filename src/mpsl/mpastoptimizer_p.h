@@ -21,8 +21,9 @@ namespace mpsl {
 // ============================================================================
 
 //! \internal
-struct AstOptimizer : public AstVisitor<AstOptimizer> {
-  MPSL_NO_COPY(AstOptimizer)
+class AstOptimizer : public AstVisitor<AstOptimizer> {
+public:
+  MPSL_NONCOPYABLE(AstOptimizer)
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
@@ -58,8 +59,8 @@ struct AstOptimizer : public AstVisitor<AstOptimizer> {
 
   MPSL_INLINE AstSymbol* getCurrentRet() const noexcept { return _currentRet; }
   MPSL_INLINE bool isUnreachable() const noexcept { return _unreachable; }
-  MPSL_INLINE uint8_t isConditional() const noexcept { return _isConditional; }
-  MPSL_INLINE uint8_t isLocalScope() const noexcept { return _isLocalScope; }
+  MPSL_INLINE bool isConditional() const noexcept { return _isConditional; }
+  MPSL_INLINE bool isLocalScope() const noexcept { return _isLocalScope; }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -69,8 +70,8 @@ struct AstOptimizer : public AstVisitor<AstOptimizer> {
   AstSymbol* _currentRet;
 
   bool _unreachable;
-  uint8_t _isConditional;
-  uint8_t _isLocalScope;
+  bool _isConditional;
+  bool _isLocalScope;
 };
 
 } // mpsl namespace

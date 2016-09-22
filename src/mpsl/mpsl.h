@@ -71,6 +71,8 @@ enum ErrorCode {
   kErrorInvalidSyntax = _kErrorMPSLStart,
   //! Invalid program.
   kErrorInvalidProgram,
+  //! Recursion not allowed.
+  kErrorRecursionNotAllowed,
 
   //! Return type of "main()" function doesn't match the output object's return
   //! type.
@@ -528,7 +530,7 @@ struct StringRef {
 //! what the program can use and after the program is compiled it's no longer
 //! needed.
 struct Layout {
-  MPSL_NO_COPY(Layout)
+  MPSL_NONCOPYABLE(Layout)
 
   //! \internal
   struct Member {
@@ -605,7 +607,7 @@ public:
     return _get(name.getData(), name.getLength()) != nullptr;
   }
 
-  //! Get the member of name `name`, returns `nullptr` if such member doesn't exist.
+  //! Get the member of name `name`, returns null if such member doesn't exist.
   MPSL_INLINE const Member* getMember(const char* name) const noexcept {
     return _get(name, Globals::kInvalidIndex);
   }

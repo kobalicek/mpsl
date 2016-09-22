@@ -9,7 +9,7 @@
 #define _MPSL_MPHASH_P_H
 
 // [Dependencies - MPSL]
-#include "./mpallocator_p.h"
+#include "./mpsl_p.h"
 
 // [Api-Begin]
 #include "./mpsl_apibegin.h"
@@ -35,9 +35,9 @@ namespace HashUtils {
 
   // \internal
   //
-  // Get a hash of the given string `kStr` of `kLen` length. This function doesn't
-  // require `kStr` to be NULL terminated.
-  MPSL_NOAPI uint32_t hashString(const char* kStr, size_t kLen) noexcept;
+  // Get a hash of the given string `str` of `len` length. This function doesn't
+  // require `str` to be NULL terminated.
+  MPSL_NOAPI uint32_t hashString(const char* str, size_t len) noexcept;
   //! \overload
   static MPSL_INLINE uint32_t hashString(const StringRef& str) noexcept {
     return hashString(str.getData(), str.getLength());
@@ -53,11 +53,12 @@ namespace HashUtils {
 // [mpsl::HashNode]
 // ============================================================================
 
-struct HashNode {
+class HashNode {
+public:
   MPSL_INLINE HashNode(uint32_t hVal = 0) noexcept
     : _next(nullptr), _hVal(hVal) {}
 
-  //! Next node in the chain, `nullptr` if last node.
+  //! Next node in the chain, null if last node.
   HashNode* _next;
   //! Hash code.
   uint32_t _hVal;
@@ -67,8 +68,9 @@ struct HashNode {
 // [mpsl::HashBase]
 // ============================================================================
 
-struct HashBase {
-  MPSL_NO_COPY(HashBase)
+class HashBase {
+public:
+  MPSL_NONCOPYABLE(HashBase)
 
   enum {
     kExtraFirst = 0,
@@ -79,8 +81,8 @@ struct HashBase {
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE HashBase(Allocator* allocator) noexcept {
-    _allocator = allocator;
+  MPSL_INLINE HashBase(ZoneHeap* heap) noexcept {
+    _heap = heap;
     _length = 0;
 
     _bucketsCount = 1;
@@ -93,14 +95,14 @@ struct HashBase {
 
   MPSL_INLINE ~HashBase() noexcept {
     if (_data != _embedded)
-      _allocator->release(_data, static_cast<size_t>(_bucketsCount + kExtraCount) * sizeof(void*));
+      _heap->release(_data, static_cast<size_t>(_bucketsCount + kExtraCount) * sizeof(void*));
   }
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE Allocator* getAllocator() const noexcept { return _allocator; }
+  MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _heap; }
 
   // --------------------------------------------------------------------------
   // [Ops]
@@ -113,10 +115,10 @@ struct HashBase {
   HashNode* _del(HashNode* node) noexcept;
 
   // --------------------------------------------------------------------------
-  // [Reset / Rehash]
+  // [Members]
   // --------------------------------------------------------------------------
 
-  Allocator* _allocator;
+  ZoneHeap* _heap;
 
   uint32_t _length;
   uint32_t _bucketsCount;
@@ -151,13 +153,14 @@ struct HashBase {
 //! Hash is currently used by AST to keep references of global and local
 //! symbols and by AST to IR translator to associate IR specific data with AST.
 template<typename Key, typename Node>
-struct Hash : public HashBase {
+class Hash : public HashBase {
+public:
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE Hash(Allocator* allocator) noexcept
-    : HashBase(allocator) {}
+  MPSL_INLINE Hash(ZoneHeap* heap) noexcept
+    : HashBase(heap) {}
 
   // --------------------------------------------------------------------------
   // [Ops]
@@ -171,7 +174,7 @@ struct Hash : public HashBase {
     for (uint32_t i = 0; i < count; i++) {
       HashNode* node = data[i];
 
-      while (node != nullptr) {
+      while (node) {
         HashNode* next = node->_next;
         handler.release(static_cast<Node*>(node));
         node = next;
@@ -179,7 +182,7 @@ struct Hash : public HashBase {
     }
 
     if (data != _embedded)
-      _allocator->release(data, static_cast<size_t>(count + kExtraCount) * sizeof(void*));
+      _heap->release(data, static_cast<size_t>(count + kExtraCount) * sizeof(void*));
 
     _bucketsCount = 1;
     _bucketsGrow = 1;
@@ -199,7 +202,7 @@ struct Hash : public HashBase {
     uint32_t hMod = hVal % _bucketsCount;
     Node* node = static_cast<Node*>(_data[hMod]);
 
-    while (node != nullptr) {
+    while (node) {
       if (node->eq(key))
         return node;
       node = static_cast<Node*>(node->_next);
@@ -218,8 +221,9 @@ struct Hash : public HashBase {
 
 //! \internal
 template<typename Key, typename Value>
-struct Map {
-  MPSL_NO_COPY(Map)
+class Map {
+public:
+  MPSL_NONCOPYABLE(Map)
 
   struct Node : public HashNode {
     MPSL_INLINE Node(const Key& key, const Value& value, uint32_t hVal) noexcept
@@ -233,25 +237,25 @@ struct Map {
   };
 
   struct ReleaseHandler {
-    MPSL_INLINE ReleaseHandler(Allocator* allocator) noexcept
-      : _allocator(allocator) {}
+    MPSL_INLINE ReleaseHandler(ZoneHeap* heap) noexcept
+      : _heap(heap) {}
 
     MPSL_INLINE void release(Node* node) noexcept {
-      _allocator->release(node, sizeof(Node));
+      _heap->release(node, sizeof(Node));
     }
 
-    Allocator* _allocator;
+    ZoneHeap* _heap;
   };
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE Map(Allocator* allocator) noexcept
-    : _hash(allocator) {}
+  MPSL_INLINE Map(ZoneHeap* heap) noexcept
+    : _hash(heap) {}
 
   MPSL_INLINE ~Map() noexcept {
-    ReleaseHandler releaseHandler(_hash.getAllocator());
+    ReleaseHandler releaseHandler(_hash.getHeap());
     _hash.reset(releaseHandler);
   }
 
@@ -264,12 +268,11 @@ struct Map {
     uint32_t hMod = hVal % _hash._bucketsCount;
     Node* node = static_cast<Node*>(_hash._data[hMod]);
 
-    while (node != nullptr) {
+    while (node) {
       if (node->eq(key))
         return true;
       node = static_cast<Node*>(node->_next);
     }
-
     return false;
   }
 
@@ -278,7 +281,7 @@ struct Map {
     uint32_t hMod = hVal % _hash._bucketsCount;
     Node* node = static_cast<Node*>(_hash._data[hMod]);
 
-    while (node != nullptr) {
+    while (node) {
       if (node->eq(key))
         return node->_value;
       node = static_cast<Node*>(node->_next);
@@ -287,8 +290,23 @@ struct Map {
     return Value();
   }
 
+  MPSL_INLINE bool get(const Key& key, Value** pValue) const noexcept {
+    uint32_t hVal = HashUtils::hashPointer(key);
+    uint32_t hMod = hVal % _hash._bucketsCount;
+    Node* node = static_cast<Node*>(_hash._data[hMod]);
+
+    while (node) {
+      if (node->eq(key)) {
+        *pValue = &node->_value;
+        return true;
+      }
+      node = static_cast<Node*>(node->_next);
+    }
+    return false;
+  }
+
   MPSL_INLINE Error put(const Key& key, const Value& value) noexcept {
-    Node* node = static_cast<Node*>(_hash._allocator->alloc(sizeof(Node)));
+    Node* node = static_cast<Node*>(_hash._heap->alloc(sizeof(Node)));
     if (node == nullptr)
       return MPSL_TRACE_ERROR(kErrorNoMemory);
 
@@ -296,6 +314,96 @@ struct Map {
     _hash.put(new(node) Node(key, value, hVal));
 
     return kErrorOk;
+  }
+
+  Hash<Key, Node> _hash;
+};
+
+// ============================================================================
+// [mpsl::Set<Key, Value>]
+// ============================================================================
+
+//! \internal
+template<typename Key>
+class Set {
+public:
+  MPSL_NONCOPYABLE(Set)
+
+  struct Node : public HashNode {
+    MPSL_INLINE Node(const Key& key, uint32_t hVal) noexcept
+      : HashNode(hVal),
+        _key(key) {}
+    MPSL_INLINE bool eq(const Key& key) noexcept { return _key == key; }
+
+    Key _key;
+  };
+
+  struct ReleaseHandler {
+    MPSL_INLINE ReleaseHandler(ZoneHeap* heap) noexcept
+      : _heap(heap) {}
+
+    MPSL_INLINE void release(Node* node) noexcept {
+      _heap->release(node, sizeof(Node));
+    }
+
+    ZoneHeap* _heap;
+  };
+
+  // --------------------------------------------------------------------------
+  // [Construction / Destruction]
+  // --------------------------------------------------------------------------
+
+  MPSL_INLINE Set(ZoneHeap* heap) noexcept
+    : _hash(heap) {}
+
+  MPSL_INLINE ~Set() noexcept {
+    ReleaseHandler releaseHandler(_hash.getHeap());
+    _hash.reset(releaseHandler);
+  }
+
+  // --------------------------------------------------------------------------
+  // [Ops]
+  // --------------------------------------------------------------------------
+
+  MPSL_INLINE bool has(const Key& key) const noexcept {
+    uint32_t hVal = HashUtils::hashPointer(key);
+    uint32_t hMod = hVal % _hash._bucketsCount;
+    Node* node = static_cast<Node*>(_hash._data[hMod]);
+
+    while (node) {
+      if (node->eq(key))
+        return true;
+      node = static_cast<Node*>(node->_next);
+    }
+    return false;
+  }
+
+  MPSL_INLINE Error put(const Key& key) noexcept {
+    MPSL_ASSERT(!has(key));
+
+    Node* node = static_cast<Node*>(_hash._heap->alloc(sizeof(Node)));
+    if (node == nullptr)
+      return MPSL_TRACE_ERROR(kErrorNoMemory);
+
+    uint32_t hVal = HashUtils::hashPointer(key);
+    _hash.put(new(node) Node(key, hVal));
+
+    return kErrorOk;
+  }
+
+  MPSL_INLINE bool del(const Key& key) noexcept {
+    uint32_t hVal = HashUtils::hashPointer(key);
+    uint32_t hMod = hVal % _hash._bucketsCount;
+    Node* node = static_cast<Node*>(_hash._data[hMod]);
+
+    while (node) {
+      if (node->eq(key)) {
+        _hash._heap->release(_hash.del(node), sizeof(Node));
+        return true;
+      }
+      node = static_cast<Node*>(node->_next);
+    }
+    return false;
   }
 
   Hash<Key, Node> _hash;
