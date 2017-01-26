@@ -11,7 +11,8 @@
 // [Dependencies]
 #include "./mpsl_p.h"
 
-#if defined(_MSC_VER)
+// `mpsl_p` includes asmjit, so we can use `ASMJIT_OS_...`.
+#if ASMJIT_OS_WINDOWS
 # define MPSL_STRTOD_MSLOCALE
 # include <locale.h>
 #else

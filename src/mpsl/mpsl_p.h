@@ -126,14 +126,14 @@ using asmjit::ZoneVector;
 // ============================================================================
 
 enum { kInvalidDataSlot = 0xFF };
-enum { kInvalidValue = asmjit::kInvalidValue };
+enum { kInvalidRegId = asmjit::Globals::kInvalidRegId };
 enum { kPointerWidth = static_cast<int>(sizeof(void*)) };
 
 static const uint32_t kB32_0 = 0x00000000U;
 static const uint32_t kB32_1 = 0xFFFFFFFFU;
 
-static const uint64_t kB64_0 = MPSL_UINT64_C(0x0000000000000000);
-static const uint64_t kB64_1 = MPSL_UINT64_C(0xFFFFFFFFFFFFFFFF);
+static const uint64_t kB64_0 = ASMJIT_UINT64_C(0x0000000000000000);
+static const uint64_t kB64_1 = ASMJIT_UINT64_C(0xFFFFFFFFFFFFFFFF);
 
 // ============================================================================
 // [mpsl::InternalOptions]

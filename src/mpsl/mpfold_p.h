@@ -32,7 +32,7 @@ namespace Fold {
 // ============================================================================
 
 MPSL_NOAPI Error foldCast(Value& dVal, uint32_t dTypeInfo, const Value& sVal, uint32_t sTypeInfo) noexcept;
-MPSL_NOAPI Error foldSwizzle(uint32_t swiz, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept;
+MPSL_NOAPI Error foldSwizzle(const uint8_t* swizzleArray, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept;
 MPSL_NOAPI Error foldUnaryOp(uint32_t op, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept;
 
 MPSL_NOAPI Error foldBinaryOp(uint32_t op, Value& dVal,

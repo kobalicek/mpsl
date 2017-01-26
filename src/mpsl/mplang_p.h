@@ -289,7 +289,7 @@ enum InstCode {
   kInstCodeNone = 0,
 
   kInstCodeJmp,
-  kInstCodeJcc,
+  kInstCodeJnz,
   kInstCodeCall,
   kInstCodeRet,
 
@@ -624,9 +624,8 @@ extern const uint32_t mpImplicitCast[kTypeCount];
 //!
 //! Identifiers of vector elements.
 struct VectorIdentifiers {
-  //! Letters used to name up to 8 vector elements. Starts from the most
-  //! significant element.
-  char letters[8];
+  char letters[8];                       //!< Letters specifying vector index (0..7).
+  uint32_t mask;                         //!< Mask of all letters for fast matching.
 };
 extern const VectorIdentifiers mpVectorIdentifiers[2];
 

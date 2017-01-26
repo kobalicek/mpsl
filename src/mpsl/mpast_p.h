@@ -36,6 +36,7 @@ class AstUnary;
 
 //! \internal
 class AstBuilder {
+public:
   MPSL_NONCOPYABLE(AstBuilder)
 
   // --------------------------------------------------------------------------
@@ -990,9 +991,8 @@ public:
   // [Members]
   // --------------------------------------------------------------------------
 
-  StringRef _field;
-  //! Offset to the member if object (or a single field access of vector type).
-  int32_t _offset;
+  StringRef _field;                      //!< Accessoe name.
+  int32_t _offset;                       //!< Member offset if this is a member access.
 };
 
 // ============================================================================
@@ -1082,13 +1082,13 @@ public:
 
   MPSL_INLINE AstUnaryOp(AstBuilder* ast, uint32_t op) noexcept
     : AstUnary(ast, kTypeUnaryOp),
-      _swizzleMask(0) {
+      _swizzleUInt64(0) {
     setOp(op);
   }
 
   MPSL_INLINE AstUnaryOp(AstBuilder* ast, uint32_t op, uint32_t typeInfo) noexcept
     : AstUnary(ast, kTypeUnaryOp),
-      _swizzleMask(0) {
+      _swizzleUInt64(0) {
     setOp(op);
     setTypeInfo(typeInfo);
   }
@@ -1097,14 +1097,29 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE uint32_t getSwizzleMask() const noexcept { return _swizzleMask; }
-  MPSL_INLINE void setSwizzleMask(uint32_t m) noexcept { _swizzleMask = m; }
+  MPSL_INLINE uint8_t* getSwizzleArray() noexcept { return _swizzleArray; }
+  MPSL_INLINE const uint8_t* getSwizzleArray() const noexcept { return _swizzleArray; }
+  MPSL_INLINE uint32_t getSwizzleCount() const noexcept { return TypeInfo::elementsOf(getTypeInfo()); }
+
+  MPSL_INLINE uint32_t getSwizzleIndex(size_t position) const noexcept {
+    MPSL_ASSERT(position < ASMJIT_ARRAY_SIZE(_swizzleArray));
+    return _swizzleArray[position];
+  }
+
+  MPSL_INLINE void setSwizzleIndex(uint32_t position, uint32_t value) noexcept {
+    MPSL_ASSERT(position < ASMJIT_ARRAY_SIZE(_swizzleArray));
+    MPSL_ASSERT(value <= 0xFF);
+    _swizzleArray[position] = static_cast<uint8_t>(value);
+  }
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
-  uint32_t _swizzleMask;
+  union {
+    uint8_t _swizzleArray[8];
+    uint64_t _swizzleUInt64;
+  };
 };
 
 // ============================================================================
@@ -1277,7 +1292,8 @@ public:
 // [mpsl::AstDump]
 // ============================================================================
 
-struct AstDump : public AstVisitor<AstDump> {
+class AstDump : public AstVisitor<AstDump> {
+public:
   MPSL_NONCOPYABLE(AstDump)
 
   // --------------------------------------------------------------------------
@@ -1325,6 +1341,82 @@ struct AstDump : public AstVisitor<AstDump> {
 
   StringBuilder& _sb;
   uint32_t _level;
+};
+
+// ============================================================================
+// [mpsl::AstAnalysis]
+// ============================================================================
+
+//! \internal
+//!
+//! Visitor that does semantic analysis.
+class AstAnalysis : public AstVisitor<AstAnalysis> {
+public:
+  MPSL_NONCOPYABLE(AstAnalysis)
+
+  // --------------------------------------------------------------------------
+  // [Construction / Destruction]
+  // --------------------------------------------------------------------------
+
+  MPSL_NOAPI AstAnalysis(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
+  MPSL_NOAPI ~AstAnalysis() noexcept;
+
+  // --------------------------------------------------------------------------
+  // [OnNode]
+  // --------------------------------------------------------------------------
+
+  MPSL_NOAPI Error onProgram(AstProgram* node) noexcept;
+  MPSL_NOAPI Error onFunction(AstFunction* node) noexcept;
+  MPSL_NOAPI Error onBlock(AstBlock* node) noexcept;
+  MPSL_NOAPI Error onBranch(AstBranch* node) noexcept;
+  MPSL_NOAPI Error onCondition(AstCondition* node) noexcept;
+  MPSL_NOAPI Error onLoop(AstLoop* node) noexcept;
+  MPSL_NOAPI Error onBreak(AstBreak* node) noexcept;
+  MPSL_NOAPI Error onContinue(AstContinue* node) noexcept;
+  MPSL_NOAPI Error onReturn(AstReturn* node) noexcept;
+  MPSL_NOAPI Error onVarDecl(AstVarDecl* node) noexcept;
+  MPSL_NOAPI Error onVarMemb(AstVarMemb* node) noexcept;
+  MPSL_NOAPI Error onVar(AstVar* node) noexcept;
+  MPSL_NOAPI Error onImm(AstImm* node) noexcept;
+  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node) noexcept;
+  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node) noexcept;
+  MPSL_NOAPI Error onCall(AstCall* node) noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Accessors]
+  // --------------------------------------------------------------------------
+
+  MPSL_INLINE AstSymbol* getCurrentRet() const noexcept { return _currentRet; }
+  MPSL_INLINE bool isUnreachable() const noexcept { return _unreachable; }
+
+  // --------------------------------------------------------------------------
+  // [CheckAssignment]
+  // --------------------------------------------------------------------------
+
+  MPSL_NOAPI Error checkAssignment(AstNode* node, uint32_t op) noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Cast]
+  // --------------------------------------------------------------------------
+
+  //! Perform an implicit cast.
+  MPSL_NOAPI uint32_t implicitCast(AstNode* node, AstNode* child, uint32_t type) noexcept;
+
+  //! Perform an internal cast to `bool` or `__qbool`.
+  MPSL_NOAPI uint32_t boolCast(AstNode* node, AstNode* child) noexcept;
+
+  // TODO: Move to `AstBuilder::onInvalidCast()`.
+  //! Report an invalid implicit or explicit cast.
+  MPSL_NOAPI Error invalidCast(uint32_t position, const char* msg, uint32_t fromTypeInfo, uint32_t toTypeInfo) noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Members]
+  // --------------------------------------------------------------------------
+
+  ErrorReporter* _errorReporter;
+  AstSymbol* _currentRet;
+
+  bool _unreachable;
 };
 
 } // mpsl namespace

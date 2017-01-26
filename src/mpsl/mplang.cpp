@@ -54,10 +54,19 @@ const uint32_t mpImplicitCast[kTypeCount] = {
 // NOTE: Each letter can only be used at a specific index. Letters can repeat
 // in multiple `VectorIdentifiers` records, but cannot change their index once
 // assigned.
+#define MPSL_VECTOR_LETTERS(I0, I1, I2, I3, I4, I5, I6, I7) \
+  {                                                         \
+    { I0, I1, I2, I3, I4, I5, I6, I7 },                     \
+    (1U << (I0 - 'a')) | (1U << (I1 - 'a')) |               \
+    (1U << (I2 - 'a')) | (1U << (I3 - 'a')) |               \
+    (1U << (I4 - 'a')) | (1U << (I5 - 'a')) |               \
+    (1U << (I6 - 'a')) | (1U << (I7 - 'a'))                 \
+  }
 const VectorIdentifiers mpVectorIdentifiers[2] = {
-  { 'x', 'y', 'z', 'w', 'i', 'j', 'k', 'l' }, // xyzwijkl.
-  { 'r', 'g', 'b', 'a', 'i', 'j', 'k', 'l' }  // rgbaijkl.
+  MPSL_VECTOR_LETTERS('x', 'y', 'z', 'w', 'i', 'j', 'k', 'l'),
+  MPSL_VECTOR_LETTERS('r', 'g', 'b', 'a', 'i', 'j', 'k', 'l')
 };
+#undef MPSL_VECTOR_LETTERS
 
 // ============================================================================
 // [mpsl::mpConstInfo]
@@ -272,7 +281,7 @@ const InstInfo mpInstInfo[kInstCodeCount] = {
   // +----------+---------------+-----------------------------------------+
   ROW(None      , "<none>"      , 0, 0                                    ),
   ROW(Jmp       , "jmp"         , 1, I(Jxx)                               ),
-  ROW(Jcc       , "jcc"         , 2, I(Jxx)                               ),
+  ROW(Jnz       , "jnz"         , 2, I(Jxx)                               ),
   ROW(Call      , "call"        , 0, I(Call)                              ),
   ROW(Ret       , "ret"         , 0, I(Ret)                               ),
 

@@ -19,9 +19,9 @@ struct Args {
 };
 
 int main(int argc, char* argv[]) {
-  mpsl::Context context = mpsl::Context::create();
-
+  mpsl::Context ctx = mpsl::Context::create();
   mpsl::LayoutTmp<> args;
+
   args.addMember("bg"   , mpsl::kTypeInt4 | mpsl::kTypeRO, MPSL_OFFSET_OF(Args, bg));
   args.addMember("fg"   , mpsl::kTypeInt4 | mpsl::kTypeRO, MPSL_OFFSET_OF(Args, fg));
   args.addMember("alpha", mpsl::kTypeInt4 | mpsl::kTypeRO, MPSL_OFFSET_OF(Args, alpha));
@@ -38,13 +38,13 @@ int main(int argc, char* argv[]) {
   printf("[Program]\n%s\n", body);
   uint32_t options = 
     mpsl::kOptionVerbose  |
-    mpsl::kOptionDebugAST |
+    mpsl::kOptionDebugAst |
     mpsl::kOptionDebugIR  |
     mpsl::kOptionDebugASM ;
   TestLog log;
 
   mpsl::Program1<> program;
-  mpsl::Error err = program.compile(context, body, options, args, &log);
+  mpsl::Error err = program.compile(ctx, body, options, args, &log);
 
   if (err) {
     printf("Compilation failed: ERROR: 0x%08X\n", static_cast<unsigned int>(err));

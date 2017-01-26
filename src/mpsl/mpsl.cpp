@@ -9,9 +9,8 @@
 
 // [Dependencies - MPSL]
 #include "./mpast_p.h"
-#include "./mpastanalysis_p.h"
 #include "./mpastoptimizer_p.h"
-#include "./mpasttoir_p.h"
+#include "./mpcodegen_p.h"
 #include "./mpatomic_p.h"
 #include "./mpformatutils_p.h"
 #include "./mpir_p.h"
@@ -330,18 +329,22 @@ Error Context::freeze() noexcept {
 // [mpsl::Context - Compile]
 // ============================================================================
 
-#define MPSL_PROPAGATE_AND_HANDLE_COLLISION(...) \
-  do { \
-    AstSymbol* collidedSymbol = nullptr; \
-    ::mpsl::Error _errorValue = __VA_ARGS__; \
-    \
-    if (MPSL_UNLIKELY(_errorValue != ::mpsl::kErrorOk)) { \
-      if (_errorValue == ::mpsl::kErrorSymbolCollision && log) { \
-        sbTmp.setFormat("Built-in symbol collision: '%s' already defined", collidedSymbol->getName()); \
-        log->log(OutputLog::Info(OutputLog::kMessageError, 0, 0, sbTmp.getData(), sbTmp.getLength())); \
-      } \
-      return _errorValue; \
-    } \
+#define MPSL_PROPAGATE_AND_HANDLE_COLLISION(...)                              \
+  do {                                                                        \
+    AstSymbol* collidedSymbol = nullptr;                                      \
+    Error _errorValue = __VA_ARGS__;                                          \
+                                                                              \
+    if (MPSL_UNLIKELY(_errorValue)) {                                         \
+      if (_errorValue == kErrorSymbolCollision && log) {                      \
+        sbTmp.setFormat("Built-in symbol collision: '%s' already defined",    \
+          collidedSymbol->getName());                                         \
+        log->log(OutputLog::Message(                                          \
+          OutputLog::kMessageError, 0, 0,                                     \
+          StringRef("ERROR", 5),                                              \
+          StringRef(sbTmp.getData(), sbTmp.getLength())));                    \
+      }                                                                       \
+      return _errorValue;                                                     \
+    }                                                                         \
   } while (0)
 
 Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log) noexcept {
@@ -355,6 +358,14 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
     return MPSL_TRACE_ERROR(kErrorInvalidArgument);
 
   // --------------------------------------------------------------------------
+  // [Debug Strings]
+  // --------------------------------------------------------------------------
+
+  static const char kDebugHeadingAST[] = "AST";
+  static const char kDebugHeadingIR[]  = "IR";
+  static const char kDebugHeadingASM[] = "ASM";
+
+  // --------------------------------------------------------------------------
   // [Init]
   // --------------------------------------------------------------------------
 
@@ -364,7 +375,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   if (log)
     options |= kInternalOptionLog;
   else
-    options &= ~(kOptionVerbose | kOptionDebugAST | kOptionDebugIR | kOptionDebugASM);
+    options &= ~(kOptionVerbose | kOptionDebugAst | kOptionDebugIR | kOptionDebugASM);
 
   if (len == Globals::kInvalidIndex)
     len = ::strlen(body);
@@ -395,17 +406,20 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   // Parse the source code into AST.
   { MPSL_PROPAGATE(Parser(&ast, &errorReporter, body, len).parseProgram(ast.getProgramNode())); }
 
-  // Do a semantic analysis of the code without doing any optimizations.
+  // Perform a semantic analysis of the parsed AST.
   //
   // It can add some nodes required by implicit casts and fail if the code is
-  // semantically incorrect, for example invalid implicit cast, explicit-cast,
+  // semantically incorrect - for example invalid implicit cast, explicit-cast,
   // or function call. This pass doesn't do constant folding or optimizations.
-  // Perform semantic analysis of the parsed code.
   { MPSL_PROPAGATE(AstAnalysis(&ast, &errorReporter).onProgram(ast.getProgramNode())); }
 
-  if (options & kOptionDebugAST) {
+  if (options & kOptionDebugAst) {
     ast.dump(sbTmp);
-    log->log(OutputLog::Info(OutputLog::kMessageAstInitial, 0, 0, sbTmp.getData(), sbTmp.getLength()));
+    log->log(
+      OutputLog::Message(
+        OutputLog::kMessageDump, 0, 0,
+        StringRef(kDebugHeadingAST, MPSL_ARRAY_SIZE(kDebugHeadingAST) - 1),
+        StringRef(sbTmp.getData(), sbTmp.getLength())));
     sbTmp.clear();
   }
 
@@ -415,9 +429,13 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   // IR level.
   { MPSL_PROPAGATE(AstOptimizer(&ast, &errorReporter).onProgram(ast.getProgramNode())); }
 
-  if (options & kOptionDebugAST) {
+  if (options & kOptionDebugAst) {
     ast.dump(sbTmp);
-    log->log(OutputLog::Info(OutputLog::kMessageAstFinal, 0, 0, sbTmp.getData(), sbTmp.getLength()));
+    log->log(
+      OutputLog::Message(
+        OutputLog::kMessageDump, 0, 0,
+        StringRef(kDebugHeadingAST, MPSL_ARRAY_SIZE(kDebugHeadingAST) - 1),
+        StringRef(sbTmp.getData(), sbTmp.getLength())));
     sbTmp.clear();
   }
 
@@ -427,13 +445,17 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
 
   // Translate AST to IR.
   {
-    AstToIR::Args unused(false);
-    MPSL_PROPAGATE(AstToIR(&ast, &ir).onProgram(ast.getProgramNode(), unused));
+    CodeGen::Result unused(false);
+    MPSL_PROPAGATE(CodeGen(&ast, &ir).onProgram(ast.getProgramNode(), unused));
   }
 
   if (options & kOptionDebugIR) {
     ir.dump(sbTmp);
-    log->log(OutputLog::Info(OutputLog::kMessageIRInitial, 0, 0, sbTmp.getData(), sbTmp.getLength()));
+    log->log(
+      OutputLog::Message(
+        OutputLog::kMessageDump, 0, 0,
+        StringRef(kDebugHeadingIR, MPSL_ARRAY_SIZE(kDebugHeadingIR) - 1),
+        StringRef(sbTmp.getData(), sbTmp.getLength())));
     sbTmp.clear();
   }
 
@@ -441,7 +463,11 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
 
   if (options & kOptionDebugIR) {
     ir.dump(sbTmp);
-    log->log(OutputLog::Info(OutputLog::kMessageIRFinal, 0, 0, sbTmp.getData(), sbTmp.getLength()));
+    log->log(
+      OutputLog::Message(
+        OutputLog::kMessageDump, 0, 0,
+        StringRef(kDebugHeadingIR, MPSL_ARRAY_SIZE(kDebugHeadingIR) - 1),
+        StringRef(sbTmp.getData(), sbTmp.getLength())));
     sbTmp.clear();
   }
 
@@ -476,7 +502,11 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
     if (err) return MPSL_TRACE_ERROR(kErrorJITFailed);
 
     if (options & kOptionDebugASM)
-      log->log(OutputLog::Info(OutputLog::kMessageAsm, 0, 0, asmlog.getString(), asmlog.getLength()));
+      log->log(
+        OutputLog::Message(
+          OutputLog::kMessageDump, 0, 0,
+          StringRef(kDebugHeadingASM, MPSL_ARRAY_SIZE(kDebugHeadingASM) - 1),
+          StringRef(asmlog.getString(), asmlog.getLength())));
   }
 
   if (programD->_refCount == 1 && static_cast<RuntimeData*>(programD->_runtimeData) == rt) {
@@ -612,7 +642,11 @@ void ErrorReporter::onWarning(uint32_t position, const StringBuilder& msg) noexc
   if (reportsWarnings()) {
     uint32_t line, column;
     getLineAndColumn(position, line, column);
-    _log->log(OutputLog::Info(OutputLog::kMessageWarning, line, column, msg.getData(), msg.getLength()));
+    _log->log(
+      OutputLog::Message(
+        OutputLog::kMessageWarning, line, column,
+        StringRef("WARNING", 7),
+        StringRef(msg.getData(), msg.getLength())));
   }
 }
 
@@ -634,9 +668,13 @@ Error ErrorReporter::onError(Error error, uint32_t position, const char* fmt, ..
 
 Error ErrorReporter::onError(Error error, uint32_t position, const StringBuilder& msg) noexcept {
   if (reportsErrors()) {
-    OutputLog::Info info(OutputLog::kMessageError, 0, 0, msg.getData(), msg.getLength());
-    getLineAndColumn(position, info._line, info._column);
-    _log->log(info);
+    OutputLog::Message logMsg(
+      OutputLog::kMessageError, 0, 0,
+      StringRef("ERROR", 5),
+      StringRef(msg.getData(), msg.getLength()));
+
+    getLineAndColumn(position, logMsg._line, logMsg._column);
+    _log->log(logMsg);
   }
 
   return MPSL_TRACE_ERROR(error);

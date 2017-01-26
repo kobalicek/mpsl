@@ -17,8 +17,10 @@ namespace mpsl {
 
 static Error mpIRPassBlock(IRBuilder* ir, IRBlock* block) noexcept {
   IRBody& body = block->getBody();
-  for (size_t i = 0, len = body.getLength(); i < len; i++) {
-    IRInst* inst = body[i];
+  size_t i = body.getLength();
+
+  while (i != 0) {
+    IRInst* inst = body[--i];
     if (inst) {
       // TODO: Just testing some concepts.
       const InstInfo& info = mpInstInfo[inst->getInstCode() & kInstCodeMask];
@@ -27,7 +29,7 @@ static Error mpIRPassBlock(IRBuilder* ir, IRBlock* block) noexcept {
         uint32_t opCount = inst->getOpCount();
 
         IRObject* dst = opArray[0];
-        if (dst->isVar() && dst->_usageCount == 1) {
+        if (dst->isReg() && dst->getRefCount() == 1) {
           block->neuterAt(i);
           ir->deleteInst(inst);
         }

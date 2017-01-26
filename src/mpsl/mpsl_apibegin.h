@@ -16,36 +16,32 @@
 #endif // MPSL_API_SCOPE
 
 // ============================================================================
-// [NoExcept]
+// [C++ Support]
 // ============================================================================
 
+// [NoExcept]
 #if !MPSL_CC_HAS_NOEXCEPT && !defined(noexcept)
 # define noexcept MPSL_NOEXCEPT
 # define MPSL_UNDEF_NOEXCEPT
 #endif // !MPSL_CC_HAS_NOEXCEPT && !noexcept
 
-// ============================================================================
 // [NullPtr]
-// ============================================================================
-
 #if !MPSL_CC_HAS_NULLPTR && !defined(nullptr)
 # define nullptr NULL
 # define MPSL_UNDEF_NULLPTR
 #endif // !MPSL_CC_HAS_NULLPTR && !nullptr
 
-// ============================================================================
 // [Override]
-// ============================================================================
-
 #if !MPSL_CC_HAS_OVERRIDE && !defined(override)
 # define override
 # define MPSL_UNDEF_OVERRIDE
 #endif // !MPSL_CC_HAS_OVERRIDE && !override
 
 // ============================================================================
-// [MSC]
+// [Compiler Support]
 // ============================================================================
 
+// [MSC]
 #if defined(_MSC_VER)
 
 # pragma warning(push)
@@ -74,12 +70,20 @@
 
 #endif // _MSC_VER
 
-// ============================================================================
 // [Clang]
-// ============================================================================
-
 #if defined(__clang__)
 # pragma clang diagnostic push
 # pragma clang diagnostic ignored "-Wc++11-extensions"
 # pragma clang diagnostic ignored "-Wunnamed-type-template-args"
 #endif // __clang__
+
+// ============================================================================
+// [Custom Macros]
+// ============================================================================
+
+// [NONCOPYABLE]
+#define MPSL_NONCOPYABLE(...) \
+private: \
+  MPSL_INLINE __VA_ARGS__(const __VA_ARGS__& other) MPSL_NOEXCEPT; \
+  MPSL_INLINE __VA_ARGS__& operator=(const __VA_ARGS__& other) MPSL_NOEXCEPT; \
+public:

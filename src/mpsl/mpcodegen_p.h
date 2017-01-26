@@ -5,8 +5,8 @@
 // Zlib - See LICENSE.md file in the package.
 
 // [Guard]
-#ifndef _MPSL_MPASTTOIR_P_H
-#define _MPSL_MPASTTOIR_P_H
+#ifndef _MPSL_MPCODEGEN_P_H
+#define _MPSL_MPCODEGEN_P_H
 
 // [Dependencies - MPSL]
 #include "./mpast_p.h"
@@ -18,12 +18,12 @@
 namespace mpsl {
 
 // ============================================================================
-// [mpsl::AstToIR]
+// [mpsl::CodeGen]
 // ============================================================================
 
-class AstToIRArgs {
+class CodeGenResult {
 public:
-  MPSL_INLINE AstToIRArgs(bool dependsOnResult = true) noexcept {
+  MPSL_INLINE CodeGenResult(bool dependsOnResult = true) noexcept {
     this->result.reset();
     this->dependsOnResult = dependsOnResult;
   }
@@ -37,14 +37,14 @@ public:
 };
 
 //! \internal
-class AstToIR : public AstVisitorWithArgs<AstToIR, AstToIRArgs&> {
+class CodeGen : public AstVisitorWithArgs<CodeGen, CodeGenResult&> {
 public:
-  MPSL_NONCOPYABLE(AstToIR)
+  MPSL_NONCOPYABLE(CodeGen)
 
-  typedef AstToIRArgs Args;
+  typedef CodeGenResult Result;
 
   typedef Set< AstFunction* > FunctionSet;
-  typedef Map< AstSymbol*, IRPair<IRVar> > VarMap;
+  typedef Map< AstSymbol*, IRPair<IRReg> > VarMap;
   typedef Map< AstSymbol*, IRMem*        > MemMap;
 
   struct DataSlot {
@@ -60,29 +60,29 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI AstToIR(AstBuilder* ast, IRBuilder* ir) noexcept;
-  MPSL_NOAPI ~AstToIR() noexcept;
+  MPSL_NOAPI CodeGen(AstBuilder* ast, IRBuilder* ir) noexcept;
+  MPSL_NOAPI ~CodeGen() noexcept;
 
   // --------------------------------------------------------------------------
   // [OnNode]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error onProgram(AstProgram* node, Args& out) noexcept;
-  MPSL_NOAPI Error onFunction(AstFunction* node, Args& out) noexcept;
-  MPSL_NOAPI Error onBlock(AstBlock* node, Args& out) noexcept;
-  MPSL_NOAPI Error onBranch(AstBranch* node, Args& out) noexcept;
-  MPSL_NOAPI Error onCondition(AstCondition* node, Args& out) noexcept;
-  MPSL_NOAPI Error onLoop(AstLoop* node, Args& out) noexcept;
-  MPSL_NOAPI Error onBreak(AstBreak* node, Args& out) noexcept;
-  MPSL_NOAPI Error onContinue(AstContinue* node, Args& out) noexcept;
-  MPSL_NOAPI Error onReturn(AstReturn* node, Args& out) noexcept;
-  MPSL_NOAPI Error onVarDecl(AstVarDecl* node, Args& out) noexcept;
-  MPSL_NOAPI Error onVarMemb(AstVarMemb* node, Args& out) noexcept;
-  MPSL_NOAPI Error onVar(AstVar* node, Args& out) noexcept;
-  MPSL_NOAPI Error onImm(AstImm* node, Args& out) noexcept;
-  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node, Args& out) noexcept;
-  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node, Args& out) noexcept;
-  MPSL_NOAPI Error onCall(AstCall* node, Args& out) noexcept;
+  MPSL_NOAPI Error onProgram(AstProgram* node, Result& out) noexcept;
+  MPSL_NOAPI Error onFunction(AstFunction* node, Result& out) noexcept;
+  MPSL_NOAPI Error onBlock(AstBlock* node, Result& out) noexcept;
+  MPSL_NOAPI Error onBranch(AstBranch* node, Result& out) noexcept;
+  MPSL_NOAPI Error onCondition(AstCondition* node, Result& out) noexcept;
+  MPSL_NOAPI Error onLoop(AstLoop* node, Result& out) noexcept;
+  MPSL_NOAPI Error onBreak(AstBreak* node, Result& out) noexcept;
+  MPSL_NOAPI Error onContinue(AstContinue* node, Result& out) noexcept;
+  MPSL_NOAPI Error onReturn(AstReturn* node, Result& out) noexcept;
+  MPSL_NOAPI Error onVarDecl(AstVarDecl* node, Result& out) noexcept;
+  MPSL_NOAPI Error onVarMemb(AstVarMemb* node, Result& out) noexcept;
+  MPSL_NOAPI Error onVar(AstVar* node, Result& out) noexcept;
+  MPSL_NOAPI Error onImm(AstImm* node, Result& out) noexcept;
+  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node, Result& out) noexcept;
+  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node, Result& out) noexcept;
+  MPSL_NOAPI Error onCall(AstCall* node, Result& out) noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -99,7 +99,7 @@ public:
   // [Utilities]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error mapVarToAst(AstSymbol* sym, IRPair<IRVar> var) noexcept;
+  MPSL_NOAPI Error mapVarToAst(AstSymbol* sym, IRPair<IRReg> var) noexcept;
 
   MPSL_NOAPI Error newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept;
   MPSL_NOAPI Error newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeInfo) noexcept;
@@ -107,8 +107,8 @@ public:
 
   MPSL_NOAPI Error asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept;
 
-  MPSL_NOAPI Error emitMove(IRPair<IRVar> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept;
-  MPSL_NOAPI Error emitStore(IRPair<IRObject> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept;
+  MPSL_NOAPI Error emitMove(IRPair<IRReg> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept;
+  MPSL_NOAPI Error emitStore(IRPair<IRObject> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept;
   MPSL_NOAPI Error emitInst2(uint32_t instCode,
     IRPair<IRObject> o0,
     IRPair<IRObject> o1, uint32_t typeInfo) noexcept;
@@ -119,8 +119,8 @@ public:
     IRPair<IRObject> o2, uint32_t typeInfo) noexcept;
 
   // TODO: Rename after API is completed.
-  MPSL_NOAPI Error emitFetchX(IRVar* dst, IRMem* src, uint32_t typeInfo) noexcept;
-  MPSL_NOAPI Error emitStoreX(IRMem* dst, IRVar* src, uint32_t typeInfo) noexcept;
+  MPSL_NOAPI Error emitFetchX(IRReg* dst, IRMem* src, uint32_t typeInfo) noexcept;
+  MPSL_NOAPI Error emitStoreX(IRMem* dst, IRReg* src, uint32_t typeInfo) noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -136,7 +136,7 @@ public:
   IRPair<IRObject> _currentRet;          //!< Current return, required by \ref onReturn().
 
   FunctionSet _nestedFunctions;          //!< Hash of all nested functions.
-  VarMap _varMap;                        //!< Mapping of `AstVar` to `IRPair<IRVar>`.
+  VarMap _varMap;                        //!< Mapping of `AstVar` to `IRPair<IRReg>`.
   MemMap _memMap;                        //!< Mapping of `AstVarMemb` to `IRMem`.
 };
 
@@ -146,4 +146,4 @@ public:
 #include "./mpsl_apiend.h"
 
 // [Guard]
-#endif // _MPSL_MPASTTOIR_P_H
+#endif // _MPSL_MPCODEGEN_P_H

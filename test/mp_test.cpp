@@ -38,15 +38,6 @@ public:
 // ============================================================================
 
 struct TestUtils {
-  static bool isVerbose(uint32_t options) {
-    const uint32_t kVerboseMask =
-      mpsl::kOptionVerbose  |
-      mpsl::kOptionDebugAST |
-      mpsl::kOptionDebugIR  |
-      mpsl::kOptionDebugASM ;
-    return (options & kVerboseMask) != 0;
-  }
-
   static void printCode(const char* prefix, const char* body) {
     size_t prefixLen = ::strlen(prefix);
 
@@ -123,27 +114,39 @@ public:
     mpsl::Value ret;
   };
 
-  Test();
+  Test(uint32_t options);
+
+  inline bool isVerbose() {
+    const uint32_t kVerboseMask =
+      mpsl::kOptionVerbose  |
+      mpsl::kOptionDebugAst |
+      mpsl::kOptionDebugIR  |
+      mpsl::kOptionDebugASM ;
+    return (_options & kVerboseMask) != 0;
+  }
 
   void initLayout(mpsl::Layout& layout, uint32_t retType);
   void initArgs(Args& args);
 
-  void printTest(const char* body, uint32_t options);
-  void printPass(const char* body, uint32_t options);
-  void printFail(const char* body, uint32_t options, const char* fmt, ...);
+  void printTest(const char* body);
+  void printPass(const char* body);
+  void printFail(const char* body, const char* fmt, ...);
 
-  bool basicTest(const char* body, uint32_t options, uint32_t retType, const mpsl::Value& retValue);
-  bool failureTest(const char* body, uint32_t options);
+  bool basicTest(const char* body, uint32_t retType, const mpsl::Value& retValue);
+  bool failureTest(const char* body);
 
-  mpsl::Context _context;
+  mpsl::Context _ctx;
+  uint32_t _options;
+
   int a[4];
   int b[4];
   int c[4];
   bool _succeeded;
 };
 
-Test::Test()
-  : _context(mpsl::Context::create()),
+Test::Test(uint32_t options)
+  : _ctx(mpsl::Context::create()),
+    _options(options),
     _succeeded(true) {
   a[0] = 1; a[1] = 2; a[2] = 3; a[3] = 4;
   b[0] = 9; b[1] = 8; b[2] = 7; b[3] = 6;
@@ -243,51 +246,44 @@ void Test::initArgs(Args& args) {
   args.d4c.set(double(c[0]), double(c[1]), double(c[2]), double(c[3]));
 }
 
-void Test::printTest(const char* body, uint32_t options) {
-  if (TestUtils::isVerbose(options))
-    TestUtils::printCode("[TEST] ", body);
+void Test::printTest(const char* body) {
+  TestUtils::printCode("[TEST] ", body);
 }
 
-void Test::printPass(const char* body, uint32_t options) {
-  if (!TestUtils::isVerbose(options)) {
-    TestUtils::printCode("[PASS] ", body);
-  }
+void Test::printPass(const char* body) {
+  if (isVerbose())
+    printf("[PASS]\n");
 }
 
-void Test::printFail(const char* body, uint32_t options, const char* fmt, ...) {
-  if (TestUtils::isVerbose(options)) {
-    printf("[FAIL] ");
+void Test::printFail(const char* body, const char* fmt, ...) {
+  printf("[FAIL] ");
 
-    va_list ap;
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
-  }
-  else {
-    TestUtils::printCode("[FAIL] ", body);
-  }
+  va_list ap;
+  va_start(ap, fmt);
+  vprintf(fmt, ap);
+  va_end(ap);
 }
 
-bool Test::basicTest(const char* body, uint32_t options, uint32_t retType, const mpsl::Value& retValue) {
+bool Test::basicTest(const char* body, uint32_t retType, const mpsl::Value& retValue) {
   mpsl::LayoutTmp<1024> layout;
   Args args;
 
   initLayout(layout, retType);
   initArgs(args);
-  printTest(body, options);
+  printTest(body);
 
   TestLog log;
   mpsl::Program1<Args> program;
-  mpsl::Error err = program.compile(_context, body, options, layout, &log);
+  mpsl::Error err = program.compile(_ctx, body, _options, layout, &log);
 
   if (err != mpsl::kErrorOk) {
-    printFail(body, options, "COMPILATION ERROR 0x%08X.\n", static_cast<unsigned int>(err));
+    printFail(body, "COMPILATION ERROR 0x%08X.\n", static_cast<unsigned int>(err));
     return false;
   }
 
   err = program.run(&args);
   if (err != mpsl::kErrorOk) {
-    printFail(body, options, "EXECUTION ERROR 0x%08X.\n", static_cast<unsigned int>(err));
+    printFail(body, "EXECUTION ERROR 0x%08X.\n", static_cast<unsigned int>(err));
     return false;
   }
 
@@ -345,14 +341,13 @@ checkDouble:
   }
 
   if (isOk)
-    printPass(body, options);
+    printPass(body);
   else
     _succeeded = false;
   return isOk;
 }
 
-bool Test::failureTest(const char* body, uint32_t options) {
-
+bool Test::failureTest(const char* body) {
   return true;
 }
 
@@ -365,68 +360,84 @@ int main(int argc, char* argv[]) {
   uint32_t options = 0;
 
   if (cmd.hasKey("--verbose")) options |= mpsl::kOptionVerbose;
-  if (cmd.hasKey("--ast"    )) options |= mpsl::kOptionDebugAST;
+  if (cmd.hasKey("--ast"    )) options |= mpsl::kOptionDebugAst;
   if (cmd.hasKey("--ir"     )) options |= mpsl::kOptionDebugIR;
   if (cmd.hasKey("--asm"    )) options |= mpsl::kOptionDebugASM;
-
-  Test test;
 
   // Variables are initialized to these:
   //   a[0] = 1; a[1] = 2; a[2] = 3; a[3] = 4;
   //   b[0] = 9; b[1] = 8; b[2] = 7; b[3] = 6;
   //   c[0] =-2; c[1] =-3; c[2] =-4; c[3] =-5;
+  Test test(options);
 
   // Test MPSL basics.
-  test.basicTest("int     main() { return ia + ib; }", options, mpsl::kTypeInt    , makeIVal(10   ));
-  test.basicTest("float   main() { return fa + fb; }", options, mpsl::kTypeFloat  , makeFVal(10.0f));
-  test.basicTest("double  main() { return da + db; }", options, mpsl::kTypeDouble , makeDVal(10.0 ));
+  test.basicTest("int     main() { return ia + ib; }", mpsl::kTypeInt    , makeIVal(10   ));
+  test.basicTest("float   main() { return fa + fb; }", mpsl::kTypeFloat  , makeFVal(10.0f));
+  test.basicTest("double  main() { return da + db; }", mpsl::kTypeDouble , makeDVal(10.0 ));
 
-  test.basicTest("int2    main() { return i2a + i2b; }", options, mpsl::kTypeInt2   , makeIVal(10   , 10   ));
-  test.basicTest("float2  main() { return f2a + f2b; }", options, mpsl::kTypeFloat2 , makeFVal(10.0f, 10.0f));
-  test.basicTest("double2 main() { return d2a + d2b; }", options, mpsl::kTypeDouble2, makeDVal(10.0 , 10.0 ));
+  test.basicTest("int2    main() { return i2a + i2b; }", mpsl::kTypeInt2   , makeIVal(10   , 10   ));
+  test.basicTest("float2  main() { return f2a + f2b; }", mpsl::kTypeFloat2 , makeFVal(10.0f, 10.0f));
+  test.basicTest("double2 main() { return d2a + d2b; }", mpsl::kTypeDouble2, makeDVal(10.0 , 10.0 ));
 
-  test.basicTest("int3    main() { return i3a + i3b; }", options, mpsl::kTypeInt3   , makeIVal(10   , 10   , 10   ));
-  test.basicTest("float3  main() { return f3a + f3b; }", options, mpsl::kTypeFloat3 , makeFVal(10.0f, 10.0f, 10.0f));
-  test.basicTest("double3 main() { return d3a + d3b; }", options, mpsl::kTypeDouble3, makeDVal(10.0 , 10.0 , 10.0 ));
+  test.basicTest("int3    main() { return i3a + i3b; }", mpsl::kTypeInt3   , makeIVal(10   , 10   , 10   ));
+  test.basicTest("float3  main() { return f3a + f3b; }", mpsl::kTypeFloat3 , makeFVal(10.0f, 10.0f, 10.0f));
+  test.basicTest("double3 main() { return d3a + d3b; }", mpsl::kTypeDouble3, makeDVal(10.0 , 10.0 , 10.0 ));
 
-  test.basicTest("int4    main() { return i4a + i4b; }", options, mpsl::kTypeInt4   , makeIVal(10   , 10   , 10   , 10   ));
-  test.basicTest("float4  main() { return f4a + f4b; }", options, mpsl::kTypeFloat4 , makeFVal(10.0f, 10.0f, 10.0f, 10.0f));
-  test.basicTest("double4 main() { return d4a + d4b; }", options, mpsl::kTypeDouble4, makeDVal(10.0 , 10.0 , 10.0 , 10.0 ));
+  test.basicTest("int4    main() { return i4a + i4b; }", mpsl::kTypeInt4   , makeIVal(10   , 10   , 10   , 10   ));
+  test.basicTest("float4  main() { return f4a + f4b; }", mpsl::kTypeFloat4 , makeFVal(10.0f, 10.0f, 10.0f, 10.0f));
+  test.basicTest("double4 main() { return d4a + d4b; }", mpsl::kTypeDouble4, makeDVal(10.0 , 10.0 , 10.0 , 10.0 ));
 
-  test.basicTest("int     main() { return (ia + ib) * ic - ia; }", options, mpsl::kTypeInt    , makeIVal(-21   ));
-  test.basicTest("float   main() { return (fa + fb) * fc - fa; }", options, mpsl::kTypeFloat  , makeFVal(-21.0f));
-  test.basicTest("double  main() { return (da + db) * dc - da; }", options, mpsl::kTypeDouble , makeDVal(-21.0 ));
+  test.basicTest("int     main() { return (ia + ib) * ic - ia; }", mpsl::kTypeInt    , makeIVal(-21   ));
+  test.basicTest("float   main() { return (fa + fb) * fc - fa; }", mpsl::kTypeFloat  , makeFVal(-21.0f));
+  test.basicTest("double  main() { return (da + db) * dc - da; }", mpsl::kTypeDouble , makeDVal(-21.0 ));
 
-  test.basicTest("int2    main() { return (i2a + i2b) * i2c - i2a; }", options, mpsl::kTypeInt2   , makeIVal(-21   , -32   ));
-  test.basicTest("float2  main() { return (f2a + f2b) * f2c - f2a; }", options, mpsl::kTypeFloat2 , makeFVal(-21.0f, -32.0f));
-  test.basicTest("double2 main() { return (d2a + d2b) * d2c - d2a; }", options, mpsl::kTypeDouble2, makeDVal(-21.0 , -32.0 ));
+  test.basicTest("int2    main() { return (i2a + i2b) * i2c - i2a; }", mpsl::kTypeInt2   , makeIVal(-21   , -32   ));
+  test.basicTest("float2  main() { return (f2a + f2b) * f2c - f2a; }", mpsl::kTypeFloat2 , makeFVal(-21.0f, -32.0f));
+  test.basicTest("double2 main() { return (d2a + d2b) * d2c - d2a; }", mpsl::kTypeDouble2, makeDVal(-21.0 , -32.0 ));
 
-  test.basicTest("int3    main() { return (i3a + i3b) * i3c - i3a; }", options, mpsl::kTypeInt3   , makeIVal(-21   , -32   , 37   ));
-  test.basicTest("float3  main() { return (f3a + f3b) * f3c - f3a; }", options, mpsl::kTypeFloat3 , makeFVal(-21.0f, -32.0f, 37.0f));
-  test.basicTest("double3 main() { return (d3a + d3b) * d3c - d3a; }", options, mpsl::kTypeDouble3, makeDVal(-21.0 , -32.0 , 37.0 ));
+  test.basicTest("int3    main() { return (i3a + i3b) * i3c - i3a; }", mpsl::kTypeInt3   , makeIVal(-21   , -32   , 37   ));
+  test.basicTest("float3  main() { return (f3a + f3b) * f3c - f3a; }", mpsl::kTypeFloat3 , makeFVal(-21.0f, -32.0f, 37.0f));
+  test.basicTest("double3 main() { return (d3a + d3b) * d3c - d3a; }", mpsl::kTypeDouble3, makeDVal(-21.0 , -32.0 , 37.0 ));
 
-  test.basicTest("int4    main() { return (i4a + i4b) * i4c - i4a; }", options, mpsl::kTypeInt4   , makeIVal(-21   , -32   , 37   , 46   ));
-  test.basicTest("float4  main() { return (f4a + f4b) * f4c - f4a; }", options, mpsl::kTypeFloat4 , makeFVal(-21.0f, -32.0f, 37.0f, 46.0f));
-  test.basicTest("double4 main() { return (d4a + d4b) * d4c - d4a; }", options, mpsl::kTypeDouble4, makeDVal(-21.0 , -32.0 , 37.0 , 46.0 ));
+  test.basicTest("int4    main() { return (i4a + i4b) * i4c - i4a; }", mpsl::kTypeInt4   , makeIVal(-21   , -32   , 37   , 46   ));
+  test.basicTest("float4  main() { return (f4a + f4b) * f4c - f4a; }", mpsl::kTypeFloat4 , makeFVal(-21.0f, -32.0f, 37.0f, 46.0f));
+  test.basicTest("double4 main() { return (d4a + d4b) * d4c - d4a; }", mpsl::kTypeDouble4, makeDVal(-21.0 , -32.0 , 37.0 , 46.0 ));
 
+  // Test vector swizzling.
+  test.basicTest("int4    main() { return i4a.xxxx; }", mpsl::kTypeInt4, makeIVal(1, 1, 1, 1));
+  test.basicTest("int4    main() { return i4a.xyxy; }", mpsl::kTypeInt4, makeIVal(1, 2, 1, 2));
+  test.basicTest("float4  main() { return f4a.xxxx; }", mpsl::kTypeFloat4, makeFVal(1, 1, 1, 1));
+  test.basicTest("float4  main() { return f4a.xyxy; }", mpsl::kTypeFloat4, makeFVal(1, 2, 1, 2));
+  test.basicTest("double4 main() { return d4a.xxxx; }", mpsl::kTypeDouble4, makeDVal(1, 1, 1, 1));
+  test.basicTest("double4 main() { return d4a.xyxy; }", mpsl::kTypeDouble4, makeDVal(1, 2, 1, 2));
+/*
+  // Test control flow - branches.
+  test.basicTest("int main() { if (ib == 9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(1));
+  test.basicTest("int main() { if (ib != 9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(0));
+  test.basicTest("int main() { if (ib >= 9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(1));
+  test.basicTest("int main() { if (ib >  9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(0));
+  test.basicTest("int main() { if (ib <= 9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(1));
+  test.basicTest("int main() { if (ib <  9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(0));
+*/
+/*
   // Test creating and calling functions inside the shader.
   test.basicTest("int dummy(int a, int b) { return a + b; }\n"
                  "int main() { return dummy(1, 2); }\n",
-                 options, mpsl::kTypeInt, makeIVal(3));
+                 mpsl::kTypeInt, makeIVal(3));
 
   test.basicTest("int dummy(int a, int b) { return a + b; }\n"
                  "int main() { return dummy(ia, ib); }\n",
-                 options, mpsl::kTypeInt, makeIVal(10));
+                 mpsl::kTypeInt, makeIVal(10));
 
   test.basicTest("int xFunc(int a, int b) { return a + b; }\n"
                  "int yFunc(int a, int b) { return xFunc(a, b); }\n"
                  "int main() { return yFunc(ia, ib); }\n",
-                 options, mpsl::kTypeInt, makeIVal(10));
+                 mpsl::kTypeInt, makeIVal(10));
 
   test.basicTest("int xFunc(int a, int b) { return a + b; }\n"
                  "int yFunc(int a, int b) { return xFunc(a, b); }\n"
                  "int main() { return xFunc(ia, ib) + yFunc(ia, ic) + yFunc(ib, ic); }\n",
-                 options, mpsl::kTypeInt, makeIVal(16));
-
+                 mpsl::kTypeInt, makeIVal(16));
+*/
   return test._succeeded ? 0 : 1;
 }

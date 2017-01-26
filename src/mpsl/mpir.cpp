@@ -35,7 +35,7 @@ void IRBlock::_fixupAfterNeutering() noexcept {
   }
 
   _body.truncate(dstIndex);
-  _neutered = false;
+  _requiresFixup = false;
 }
 
 // ============================================================================
@@ -53,7 +53,7 @@ IRBuilder::IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept
 
   for (uint32_t i = 0; i < Globals::kMaxArgumentsCount; i++) {
     if (i < numSlots)
-      _dataSlots[i] = newVar(kIRRegGP, kPointerWidth);
+      _dataSlots[i] = newVar(IRReg::kKindGp, kPointerWidth);
     else
       _dataSlots[i] = nullptr;
   }
@@ -70,18 +70,18 @@ MPSL_INLINE void mpExpandTypeInfo(uint32_t typeInfo, uint32_t& reg, uint32_t& wi
 
   // Scalar integers are allocated in GP registers.
   if (typeId == kTypeInt && vecLen <= 1) {
-    reg = kIRRegGP;
+    reg = IRReg::kKindGp;
     width = 4;
   }
   // Everything else is allocated in SIMD registers.
   else {
-    reg = kIRRegSIMD;
+    reg = IRReg::kKindVec;
     width = TypeInfo::sizeOf(typeId) * vecLen;
   }
 }
 
-IRVar* IRBuilder::newVar(uint32_t reg, uint32_t width) noexcept {
-  IRVar* var = newObject<IRVar>(reg, width);
+IRReg* IRBuilder::newVar(uint32_t reg, uint32_t width) noexcept {
+  IRReg* var = newObject<IRReg>(reg, width);
   if (var == nullptr) return nullptr;
 
   // Assign a variable ID.
@@ -90,7 +90,7 @@ IRVar* IRBuilder::newVar(uint32_t reg, uint32_t width) noexcept {
   return var;
 }
 
-IRVar* IRBuilder::newVarByTypeInfo(uint32_t typeInfo) noexcept {
+IRReg* IRBuilder::newVarByTypeInfo(uint32_t typeInfo) noexcept {
   uint32_t reg;
   uint32_t width;
   mpExpandTypeInfo(typeInfo, reg, width);
@@ -98,7 +98,7 @@ IRVar* IRBuilder::newVarByTypeInfo(uint32_t typeInfo) noexcept {
   return newVar(reg, width);
 }
 
-IRMem* IRBuilder::newMem(IRVar* base, IRVar* index, int32_t offset) noexcept {
+IRMem* IRBuilder::newMem(IRReg* base, IRReg* index, int32_t offset) noexcept {
   IRMem* mem = newObject<IRMem>(base, index, offset);
   return mem;
 }
@@ -144,10 +144,8 @@ void IRBuilder::deleteInst(IRInst* inst) noexcept {
   IRObject** opArray = inst->getOpArray();
   uint32_t count = inst->getOpCount();
 
-  for (uint32_t i = 0; i < count; i++) {
-    IRObject* op = opArray[i];
-    op->_usageCount--;
-  }
+  for (uint32_t i = 0; i < count; i++)
+    derefObject(opArray[i]);
 
   _heap->release(inst, sizeof(IRInst));
 }
@@ -156,8 +154,18 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
   size_t objectSize = 0;
 
   switch (obj->getObjectType()) {
-    case IRObject::kTypeVar: {
-      objectSize = sizeof(IRVar);
+    case IRObject::kTypeReg: {
+      objectSize = sizeof(IRReg);
+      break;
+    }
+
+    case IRObject::kTypeMem: {
+      IRMem* mem = obj->as<IRMem>();
+
+      if (mem->hasBase()) derefObject(mem->getBase());
+      if (mem->hasIndex()) derefObject(mem->getIndex());
+
+      objectSize = sizeof(IRMem);
       break;
     }
 
@@ -167,7 +175,7 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
     }
 
     case IRObject::kTypeBlock: {
-      IRBlock* block = static_cast<IRBlock*>(obj);
+      IRBlock* block = obj->as<IRBlock>();
       IRBody& body = block->getBody();
 
       for (size_t i = 0, len = body.getLength(); i < len; i++) {
@@ -218,8 +226,8 @@ Error IRBuilder::initEntryBlock() noexcept {
   _entryBlock = newBlock();
   MPSL_NULLCHECK(_entryBlock);
 
-  _entryBlock->_blockData._blockType = kIRBlockEntry;
-  _entryBlock->_usageCount = 1;
+  _entryBlock->_blockData._blockType = IRBlock::kKindEntry;
+  _entryBlock->_refCount = 1;
 
   return kErrorOk;
 }
@@ -246,7 +254,7 @@ Error IRBuilder::emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObj
   return block->append(node);
 }
 
-Error IRBuilder::emitMove(IRBlock* block, IRVar* dst, IRVar* src) noexcept {
+Error IRBuilder::emitMove(IRBlock* block, IRReg* dst, IRReg* src) noexcept {
   uint32_t inst = kInstCodeNone;
 
   switch (mpMin<uint32_t>(dst->getWidth(), src->getWidth())) {
@@ -262,7 +270,7 @@ Error IRBuilder::emitMove(IRBlock* block, IRVar* dst, IRVar* src) noexcept {
   return emitInst(block, inst, dst, src);
 }
 
-Error IRBuilder::emitFetch(IRBlock* block, IRVar* dst, IRObject* src) noexcept {
+Error IRBuilder::emitFetch(IRBlock* block, IRReg* dst, IRObject* src) noexcept {
   uint32_t inst = kInstCodeNone;
 
   if (src->isImm() || src->isMem()) {
@@ -314,8 +322,8 @@ MPSL_NOAPI Error IRBuilder::dump(StringBuilder& sb) noexcept {
           sb.appendString(", ");
 
         switch (op->getObjectType()) {
-          case IRObject::kTypeVar: {
-            IRVar* var = static_cast<IRVar*>(op);
+          case IRObject::kTypeReg: {
+            IRReg* var = static_cast<IRReg*>(op);
             sb.appendFormat("%%%u", var->getId());
             break;
           }

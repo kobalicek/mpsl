@@ -625,7 +625,7 @@ Error foldCast(
   return kErrorOk;
 }
 
-Error foldSwizzle(uint32_t swiz, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept {
+Error foldSwizzle(const uint8_t* swizzleArray, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept {
   uint32_t typeId = sTypeInfo & kTypeIdMask;
   uint32_t i = 0;
   uint32_t count = TypeInfo::elementsOf(sTypeInfo);
@@ -636,8 +636,7 @@ Error foldSwizzle(uint32_t swiz, Value& dVal, const Value& sVal, uint32_t sTypeI
   switch (TypeInfo::sizeOf(typeId)) {
     case 4:
       do {
-        uint32_t sIdx = swiz & 0xF;
-        swiz >>= 4;
+        uint32_t sIdx = swizzleArray[i];
         if (MPSL_UNLIKELY(sIdx >= 8))
           return MPSL_TRACE_ERROR(kErrorInvalidState);
         out.i[i] = sVal.i[sIdx];
@@ -646,8 +645,7 @@ Error foldSwizzle(uint32_t swiz, Value& dVal, const Value& sVal, uint32_t sTypeI
 
     case 8:
       do {
-        uint32_t sIdx = swiz & 0xF;
-        swiz >>= 4;
+        uint32_t sIdx = swizzleArray[i];
         if (MPSL_UNLIKELY(sIdx >= 4))
           return MPSL_TRACE_ERROR(kErrorInvalidState);
         out.q[i] = sVal.q[sIdx];

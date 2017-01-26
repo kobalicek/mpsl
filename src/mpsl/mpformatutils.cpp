@@ -283,12 +283,12 @@ StringBuilder& FormatUtils::formatValue(StringBuilder& sb, uint32_t typeInfo, co
   return sb;
 }
 
-void FormatUtils::formatSwizzle(char* dst, uint32_t swizzleMask, uint32_t count) noexcept {
+void FormatUtils::formatSwizzleArray(char* dst, const uint8_t* swizzleArray, uint32_t count) noexcept {
   const char* letters = mpVectorIdentifiers[0].letters;
   uint32_t i, max = 8;
 
-  for (i = 0; i < count; i++, swizzleMask >>= 4) {
-    uint32_t pos = swizzleMask & 0xF;
+  for (i = 0; i < count; i++) {
+    uint32_t pos = swizzleArray[i];
     if (pos < max)
       dst[i] = letters[pos];
     else

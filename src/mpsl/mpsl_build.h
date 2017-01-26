@@ -717,25 +717,11 @@ typedef unsigned __int32 uint32_t;
 typedef unsigned __int64 uint64_t;
 #  endif
 # endif
-# define MPSL_INT64_C(x) (x##i64)
-# define MPSL_UINT64_C(x) (x##ui64)
 #else
 # include <stdint.h>
 # include <limits.h>
-# define MPSL_INT64_C(x) (x##ll)
-# define MPSL_UINT64_C(x) (x##ull)
 #endif
 // [@STDTYPES}@]
-
-// ============================================================================
-// [mpsl::Build - MPSL-Specific]
-// ============================================================================
-
-#define MPSL_NONCOPYABLE(...) \
-private: \
-  MPSL_INLINE __VA_ARGS__(const __VA_ARGS__& other) MPSL_NOEXCEPT; \
-  MPSL_INLINE __VA_ARGS__& operator=(const __VA_ARGS__& other) MPSL_NOEXCEPT; \
-public:
 
 // ============================================================================
 // [blend::Build - Dependencies]

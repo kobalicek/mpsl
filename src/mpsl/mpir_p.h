@@ -24,41 +24,13 @@ namespace mpsl {
 
 class IRBuilder;
 class IRObject;
-class IRVar;
+class IRReg;
+class IRMem;
 class IRImm;
 class IRInst;
 class IRBlock;
 
 typedef ZoneVector<IRInst*> IRBody;
-
-// ============================================================================
-// [mpsl::IRBlockType]
-// ============================================================================
-
-enum IRBlockType {
-  //! Basic block.
-  kIRBlockBasic = 0,
-  //! Entry point.
-  kIRBlockEntry
-};
-
-// ============================================================================
-// [mpsl::IRRegType]
-// ============================================================================
-
-//! \internal
-//!
-//! Type of IR register (used by variables and immediates).
-enum IRRegType {
-  //! Invalid register (not used).
-  kIRRegNone = 0,
-  //! General purpose register (32-bit scalar int or pointer).
-  kIRRegGP = 1,
-  //! SIMD register (128-bit or 256-bit).
-  kIRRegSIMD = 2,
-  //! Count of register types
-  kIRRegCount = 3
-};
 
 // ============================================================================
 // [mpsl::IRObject]
@@ -69,23 +41,13 @@ class IRObject {
 public:
   MPSL_NONCOPYABLE(IRObject)
 
-  // --------------------------------------------------------------------------
-  // [Enums]
-  // --------------------------------------------------------------------------
-
   //! Type of \ref IRObject.
   enum Type {
-    //! Not used.
-    kTypeNone = 0,
-
-    //! The object is \ref IRVar.
-    kTypeVar,
-    //! The object is \ref IRMem.
-    kTypeMem,
-    //! The object is \ref IRImm.
-    kTypeImm,
-    //! The object is \ref IRBlock.
-    kTypeBlock
+    kTypeNone  = 0,                      //!< Not used.
+    kTypeReg   = 1,                      //!< The object is \ref IRReg.
+    kTypeMem   = 2,                      //!< The object is \ref IRMem.
+    kTypeImm   = 3,                      //!< The object is \ref IRImm.
+    kTypeBlock = 4                       //!< The object is \ref IRBlock.
   };
 
   // --------------------------------------------------------------------------
@@ -99,7 +61,7 @@ public:
     _anyData._reserved[2] = 0;
 
     _id = 0;
-    _usageCount = 0;
+    _refCount = 0;
   }
 
   // --------------------------------------------------------------------------
@@ -109,8 +71,8 @@ public:
   //! Get the object type, see \ref IRObjectType.
   MPSL_INLINE uint32_t getObjectType() const noexcept { return _anyData._objectType; }
 
-  //! Get whether the `IRObject` is `IRVar`.
-  MPSL_INLINE bool isVar() const noexcept { return getObjectType() == kTypeVar; }
+  //! Get whether the `IRObject` is `IRReg`.
+  MPSL_INLINE bool isReg() const noexcept { return getObjectType() == kTypeReg; }
   //! Get whether the `IRObject` is `IRMem`.
   MPSL_INLINE bool isMem() const noexcept { return getObjectType() == kTypeMem; }
   //! Get whether the `IRObject` is `IRImm`.
@@ -121,12 +83,20 @@ public:
   //! Get the object ID.
   MPSL_INLINE uint32_t getId() const noexcept { return _id; }
 
-  //! Get register type, only \ref IRVar and \ref IRImm.
+  //! Get register type, only \ref IRReg and \ref IRImm.
   MPSL_INLINE uint32_t getReg() const noexcept {
-    MPSL_ASSERT(isVar() || isImm());
-    // This member is the same for IRVar and IRImm.
+    MPSL_ASSERT(isReg() || isImm());
+    // This member is the same for IRReg and IRImm.
     return _varData._reg;
   }
+
+  MPSL_INLINE uint32_t getRefCount() noexcept { return _refCount; }
+  MPSL_INLINE void addRef() noexcept { _refCount++; }
+
+  template<typename T>
+  MPSL_INLINE T* as() noexcept { return static_cast<T*>(this); }
+  template<typename T>
+  MPSL_INLINE const T* as() const noexcept { return static_cast<const T*>(this); }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -142,7 +112,7 @@ public:
   struct VarData {
     //! Type of the IRObject, see \ref IRObjectType.
     uint8_t _objectType;
-    //! Type of the IRVar's register, see \ref IRRegType.
+    //! Type of the IRReg's register, see \ref IRRegType.
     uint8_t _reg;
     //! Register width used (in bytes).
     uint8_t _width;
@@ -155,7 +125,7 @@ public:
   struct ImmData {
     //! Type of the IRObject, see \ref IRObjectType.
     uint8_t _objectType;
-    //! Type of this object, see \ref IRVarType.
+    //! Type of this object, see \ref IRRegType.
     uint8_t _reg;
     //! Size of the immediate in bytes.
     uint8_t _width;
@@ -188,31 +158,39 @@ public:
 
   //! ID of the IRObject.
   //!
-  //! NOTE: IDs are used by IRBlock, IRVar, and IRImm objects. They have all
+  //! NOTE: IDs are used by IRBlock, IRReg, and IRImm objects. They have all
   //! their own ID generator so IDs can collide between different object types.
   uint32_t _id;
 
   //! Increased every time this IRObject is used as an operand.
-  uint32_t _usageCount;
+  uint32_t _refCount;
 };
 
 // ============================================================================
-// [mpsl::IRVar]
+// [mpsl::IRReg]
 // ============================================================================
 
-class IRVar : public IRObject {
+class IRReg : public IRObject {
 public:
-  MPSL_NONCOPYABLE(IRVar)
+  MPSL_NONCOPYABLE(IRReg)
+
+  //! IR register kind.
+  enum Kind {
+    kKindNone  = 0,                      //!< Invalid register (not used).
+    kKindGp    = 1,                      //!< General purpose register (32-bit or 64-bit).
+    kKindVec   = 2,                      //!< Vector register (64-bit, 128-bit or 256-bit).
+    kKindCount = 3                       //!< Count of register types
+  };
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE IRVar(IRBuilder* ir, uint32_t reg, uint32_t width) noexcept
-    : IRObject(ir, kTypeVar) {
+  MPSL_INLINE IRReg(IRBuilder* ir, uint32_t reg, uint32_t width) noexcept
+    : IRObject(ir, kTypeReg) {
     _varData._reg = static_cast<uint8_t>(reg);
     _varData._width = static_cast<uint8_t>(width);
-    _varData._jitId = kInvalidValue;
+    _varData._jitId = kInvalidRegId;
   }
 
   // --------------------------------------------------------------------------
@@ -238,33 +216,41 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE IRMem(IRBuilder* ir, IRVar* base, IRVar* index, int32_t offset) noexcept
+  MPSL_INLINE IRMem(IRBuilder* ir, IRReg* base, IRReg* index, int32_t offset) noexcept
     : IRObject(ir, kTypeMem),
       _base(base),
       _index(index),
       _offset(offset) {
 
-    if (base) base->_usageCount++;
-    if (index) index->_usageCount++;
+    if (base) base->addRef();
+    if (index) index->addRef();
   }
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  //! Get the base address (always a pointer).
-  MPSL_INLINE IRVar* getBase() const noexcept { return _base; }
-  //! Get the index to access, null if there is no index.
-  MPSL_INLINE IRVar* getIndex() const noexcept { return _index; }
-  //! Get the displacement.
+  //! Get if the memory operand has a base register.
+  MPSL_INLINE bool hasBase() const noexcept { return _base != nullptr; }
+  //! Get base register.
+  MPSL_INLINE IRReg* getBase() const noexcept { return _base; }
+
+  //! Get if the memory operand has an index register.
+  MPSL_INLINE bool hasIndex() const noexcept { return _index != nullptr; }
+  //! Get index register.
+  MPSL_INLINE IRReg* getIndex() const noexcept { return _index; }
+
+  //! Get if the memory operand contains an offset.
+  MPSL_INLINE bool hasOffset() const noexcept { return _offset != 0; }
+  //! Get immediate offset.
   MPSL_INLINE int32_t getOffset() const noexcept { return _offset; }
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
-  IRVar* _base;
-  IRVar* _index;
+  IRReg* _base;
+  IRReg* _index;
   int32_t _offset;
 };
 
@@ -365,6 +351,13 @@ class IRBlock : public IRObject {
 public:
   MPSL_NONCOPYABLE(IRBlock)
 
+  //! Block kind.
+  enum Kind{
+    kKindBasic = 0,                      //!< Basic block.
+    kKindEntry = 1,                      //!< Function entry.
+    kKindExit  = 2                       //!< Function exit.
+  };
+
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
@@ -387,19 +380,19 @@ public:
   MPSL_INLINE IRBody& getBody() noexcept { return _body; }
   MPSL_INLINE const IRBody& getBody() const noexcept { return _body; }
 
-  MPSL_INLINE Error append(IRInst* inst) noexcept { return _body.append(inst); }
-  MPSL_INLINE Error prepend(IRInst* inst) noexcept { return _body.prepend(inst); }
+  MPSL_INLINE Error append(IRInst* inst) noexcept;
+  MPSL_INLINE Error prepend(IRInst* inst) noexcept;
 
   MPSL_INLINE void neuterAt(size_t i) noexcept {
     MPSL_ASSERT(i < _body.getLength());
     _body[i] = nullptr;
-    _neutered = true;
+    _requiresFixup = true;
   }
 
   MPSL_NOAPI void _fixupAfterNeutering() noexcept;
 
   MPSL_INLINE void fixupAfterNeutering() noexcept {
-    if (_neutered)
+    if (_requiresFixup)
       _fixupAfterNeutering();
   }
 
@@ -407,15 +400,12 @@ public:
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! Previous block in IRBuilder's block list.
-  IRBlock* _prevBlock;
-  //! Next block in IRBuilder's block list.
-  IRBlock* _nextBlock;
+  IRBuilder* _ir;                        //!< IR builder.
+  IRBlock* _prevBlock;                   //!< Previous block in IRBuilder's block list.
+  IRBlock* _nextBlock;                   //!< Next block in IRBuilder's block list.
 
-  //! Block body (instructions).
-  IRBody _body;
-  //! Body contains nulls and should be updated.
-  bool _neutered;
+  IRBody _body;                          //!< Block body (instructions).
+  bool _requiresFixup;                   //!< Body contains nulls and must be fixed.
 };
 
 // ============================================================================
@@ -494,7 +484,7 @@ public:
   MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _heap; }
   MPSL_INLINE IRBlock* getMainBlock() const noexcept { return _entryBlock; }
 
-  MPSL_INLINE IRVar* getDataPtr(uint32_t slot) const noexcept {
+  MPSL_INLINE IRReg* getDataPtr(uint32_t slot) const noexcept {
     MPSL_ASSERT(slot < _numSlots);
     return _dataSlots[slot];
   }
@@ -535,10 +525,10 @@ public:
   }
 #undef MPSL_ALLOC_IR_OBJECT
 
-  MPSL_NOAPI IRVar* newVar(uint32_t reg, uint32_t width) noexcept;
-  MPSL_NOAPI IRVar* newVarByTypeInfo(uint32_t typeInfo) noexcept;
+  MPSL_NOAPI IRReg* newVar(uint32_t reg, uint32_t width) noexcept;
+  MPSL_NOAPI IRReg* newVarByTypeInfo(uint32_t typeInfo) noexcept;
 
-  MPSL_NOAPI IRMem* newMem(IRVar* base, IRVar* index, int32_t offset) noexcept;
+  MPSL_NOAPI IRMem* newMem(IRReg* base, IRReg* index, int32_t offset) noexcept;
 
   MPSL_NOAPI IRImm* newImm(const Value& value, uint32_t reg, uint32_t immSize) noexcept;
   MPSL_NOAPI IRImm* newImmByTypeInfo(const Value& value, uint32_t typeInfo) noexcept;
@@ -560,7 +550,7 @@ public:
     if (inst == nullptr) return nullptr;
 
     inst->_opArray[0] = o0;
-    o0->_usageCount++;
+    o0->addRef();
 
     return inst;
   }
@@ -572,8 +562,8 @@ public:
     inst->_opArray[0] = o0;
     inst->_opArray[1] = o1;
 
-    o0->_usageCount++;
-    o1->_usageCount++;
+    o0->addRef();
+    o1->addRef();
 
     return inst;
   }
@@ -586,15 +576,20 @@ public:
     inst->_opArray[1] = o1;
     inst->_opArray[2] = o2;
 
-    o0->_usageCount++;
-    o1->_usageCount++;
-    o2->_usageCount++;
+    o0->addRef();
+    o1->addRef();
+    o2->addRef();
 
     return inst;
   }
 
   MPSL_NOAPI void deleteInst(IRInst* obj) noexcept;
   MPSL_NOAPI void deleteObject(IRObject* obj) noexcept;
+
+  MPSL_INLINE void derefObject(IRObject* obj) noexcept {
+    if (--obj->_refCount == 0)
+      deleteObject(obj);
+  }
 
   // --------------------------------------------------------------------------
   // [Init]
@@ -610,9 +605,9 @@ public:
   MPSL_NOAPI Error emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObject* o1) noexcept;
   MPSL_NOAPI Error emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObject* o1, IRObject* o2) noexcept;
 
-  MPSL_NOAPI Error emitMove(IRBlock* block, IRVar* dst, IRVar* src) noexcept;
+  MPSL_NOAPI Error emitMove(IRBlock* block, IRReg* dst, IRReg* src) noexcept;
   // TODO: Probably remove.
-  MPSL_NOAPI Error emitFetch(IRBlock* block, IRVar* dst, IRObject* src) noexcept;
+  MPSL_NOAPI Error emitFetch(IRBlock* block, IRReg* dst, IRObject* src) noexcept;
 
   // --------------------------------------------------------------------------
   // [Dump]
@@ -628,13 +623,13 @@ public:
   ZoneHeap* _heap;
   //! Main block.
   IRBlock* _entryBlock;
-  //! First block of managed by `IRBuilder`.
+  //! First block managed by `IRBuilder`.
   IRBlock* _blockFirst;
-  //! Last block of managed by `IRBuilder`.
+  //! Last block managed by `IRBuilder`.
   IRBlock* _blockLast;
 
   //! Entry point arguments.
-  IRVar* _dataSlots[Globals::kMaxArgumentsCount];
+  IRReg* _dataSlots[Globals::kMaxArgumentsCount];
   //! Number of entry-point arguments.
   uint32_t _numSlots;
 
@@ -646,14 +641,18 @@ public:
 
 MPSL_INLINE IRBlock::IRBlock(IRBuilder* ir) noexcept
   : IRObject(ir, kTypeBlock),
+    _ir(ir),
     _prevBlock(nullptr),
     _nextBlock(nullptr),
-    _body(ir->getHeap()),
-    _neutered(false) {
-  _blockData._blockType = kIRBlockBasic;
+    _body(),
+    _requiresFixup(false) {
+  _blockData._blockType = kKindBasic;
   _blockData._isAssembled = false;
-  _blockData._jitId = kInvalidValue;
+  _blockData._jitId = kInvalidRegId;
 }
+
+MPSL_INLINE Error IRBlock::append(IRInst* inst) noexcept { return _body.append(_ir->_heap, inst); }
+MPSL_INLINE Error IRBlock::prepend(IRInst* inst) noexcept { return _body.prepend(_ir->_heap, inst); }
 
 } // mpsl namespace
 

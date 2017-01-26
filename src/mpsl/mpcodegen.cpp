@@ -8,7 +8,7 @@
 #define MPSL_EXPORTS
 
 // [Dependencies - MPSL]
-#include "./mpasttoir_p.h"
+#include "./mpcodegen_p.h"
 #include "./mpmath_p.h"
 
 // [Api-Begin]
@@ -73,11 +73,11 @@ static MPSL_INLINE bool mpIsValueLoHiEqual(const Value& val) noexcept {
 }
 
 // ============================================================================
-// [mpsl::AstToIR - Construction / Destruction]
+// [mpsl::CodeGen - Construction / Destruction]
 // ============================================================================
 
-AstToIR::AstToIR(AstBuilder* ast, IRBuilder* ir) noexcept
-  : AstVisitorWithArgs<AstToIR, Args&>(ast),
+CodeGen::CodeGen(AstBuilder* ast, IRBuilder* ir) noexcept
+  : AstVisitorWithArgs<CodeGen, Result&>(ast),
     _ir(ir),
     _block(nullptr),
     _functionLevel(0),
@@ -89,13 +89,13 @@ AstToIR::AstToIR(AstBuilder* ast, IRBuilder* ir) noexcept
     _memMap(ir->getHeap()) {
   _hiddenRet = ast->getGlobalScope()->resolveSymbol(StringRef("@ret", 4));
 }
-AstToIR::~AstToIR() noexcept {}
+CodeGen::~CodeGen() noexcept {}
 
 // ============================================================================
-// [mpsl::AstToIR - OnNode]
+// [mpsl::CodeGen - OnNode]
 // ============================================================================
 
-Error AstToIR::onProgram(AstProgram* node, Args& out) noexcept {
+Error CodeGen::onProgram(AstProgram* node, Result& out) noexcept {
   AstNode** children = node->getChildren();
   uint32_t i, count = node->getLength();
 
@@ -117,7 +117,7 @@ Error AstToIR::onProgram(AstProgram* node, Args& out) noexcept {
 
 // NOTE: This is only called once per "main()". Other functions are simply
 // inlined during the AST to IR translation.
-Error AstToIR::onFunction(AstFunction* node, Args& out) noexcept {
+Error CodeGen::onFunction(AstFunction* node, Result& out) noexcept {
   if (node->hasBody()) {
     MPSL_PROPAGATE(_nestedFunctions.put(node));
     MPSL_PROPAGATE(onNode(node->getBody(), out));
@@ -126,58 +126,58 @@ Error AstToIR::onFunction(AstFunction* node, Args& out) noexcept {
   return kErrorOk;
 }
 
-Error AstToIR::onBlock(AstBlock* node, Args& out) noexcept {
+Error CodeGen::onBlock(AstBlock* node, Result& out) noexcept {
   AstNode** children = node->getChildren();
   uint32_t i, count = node->getLength();
 
   for (i = 0; i < count; i++) {
-    Args noArgs(false);
-    MPSL_PROPAGATE(onNode(children[i], noArgs));
+    Result noResult(false);
+    MPSL_PROPAGATE(onNode(children[i], noResult));
   }
 
   return kErrorOk;
 }
 
-Error AstToIR::onBranch(AstBranch* node, Args& out) noexcept {
+Error CodeGen::onBranch(AstBranch* node, Result& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onCondition(AstCondition* node, Args& out) noexcept {
+Error CodeGen::onCondition(AstCondition* node, Result& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onLoop(AstLoop* node, Args& out) noexcept {
+Error CodeGen::onLoop(AstLoop* node, Result& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onBreak(AstBreak* node, Args& out) noexcept {
+Error CodeGen::onBreak(AstBreak* node, Result& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onContinue(AstContinue* node, Args& out) noexcept {
+Error CodeGen::onContinue(AstContinue* node, Result& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;
 }
 
-Error AstToIR::onReturn(AstReturn* node, Args& out) noexcept {
+Error CodeGen::onReturn(AstReturn* node, Result& out) noexcept {
   if (node->hasChild()) {
-    Args val(true);
+    Result val(true);
     MPSL_PROPAGATE(onNode(node->getChild(), val));
 
     uint32_t typeInfo = _hiddenRet->getTypeInfo();
     uint32_t width = TypeInfo::widthOf(typeInfo);
 
     if (_functionLevel == 0) {
-      IRPair<IRVar> var;
+      IRPair<IRReg> var;
       MPSL_PROPAGATE(asVar(var, val.result, typeInfo));
 
       IRPair<IRMem> mem;
@@ -192,12 +192,12 @@ Error AstToIR::onReturn(AstReturn* node, Args& out) noexcept {
   return kErrorOk;
 }
 
-Error AstToIR::onVarDecl(AstVarDecl* node, Args& out) noexcept {
+Error CodeGen::onVarDecl(AstVarDecl* node, Result& out) noexcept {
   uint32_t typeInfo = node->getTypeInfo();
-  IRPair<IRVar> var;
+  IRPair<IRReg> var;
 
   if (node->hasChild()) {
-    Args exp(true);
+    Result exp(true);
     MPSL_PROPAGATE(onNode(node->getChild(), exp));
     MPSL_PROPAGATE(asVar(var, exp.result, typeInfo));
   }
@@ -209,7 +209,7 @@ Error AstToIR::onVarDecl(AstVarDecl* node, Args& out) noexcept {
   return mapVarToAst(node->getSymbol(), var);
 }
 
-Error AstToIR::onVarMemb(AstVarMemb* node, Args& out) noexcept {
+Error CodeGen::onVarMemb(AstVarMemb* node, Result& out) noexcept {
   AstNode* childNode = node->getChild();
   if (!childNode || !childNode->isVar())
     return MPSL_TRACE_ERROR(kErrorInvalidState);
@@ -220,7 +220,7 @@ Error AstToIR::onVarMemb(AstVarMemb* node, Args& out) noexcept {
   return addrOfData(out.result, DataSlot(child->getSymbol()->getDataSlot(), node->getOffset()), width);
 }
 
-Error AstToIR::onVar(AstVar* node, Args& out) noexcept {
+Error CodeGen::onVar(AstVar* node, Result& out) noexcept {
   AstSymbol* symbol = node->getSymbol();
 
   if (symbol->getDataSlot() != kInvalidDataSlot) {
@@ -235,25 +235,25 @@ Error AstToIR::onVar(AstVar* node, Args& out) noexcept {
   }
 }
 
-Error AstToIR::onImm(AstImm* node, Args& out) noexcept {
+Error CodeGen::onImm(AstImm* node, Result& out) noexcept {
   return newImm(out.result, node->getValue(), node->getTypeInfo());
 }
 
 #define COMBINE_OP_TYPE(op, typeId) (((op) << 8) | ((typeId) << 4))
 #define COMBINE_OP_CAST(toId, fromId) (((toId) << 8) | ((fromId) << 4))
 
-Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
+Error CodeGen::onUnaryOp(AstUnaryOp* node, Result& out) noexcept {
   if (MPSL_UNLIKELY(!node->hasChild()))
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-  Args tmp(true);
+  Result tmp(true);
   MPSL_PROPAGATE(onNode(node->getChild(), tmp));
 
   IRBlock* block = getBlock();
   uint32_t typeInfo = node->getTypeInfo();
   const OpInfo& op = OpInfo::get(node->getOp());
 
-  IRPair<IRVar> var;
+  IRPair<IRReg> var;
   MPSL_PROPAGATE(asVar(var, tmp.result, typeInfo));
 
   // Special case for unary assignment - `(x)++` and `++(x)` like operators.
@@ -277,7 +277,7 @@ Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
     IRPair<IRObject> imm;
     MPSL_PROPAGATE(newImm(imm, immContent, typeInfo));
 
-    IRPair<IRVar> result;
+    IRPair<IRReg> result;
     if (out.dependsOnResult)
       MPSL_PROPAGATE(newVar(result, typeInfo));
 
@@ -319,7 +319,7 @@ Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
     }
     else if (op.isSwizzle()) {
       uint32_t width = TypeInfo::widthOf(typeInfo);
-      uint32_t swizzleMask = node->getSwizzleMask();
+      uint32_t swizzleMask = 0; // TODO:
 
       Value swizzleValue;
       swizzleValue.q.set(0);
@@ -329,7 +329,7 @@ Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
       }
       else {
         swizzleValue.i[0] = swizzleMask;
-        IRImm* msk = getIR()->newImm(swizzleValue, kIRRegNone, 4);
+        IRImm* msk = getIR()->newImm(swizzleValue, IRReg::kKindNone, 4);
         MPSL_PROPAGATE(getIR()->emitInst(getBlock(), kInstCodePshufd, out.result.lo, tmp.result.lo, msk));
       }
     }
@@ -344,12 +344,12 @@ Error AstToIR::onUnaryOp(AstUnaryOp* node, Args& out) noexcept {
   return kErrorOk;
 }
 
-Error AstToIR::onBinaryOp(AstBinaryOp* node, Args& out) noexcept {
+Error CodeGen::onBinaryOp(AstBinaryOp* node, Result& out) noexcept {
   if (MPSL_UNLIKELY(!node->hasLeft() || !node->hasRight()))
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-  Args lValue(true);
-  Args rValue(true);
+  Result lValue(true);
+  Result rValue(true);
 
   MPSL_PROPAGATE(onNode(node->getLeft(), lValue));
   MPSL_PROPAGATE(onNode(node->getRight(), rValue));
@@ -357,9 +357,9 @@ Error AstToIR::onBinaryOp(AstBinaryOp* node, Args& out) noexcept {
   uint32_t typeInfo = node->getTypeInfo();
   const OpInfo& op = OpInfo::get(node->getOp());
 
-  IRPair<IRVar> result;
-  IRPair<IRVar> lVar;
-  IRPair<IRVar> rVar;
+  IRPair<IRReg> result;
+  IRPair<IRReg> lVar;
+  IRPair<IRReg> rVar;
   MPSL_PROPAGATE(newVar(result, typeInfo));
 
   uint32_t instCode = op.getInstByTypeId(typeInfo & kTypeIdMask);
@@ -419,7 +419,7 @@ Error AstToIR::onBinaryOp(AstBinaryOp* node, Args& out) noexcept {
 #undef COMBINE_OP_TYPE
 #undef COMBINE_OP_CAST
 
-Error AstToIR::onCall(AstCall* node, Args& out) noexcept {
+Error CodeGen::onCall(AstCall* node, Result& out) noexcept {
   uint32_t i;
 
   AstSymbol* fSym = node->getSymbol();
@@ -445,12 +445,12 @@ Error AstToIR::onCall(AstCall* node, Args& out) noexcept {
 
   // Translate all function arguments to IR.
   for (i = 0; i < cArgsCount; i++) {
-    Args value(argsUsed);
+    Result value(argsUsed);
 
     AstVarDecl* argDecl = static_cast<AstVarDecl*>(fArgsDecl->getAt(i));
     MPSL_PROPAGATE(onNode(node->getAt(i), value));
 
-    IRPair<IRVar> var;
+    IRPair<IRReg> var;
     MPSL_PROPAGATE(asVar(var, value.result, argDecl->getTypeInfo()));
 
     mapVarToAst(argDecl->getSymbol(), var);
@@ -458,12 +458,12 @@ Error AstToIR::onCall(AstCall* node, Args& out) noexcept {
 
   // Map all function arguments to `varMap`.
   while (i < fArgsCount) {
-    Args value(argsUsed);
+    Result value(argsUsed);
 
     AstVarDecl* argDecl = static_cast<AstVarDecl*>(fArgsDecl->getAt(i));
     MPSL_PROPAGATE(onNode(argDecl, value));
 
-    IRPair<IRVar> var;
+    IRPair<IRReg> var;
     MPSL_PROPAGATE(asVar(var, value.result, argDecl->getTypeInfo()));
 
     mapVarToAst(argDecl->getSymbol(), var);
@@ -485,11 +485,11 @@ Error AstToIR::onCall(AstCall* node, Args& out) noexcept {
 }
 
 // ============================================================================
-// [mpsl::AstToIR - Utilities]
+// [mpsl::CodeGen - Utilities]
 // ============================================================================
 
-Error AstToIR::mapVarToAst(AstSymbol* sym, IRPair<IRVar> var) noexcept {
-  IRPair<IRVar>* existing;
+Error CodeGen::mapVarToAst(AstSymbol* sym, IRPair<IRReg> var) noexcept {
+  IRPair<IRReg>* existing;
 
   if (!_varMap.get(sym, &existing))
     return _varMap.put(sym, var);
@@ -498,11 +498,11 @@ Error AstToIR::mapVarToAst(AstSymbol* sym, IRPair<IRVar> var) noexcept {
   return kErrorOk;
 }
 
-Error AstToIR::newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept {
+Error CodeGen::newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept {
   uint32_t width = TypeInfo::widthOf(typeInfo);
 
-  IRVar* lo = nullptr;
-  IRVar* hi = nullptr;
+  IRReg* lo = nullptr;
+  IRReg* hi = nullptr;
 
   if (needSplit(width)) {
     uint32_t loTI, hiTI;
@@ -521,7 +521,7 @@ Error AstToIR::newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept {
   return dst.set(lo, hi);
 }
 
-Error AstToIR::newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeInfo) noexcept {
+Error CodeGen::newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeInfo) noexcept {
   uint32_t width = TypeInfo::widthOf(typeInfo);
   if (width > 16 && !hasV256()) {
     uint32_t loTI, hiTI;
@@ -553,8 +553,8 @@ Error AstToIR::newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeIn
   }
 }
 
-Error AstToIR::addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) noexcept {
-  IRVar* base = getIR()->getDataPtr(data.slot);
+Error CodeGen::addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) noexcept {
+  IRReg* base = getIR()->getDataPtr(data.slot);
 
   IRMem* lo = nullptr;
   IRMem* hi = nullptr;
@@ -575,7 +575,7 @@ Error AstToIR::addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) 
   return kErrorOk;
 }
 
-Error AstToIR::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept {
+Error CodeGen::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept {
   if (in.lo == nullptr && in.hi == nullptr)
     return out.set(nullptr, nullptr);
 
@@ -594,16 +594,16 @@ Error AstToIR::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeIn
     }
 
     switch (inObj->getObjectType()) {
-      case IRObject::kTypeVar: {
-        out.obj[i] = static_cast<IRVar*>(inObj);
+      case IRObject::kTypeReg: {
+        out.obj[i] = inObj->as<IRReg>();
         break;
       }
 
       case IRObject::kTypeMem: {
         typeInfo = ti[i];
 
-        IRMem* mem = static_cast<IRMem*>(inObj);
-        IRVar* var = getIR()->newVarByTypeInfo(typeInfo);
+        IRMem* mem = inObj->as<IRMem>();
+        IRReg* var = getIR()->newVarByTypeInfo(typeInfo);
 
         MPSL_NULLCHECK(var);
         MPSL_PROPAGATE(emitFetchX(var, mem, typeInfo));
@@ -613,8 +613,8 @@ Error AstToIR::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeIn
       }
 
       case IRObject::kTypeImm: {
-        IRImm* imm = static_cast<IRImm*>(inObj);
-        IRVar* var = getIR()->newVarByTypeInfo(typeInfo);
+        IRImm* imm = inObj->as<IRImm>();
+        IRReg* var = getIR()->newVarByTypeInfo(typeInfo);
 
         MPSL_NULLCHECK(var);
         MPSL_PROPAGATE(getIR()->emitFetch(getBlock(), var, imm));
@@ -629,7 +629,7 @@ Error AstToIR::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeIn
   return kErrorOk;
 }
 
-Error AstToIR::emitMove(IRPair<IRVar> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept {
+Error CodeGen::emitMove(IRPair<IRReg> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept {
   uint32_t width = TypeInfo::widthOf(typeInfo);
   IRBlock* block = getBlock();
 
@@ -639,24 +639,24 @@ Error AstToIR::emitMove(IRPair<IRVar> dst, IRPair<IRVar> src, uint32_t typeInfo)
   return kErrorOk;
 }
 
-Error AstToIR::emitStore(IRPair<IRObject> dst, IRPair<IRVar> src, uint32_t typeInfo) noexcept {
+Error CodeGen::emitStore(IRPair<IRObject> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept {
   uint32_t width = TypeInfo::widthOf(typeInfo);
 
   if (needSplit(width)) {
     uint32_t loTI, hiTI;
     mpSplitTypeInfo(loTI, hiTI, typeInfo);
 
-    if (src.lo) MPSL_PROPAGATE(emitStoreX(static_cast<IRMem*>(dst.lo), src.lo, loTI));
-    if (src.hi) MPSL_PROPAGATE(emitStoreX(static_cast<IRMem*>(dst.hi), src.hi, hiTI));
+    if (src.lo) MPSL_PROPAGATE(emitStoreX(dst.lo->as<IRMem>(), src.lo, loTI));
+    if (src.hi) MPSL_PROPAGATE(emitStoreX(dst.hi->as<IRMem>(), src.hi, hiTI));
 
     return kErrorOk;
   }
   else {
-    return emitStoreX(static_cast<IRMem*>(dst.lo), src.lo, typeInfo);
+    return emitStoreX(dst.lo->as<IRMem>(), src.lo, typeInfo);
   }
 }
 
-Error AstToIR::emitInst2(uint32_t instCode,
+Error CodeGen::emitInst2(uint32_t instCode,
   IRPair<IRObject> o0,
   IRPair<IRObject> o1, uint32_t typeInfo) noexcept {
 
@@ -676,7 +676,7 @@ Error AstToIR::emitInst2(uint32_t instCode,
   }
 }
 
-Error AstToIR::emitInst3(uint32_t instCode,
+Error CodeGen::emitInst3(uint32_t instCode,
   IRPair<IRObject> o0,
   IRPair<IRObject> o1,
   IRPair<IRObject> o2, uint32_t typeInfo) noexcept {
@@ -697,7 +697,7 @@ Error AstToIR::emitInst3(uint32_t instCode,
   }
 }
 
-Error AstToIR::emitFetchX(IRVar* dst, IRMem* src, uint32_t typeInfo) noexcept {
+Error CodeGen::emitFetchX(IRReg* dst, IRMem* src, uint32_t typeInfo) noexcept {
   uint32_t instCode = kInstCodeNone;
   switch (typeInfo & (kTypeIdMask | kTypeVecMask)) {
     case kTypeBool   : instCode = kInstCodeFetch32; break;
@@ -740,7 +740,7 @@ Error AstToIR::emitFetchX(IRVar* dst, IRMem* src, uint32_t typeInfo) noexcept {
   return getIR()->emitInst(getBlock(), instCode, dst, src);
 }
 
-Error AstToIR::emitStoreX(IRMem* dst, IRVar* src, uint32_t typeInfo) noexcept {
+Error CodeGen::emitStoreX(IRMem* dst, IRReg* src, uint32_t typeInfo) noexcept {
   uint32_t instCode = kInstCodeNone;
   switch (typeInfo & (kTypeIdMask | kTypeVecMask)) {
     case kTypeBool   : instCode = kInstCodeStore32; break;

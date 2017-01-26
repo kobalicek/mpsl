@@ -41,7 +41,7 @@ MPSL_NOAPI StringBuilder& formatType(StringBuilder& sb, uint32_t typeInfo) noexc
 MPSL_NOAPI StringBuilder& formatValue(StringBuilder& sb, uint32_t typeInfo, const Value* value) noexcept;
 
 //! Append a formatted swizzle letters.
-MPSL_NOAPI void formatSwizzle(char* dst, uint32_t swizzleMask, uint32_t count) noexcept;
+MPSL_NOAPI void formatSwizzleArray(char* dst, const uint8_t* swizzleArray, uint32_t count) noexcept;
 
 } // FormatUtils namespace
 } // mpsl namespace

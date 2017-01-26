@@ -29,18 +29,17 @@ install:
       export PATH=${TRAVIS_BUILD_DIR}/deps/cmake/bin:${PATH}
     else
       brew update
-      brew unlink cmake
-      brew install -v cmake
+      brew outdated cmake || brew upgrade cmake
     fi
   - |
     mkdir -p deps/asmjit
-    git clone -b next --depth=1 https://github.com/kobalicek/asmjit.git deps/asmjit
+    git clone --depth=1 https://github.com/asmjit/asmjit.git deps/asmjit
 
 before_script:
   - mkdir build
   - cd build
   - cmake --version
-  - cmake .. -G"Unix Makefiles" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DASMJIT_DIR=deps/asmjit -DMPSL_BUILD_TEST=1
+  - cmake .. -G"Unix Makefiles" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DASMJIT_DIR="../deps/asmjit" -DMPSL_BUILD_TEST=1
   - cd ..
 
 script:

@@ -76,27 +76,27 @@ union DoubleBits {
 
   MPSL_INLINE bool isNan() const noexcept {
     if (MPSL_ARCH_64BIT)
-      return (u & MPSL_UINT64_C(0x7FFFFFFFFFFFFFFF)) > MPSL_UINT64_C(0x7F80000000000000);
+      return (u & ASMJIT_UINT64_C(0x7FFFFFFFFFFFFFFF)) > ASMJIT_UINT64_C(0x7F80000000000000);
     else
       return ((hi & 0x7FF00000U)) == 0x7FF00000U && ((hi & 0x000FFFFFU) | lo) != 0x00000000U;
   }
 
   MPSL_INLINE bool isInf() const noexcept {
     if (MPSL_ARCH_64BIT)
-      return (u & MPSL_UINT64_C(0x7FFFFFFFFFFFFFFF)) == MPSL_UINT64_C(0x7F80000000000000);
+      return (u & ASMJIT_UINT64_C(0x7FFFFFFFFFFFFFFF)) == ASMJIT_UINT64_C(0x7F80000000000000);
     else
       return (hi & 0x7FFFFFFFU) == 0x7FF00000U && lo == 0x00000000U;
   }
 
   MPSL_INLINE bool isFinite() const noexcept {
     if (MPSL_ARCH_64BIT)
-      return (u & MPSL_UINT64_C(0x7FF0000000000000)) != MPSL_UINT64_C(0x7FF0000000000000);
+      return (u & ASMJIT_UINT64_C(0x7FF0000000000000)) != ASMJIT_UINT64_C(0x7FF0000000000000);
     else
       return (hi & 0x7FF00000U) != 0x7FF00000U;
   }
 
-  MPSL_INLINE DoubleBits& setNan() noexcept { u = MPSL_UINT64_C(0x7FF8000000000000); return *this; }
-  MPSL_INLINE DoubleBits& setInf() noexcept { u = MPSL_UINT64_C(0x7FF0000000000000); return *this; }
+  MPSL_INLINE DoubleBits& setNan() noexcept { u = ASMJIT_UINT64_C(0x7FF8000000000000); return *this; }
+  MPSL_INLINE DoubleBits& setInf() noexcept { u = ASMJIT_UINT64_C(0x7FF0000000000000); return *this; }
 
   MPSL_INLINE DoubleBits& invSign() noexcept { hi ^= 0x80000000U; return *this; }
   MPSL_INLINE DoubleBits& setSign() noexcept { hi |= 0x80000000U; return *this; }
@@ -140,8 +140,8 @@ template<typename T> MPSL_INLINE T mpBound(T x, T xMin, T xMax) noexcept {
 static MPSL_INLINE float mpGetNanF() noexcept { static const FloatBits value = { 0x7FC00000U }; return value.f; }
 static MPSL_INLINE float mpGetInfF() noexcept { static const FloatBits value = { 0x7F800000U }; return value.f; }
 
-static MPSL_INLINE double mpGetNanD() noexcept { static const DoubleBits value = { MPSL_UINT64_C(0x7FF8000000000000) }; return value.d; }
-static MPSL_INLINE double mpGetInfD() noexcept { static const DoubleBits value = { MPSL_UINT64_C(0x7FF0000000000000) }; return value.d; }
+static MPSL_INLINE double mpGetNanD() noexcept { static const DoubleBits value = { ASMJIT_UINT64_C(0x7FF8000000000000) }; return value.d; }
+static MPSL_INLINE double mpGetInfD() noexcept { static const DoubleBits value = { ASMJIT_UINT64_C(0x7FF0000000000000) }; return value.d; }
 
 static MPSL_INLINE bool mpIsNanF(float x) noexcept { return FloatBits::fromFloat(x).isNan(); }
 static MPSL_INLINE bool mpIsInfF(float x) noexcept { return FloatBits::fromFloat(x).isInf(); }

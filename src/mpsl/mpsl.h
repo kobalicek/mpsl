@@ -240,7 +240,7 @@ enum Options {
   //! Show messages and warnings.
   kOptionVerbose = 0x0001,
   //! Debug AST and all AST-based transformations.
-  kOptionDebugAST = 0x0002,
+  kOptionDebugAst = 0x0002,
   //! Debug IR and all IR-based transformations.
   kOptionDebugIR  = 0x0004,
   //! Debug assembly generated.
@@ -294,106 +294,107 @@ enum Limits {
 //! MPSL error value, alias to `uint32_t`.
 typedef uint32_t Error;
 
-#define MPSL_DEFINE_TYPE_VEC_4(name, type) \
-  union name##2 { \
-    struct { type x, y; }; \
-    struct { type data[2]; }; \
-    \
-    MPSL_INLINE void set(type value) MPSL_NOEXCEPT { \
-      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++) \
-        data[i] = value; \
-    } \
-    \
-    MPSL_INLINE void set(type v0, type v1) MPSL_NOEXCEPT { \
-      data[0] = v0; \
-      data[1] = v1; \
-    } \
-    \
-    MPSL_INLINE type& operator[](size_t i) MPSL_NOEXCEPT { \
-      return data[i]; \
-    } \
-    MPSL_INLINE const type& operator[](size_t i) const MPSL_NOEXCEPT { \
-      return data[i]; \
-    } \
-  }; \
-  \
-  union name##3 { \
-    struct { type x, y, z; }; \
-    struct { type r, g, b; }; \
-    struct { type data[3]; }; \
-    \
-    MPSL_INLINE void set(type value) MPSL_NOEXCEPT { \
-      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++) \
-        data[i] = value; \
-    } \
-    \
-    MPSL_INLINE void set(type v0, type v1, type v2) MPSL_NOEXCEPT { \
-      data[0] = v0; \
-      data[1] = v1; \
-      data[2] = v2; \
-    } \
-    \
-    MPSL_INLINE type& operator[](size_t i) MPSL_NOEXCEPT { \
-      return data[i]; \
-    } \
-    MPSL_INLINE const type& operator[](size_t i) const MPSL_NOEXCEPT { \
-      return data[i]; \
-    } \
-  }; \
-  \
-  union name##4 { \
-    struct { type x, y, z, w; }; \
-    struct { type r, g, b, a; }; \
-    struct { type data[4]; }; \
-    \
-    MPSL_INLINE void set(type value) MPSL_NOEXCEPT { \
-      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++) \
-        data[i] = value; \
-    } \
-    \
-    MPSL_INLINE void set(type v0, type v1, type v2, type v3) MPSL_NOEXCEPT { \
-      data[0] = v0; \
-      data[1] = v1; \
-      data[2] = v2; \
-      data[3] = v3; \
-    } \
-    \
-    MPSL_INLINE type& operator[](size_t i) MPSL_NOEXCEPT { \
-      return data[i]; \
-    } \
-    MPSL_INLINE const type& operator[](size_t i) const MPSL_NOEXCEPT { \
-      return data[i]; \
-    } \
+#define MPSL_DEFINE_TYPE_VEC_4(name, type)                                    \
+  union name##2 {                                                             \
+    MPSL_INLINE void set(type value) noexcept {                               \
+      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++)                      \
+        data[i] = value;                                                      \
+    }                                                                         \
+                                                                              \
+    MPSL_INLINE void set(type v0, type v1) noexcept {                         \
+      data[0] = v0;                                                           \
+      data[1] = v1;                                                           \
+    }                                                                         \
+                                                                              \
+    MPSL_INLINE type& operator[](size_t i) noexcept {                         \
+      return data[i];                                                         \
+    }                                                                         \
+    MPSL_INLINE const type& operator[](size_t i) const noexcept {             \
+      return data[i];                                                         \
+    }                                                                         \
+                                                                              \
+    struct { type x, y; };                                                    \
+    struct { type data[2]; };                                                 \
+  };                                                                          \
+                                                                              \
+  union name##3 {                                                             \
+    MPSL_INLINE void set(type value) noexcept {                               \
+      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++)                      \
+        data[i] = value;                                                      \
+    }                                                                         \
+                                                                              \
+    MPSL_INLINE void set(type v0, type v1, type v2) noexcept {                \
+      data[0] = v0;                                                           \
+      data[1] = v1;                                                           \
+      data[2] = v2;                                                           \
+    }                                                                         \
+                                                                              \
+    MPSL_INLINE type& operator[](size_t i) noexcept {                         \
+      return data[i];                                                         \
+    }                                                                         \
+    MPSL_INLINE const type& operator[](size_t i) const noexcept {             \
+      return data[i];                                                         \
+    }                                                                         \
+                                                                              \
+    struct { type x, y, z; };                                                 \
+    struct { type r, g, b; };                                                 \
+    struct { type data[3]; };                                                 \
+  };                                                                          \
+                                                                              \
+  union name##4 {                                                             \
+    MPSL_INLINE void set(type value) noexcept {                               \
+      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++)                      \
+        data[i] = value;                                                      \
+    }                                                                         \
+                                                                              \
+    MPSL_INLINE void set(type v0, type v1, type v2, type v3) noexcept {       \
+      data[0] = v0;                                                           \
+      data[1] = v1;                                                           \
+      data[2] = v2;                                                           \
+      data[3] = v3;                                                           \
+    }                                                                         \
+                                                                              \
+    MPSL_INLINE type& operator[](size_t i) noexcept {                         \
+      return data[i];                                                         \
+    }                                                                         \
+    MPSL_INLINE const type& operator[](size_t i) const noexcept {             \
+      return data[i];                                                         \
+    }                                                                         \
+                                                                              \
+    struct { type x, y, z, w; };                                              \
+    struct { type r, g, b, a; };                                              \
+    struct { type data[4]; };                                                 \
   };
 
-#define MPSL_DEFINE_TYPE_VEC_8(name, type) \
-  union name##8 { \
-    struct { type x, y, z, w, i, j, k, l; }; \
-    struct { type r, g, b, a; }; \
-    struct { type data[8]; }; \
-    \
-    MPSL_INLINE void set(type value) MPSL_NOEXCEPT { \
-      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++) \
-        data[i] = value; \
-    } \
-    \
-    MPSL_INLINE void set(type v0, type v1, type v2, type v3, type v4, type v5, type v6, type v7) MPSL_NOEXCEPT { \
-      data[0] = v0; \
-      data[1] = v1; \
-      data[2] = v2; \
-      data[3] = v3; \
-      data[4] = v4; \
-      data[5] = v5; \
-      data[6] = v6; \
-      data[7] = v7; \
-    } \
-    \
-    MPSL_INLINE type& operator[](size_t i) MPSL_NOEXCEPT { \
-      return data[i]; \
-    } \
-    MPSL_INLINE const type& operator[](size_t i) const MPSL_NOEXCEPT { \
-      return data[i]; \
-    } \
+#define MPSL_DEFINE_TYPE_VEC_8(name, type)                                    \
+  union name##8 {                                                             \
+    MPSL_INLINE void set(type value) noexcept {                               \
+      for (size_t i = 0; i < MPSL_ARRAY_SIZE(data); i++)                      \
+        data[i] = value;                                                      \
+    }                                                                         \
+                                                                              \
+    MPSL_INLINE void set(type v0, type v1, type v2, type v3,                  \
+                         type v4, type v5, type v6, type v7) noexcept {       \
+      data[0] = v0;                                                           \
+      data[1] = v1;                                                           \
+      data[2] = v2;                                                           \
+      data[3] = v3;                                                           \
+      data[4] = v4;                                                           \
+      data[5] = v5;                                                           \
+      data[6] = v6;                                                           \
+      data[7] = v7;                                                           \
+    }                                                                         \
+                                                                              \
+    MPSL_INLINE type& operator[](size_t i) noexcept {                         \
+      return data[i];                                                         \
+    }                                                                         \
+    MPSL_INLINE const type& operator[](size_t i) const noexcept {             \
+      return data[i];                                                         \
+    }                                                                         \
+                                                                              \
+    struct { type x, y, z, w, i, j, k, l; };                                  \
+    struct { type r, g, b, a; };                                              \
+    struct { type data[8]; };                                                 \
   };
 
 MPSL_DEFINE_TYPE_VEC_4(Bool, uint32_t)
@@ -1062,44 +1063,54 @@ struct Program4 : public Program {
 
 //! Interface that can be used to catch compiler warnings and errors.
 struct MPSL_VIRTAPI OutputLog {
-  //! Message type.
-  //!
-  //! Specifies the type of the message.
-  enum Message {
-    //! Error message.
-    kMessageError = 0,
-    //! Warning message.
-    kMessageWarning,
-    //! Initial AST (after semantic analysis).
-    kMessageAstInitial,
-    //! Final AST (after optimization phases).
-    kMessageAstFinal,
-    //! Initial IR (after AST translation).
-    kMessageIRInitial,
-    //! Final IR (after optimization phases).
-    kMessageIRFinal,
-    //! Machine code.
-    kMessageAsm
+  //! Specifies the type of the message passed to \ref OutputLog::log().
+  enum MessageType {
+    kMessageError   = 0,                 //!< Error message.
+    kMessageWarning = 1,                 //!< Warning message.
+    kMessageDebug   = 2,                 //!< Debug message.
+    kMessageDump    = 3                  //!< MPSL dump (AST, IR, or ASM).
   };
 
-  //! Message information.
-  struct Info {
-    MPSL_INLINE Info(uint32_t type, uint32_t line, uint32_t column, const char* msg, size_t msgLen) noexcept
+  //! Output message data.
+  struct Message {
+    MPSL_INLINE Message(
+      uint32_t type,
+      uint32_t line,
+      uint32_t column,
+      const StringRef& header,
+      const StringRef& content) noexcept
       : _type(type),
         _line(line),
         _column(column),
-        _message(msg, msgLen) {}
+        _reserved(0),
+        _header(header),
+        _content(content) {}
 
+    MPSL_INLINE bool isError() const noexcept { return _type == kMessageError; }
+    MPSL_INLINE bool isWarning() const noexcept { return _type == kMessageWarning; }
+    MPSL_INLINE bool isDebug() const noexcept { return _type == kMessageDebug; }
+    MPSL_INLINE bool isDump() const noexcept { return _type == kMessageDump; }
+
+    //! Get if the message contains a source code position (line and column).
+    MPSL_INLINE bool hasPosition() const noexcept { return _line != 0; }
+
+    //! Get message type, see \ref MessageType.
     MPSL_INLINE uint32_t getType() const noexcept { return _type; }
+    //! Get line number, indexed from 1.
     MPSL_INLINE uint32_t getLine() const noexcept { return _line; }
+    //! Get column, indexed from 1.
     MPSL_INLINE uint32_t getColumn() const noexcept { return _column; }
-    MPSL_INLINE const StringRef& getMessage() const noexcept { return _message; }
+
+    MPSL_INLINE const StringRef& getHeader() const noexcept { return _header; }
+    MPSL_INLINE const StringRef& getContent() const noexcept { return _content; }
 
     uint32_t _type;
     uint32_t _line;
     uint32_t _column;
+    uint32_t _reserved;
 
-    StringRef _message;
+    StringRef _header;
+    StringRef _content;
   };
 
   // --------------------------------------------------------------------------
@@ -1113,7 +1124,7 @@ struct MPSL_VIRTAPI OutputLog {
   // [Interface]
   // --------------------------------------------------------------------------
 
-  virtual void log(const Info& info) noexcept = 0;
+  virtual void log(const Message& msg) noexcept = 0;
 };
 
 } // mpsl namespace

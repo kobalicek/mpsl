@@ -1,10 +1,10 @@
 #!/bin/sh
 
-MPSL_CURRENT_DIR=`pwd`
-MPSL_BUILD_DIR="build_makefiles_rel"
-MPSL_ASMJIT_DIR="../asmjit"
+CURRENT_DIR=`pwd`
+BUILD_DIR="build_makefiles_rel"
+ASMJIT_DIR="../../asmjit"
 
-mkdir ../${MPSL_BUILD_DIR}
-cd ../${MPSL_BUILD_DIR}
-cmake .. -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DASMJIT_DIR="${MPSL_ASMJIT_DIR}" -DMPSL_BUILD_TEST=1
-cd ${MPSL_CURRENT_DIR}
+mkdir -p ../${BUILD_DIR}
+cd ../${BUILD_DIR}
+cmake .. -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DASMJIT_DIR="${ASMJIT_DIR}" -DMPSL_BUILD_TEST=1
+cd ${CURRENT_DIR}

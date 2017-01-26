@@ -2,7 +2,7 @@
 
 set MPSL_CURRENT_DIR=%CD%
 set MPSL_BUILD_DIR="build_vs2015_x64"
-set MPSL_ASMJIT_DIR="../asmjit"
+set MPSL_ASMJIT_DIR="../../asmjit"
 
 mkdir ..\%MPSL_BUILD_DIR%
 cd ..\%MPSL_BUILD_DIR%

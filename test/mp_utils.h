@@ -10,31 +10,25 @@
 #include "./mpsl.h"
 
 struct TestLog : public mpsl::OutputLog {
-  virtual void log(const Info& info) MPSL_NOEXCEPT {
-    const mpsl::StringRef& msg = info.getMessage();
+  virtual void log(const Message& msg) MPSL_NOEXCEPT {
+    // TYPE    - Message type - Error, warning, debug, or dump.
+    // LINE    - Line number of the code related to the message (if known).
+    // COLUMN  - Column of the code related to the message (if known).
+    // HEADER  - Message or dump header, can be understood as a message type
+    //           with a bit more information than just the type. If the message
+    //           is a dump then the header is a dump type.
+    // CONTENT - Message or dump content. If it's just a message it always
+    //           contains just a single line. Dumps are typically multiline.
+    printf("%s", msg.getHeader().getData());
 
-    switch (info.getType()) {
-      case mpsl::OutputLog::kMessageError:
-        printf("ERROR [Line:%u] [Column:%u]\n%s\n", info.getLine(), info.getColumn(), msg.getData());
-        break;
-      case mpsl::OutputLog::kMessageWarning:
-        printf("WARNING [Line:%u] [Column:%u]\n%s\n", info.getLine(), info.getColumn(), msg.getData());
-        break;
-      case mpsl::OutputLog::kMessageAstInitial:
-        printf("[AST-Initial]\n%s\n", msg.getData());
-        break;
-      case mpsl::OutputLog::kMessageAstFinal:
-        printf("[AST-Final]\n%s\n", msg.getData());
-        break;
-      case mpsl::OutputLog::kMessageIRInitial:
-        printf("[IR-Initial]\n%s\n", msg.getData());
-        break;
-      case mpsl::OutputLog::kMessageIRFinal:
-        printf("[IR-Final]\n%s\n", msg.getData());
-        break;
-      case mpsl::OutputLog::kMessageAsm:
-        printf("[MachineCode]\n%s\n", msg.getData());
-        break;
+    if (!msg.isDump()) {
+      printf(" %s", msg.getContent().getData());
+      if (msg.hasPosition())
+        printf(" at [%u:%u]", msg.getLine(), msg.getColumn());
+      printf("\n");
+    }
+    else {
+      printf("\n%s\n", msg.getContent().getData());
     }
   }
 };

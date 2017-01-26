@@ -27,7 +27,6 @@ using asmjit::X86Gp;
 using asmjit::X86Mm;
 using asmjit::X86Xmm;
 using asmjit::X86Mem;
-using asmjit::X86Util;
 
 using asmjit::kConstScopeLocal;
 using asmjit::kConstScopeGlobal;
@@ -75,9 +74,9 @@ public:
   MPSL_NOAPI void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
   MPSL_NOAPI void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
 
-  MPSL_NOAPI X86Gp varAsPtr(IRVar* irVar);
-  MPSL_NOAPI X86Gp varAsI32(IRVar* irVar);
-  MPSL_NOAPI X86Xmm varAsXmm(IRVar* irVar);
+  MPSL_NOAPI X86Gp varAsPtr(IRReg* irVar);
+  MPSL_NOAPI X86Gp varAsI32(IRReg* irVar);
+  MPSL_NOAPI X86Xmm varAsXmm(IRReg* irVar);
 
   // --------------------------------------------------------------------------
   // [Members]

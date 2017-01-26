@@ -1,33 +1,41 @@
 cmake_minimum_required(VERSION 3.1)
 
+# Don't create a project if it was already created by another CMakeLists.txt.
+# This allows one library to embed another library without a project collision.
+if(NOT CMAKE_PROJECT_NAME OR "${CMAKE_PROJECT_NAME}" STREQUAL "mpsl")
+  project(mpsl C CXX)
+endif()
+
 # =============================================================================
 # [MPSL - Configuration]
 # =============================================================================
 
-# set(MPSL_EMBED FALSE)                         # Embed (no targets, just project).
-# set(MPSL_STATIC FALSE)                        # Whether to build a static library.
-# set(MPSL_BUILD_TEST FALSE)                    # Whether to build tests and samples.
+set(MPSL_DIR         "${CMAKE_CURRENT_LIST_DIR}" CACHE PATH "Location of 'mpsl'")
+set(ASMJIT_DIR       "${MPSL_DIR}/../asmjit"     CACHE PATH "Location of 'asmjit'")
+
+set(MPSL_EMBED       FALSE         CACHE BOOLEAN "Embed 'mpsl' library (no targets)")
+set(MPSL_STATIC      ${MPSL_EMBED} CACHE BOOLEAN "Build 'mpsl' library as static")
+set(MPSL_BUILD_TEST  FALSE         CACHE BOOLEAN "Build 'mpsl_test' applications")
+
+if(NOT DEFINED ASMJIT_EMBED)
+  set(ASMJIT_EMBED TRUE)
+endif()
 
 # =============================================================================
 # [MPSL - Project]
 # =============================================================================
 
-if(NOT MPSL_DIR)
-  set(MPSL_DIR ${CMAKE_CURRENT_LIST_DIR})
-endif()
-
 include("${MPSL_DIR}/CxxProject.cmake")
 cxx_project(mpsl)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-  set(MPSL_PRIVATE_LFLAGS "/OPT:REF /OPT:ICF")
-
   list(APPEND MPSL_PRIVATE_CFLAGS /GF)
   list(APPEND MPSL_PRIVATE_CFLAGS_DBG /GS /GR-)
   list(APPEND MPSL_PRIVATE_CFLAGS_REL /Oi /Oy /GS- /GR-)
 
+  # Enable multi-process compilation.
   if(NOT MSVC60 AND NOT MSVC70 AND NOT MSVC71)
-    list(APPEND MPSL_PRIVATE_CFLAGS /MP)        # Enable multi-process compilation.
+    list(APPEND MPSL_PRIVATE_CFLAGS /MP)
   endif()
 endif()
 
@@ -41,28 +49,27 @@ if("${CMAKE_CXX_COMPILER_ID}" MATCHES "^(GNU|Clang)$")
   list(APPEND MPSL_PRIVATE_CFLAGS_REL -fmerge-all-constants)
 endif()
 
-if(NOT ASMJIT_DIR)
-  set(ASMJIT_DIR "${MPSL_DIR}/../asmjit")
-endif()
-set(ASMJIT_EMBED TRUE)
-include("${ASMJIT_DIR}/CMakeLists.txt")
-list(APPEND MPSL_DEPS ${ASMJIT_LIBS})
-list(APPEND MPSL_PRIVATE_CFLAGS "${ASMJIT_CFLAGS}")
-
 # Use Unicode by default on Windows target.
 if(WIN32)
   list(APPEND MPSL_PRIVATE_CFLAGS "${CXX_DEFINE}_UNICODE")
 endif()
 
-set(MPSL_LIBS ${ASMJIT_DEPS})
+include("${ASMJIT_DIR}/CMakeLists.txt")
+list(APPEND MPSL_DEPS ${ASMJIT_LIBS})
+list(APPEND MPSL_PRIVATE_CFLAGS ${ASMJIT_CFLAGS})
+
+set(MPSL_LIBS ${MPSL_DEPS})
 if(NOT MPSL_EMBED)
   list(INSERT MPSL_LIBS 0 mpsl)
 endif()
 
+list(REMOVE_DUPLICATES MPSL_DEPS)
+list(REMOVE_DUPLICATES MPSL_PRIVATE_CFLAGS)
+
 cxx_project_info(mpsl)
 
 # =============================================================================
-# [MPSL - Sources]
+# [MPSL - Source]
 # =============================================================================
 
 cxx_add_source(mpsl MPSL_SRC mpsl
@@ -76,13 +83,11 @@ cxx_add_source(mpsl MPSL_SRC mpsl
 
   mpast.cpp
   mpast_p.h
-  mpastanalysis.cpp
-  mpastanalysis_p.h
   mpastoptimizer.cpp
   mpastoptimizer_p.h
-  mpasttoir.cpp
-  mpasttoir_p.h
   mpatomic_p.h
+  mpcodegen.cpp
+  mpcodegen_p.h
   mpfold.cpp
   mpfold_p.h
   mpformatutils.cpp

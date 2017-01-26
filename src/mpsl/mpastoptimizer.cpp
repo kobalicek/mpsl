@@ -350,7 +350,7 @@ Error AstOptimizer::onUnaryOp(AstUnaryOp* node) noexcept {
       }
       else if (op.isSwizzle()) {
         MPSL_PROPAGATE(
-          Fold::foldSwizzle(node->getSwizzleMask(), value, value, dTypeInfo));
+          Fold::foldSwizzle(node->getSwizzleArray(), value, value, dTypeInfo));
 
         child->setTypeInfo(dTypeInfo);
         node->unlinkChild();
