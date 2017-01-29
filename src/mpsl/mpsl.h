@@ -887,7 +887,7 @@ struct Program1 : public Program {
 
   MPSL_INLINE Error compile(Context& context, const char* body, uint32_t options,
     const Layout& layout0,
-    OutputLog* log) noexcept {
+    OutputLog* log = nullptr) noexcept {
 
     Context::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
     args.layout[0] = &layout0;
@@ -896,7 +896,7 @@ struct Program1 : public Program {
 
   MPSL_INLINE Error compile(Context& context, const StringRef& body, uint32_t options,
     const Layout& layout0,
-    OutputLog* log) noexcept {
+    OutputLog* log = nullptr) noexcept {
 
     Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
     args.layout[0] = &layout0;
@@ -928,7 +928,7 @@ struct Program2 : public Program {
   MPSL_INLINE Error compile(Context& context, const char* body, uint32_t options,
     const Layout& layout0,
     const Layout& layout1,
-    OutputLog* log) noexcept {
+    OutputLog* log = nullptr) noexcept {
 
     Context::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
     args.layout[0] = &layout0;
@@ -939,7 +939,7 @@ struct Program2 : public Program {
   MPSL_INLINE Error compile(Context& context, const StringRef& body, uint32_t options,
     const Layout& layout0,
     const Layout& layout1,
-    OutputLog* log) noexcept {
+    OutputLog* log = nullptr) noexcept {
 
     Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
     args.layout[0] = &layout0;
@@ -973,7 +973,7 @@ struct Program3 : public Program {
     const Layout& layout0,
     const Layout& layout1,
     const Layout& layout2,
-    OutputLog* log) noexcept {
+    OutputLog* log = nullptr) noexcept {
 
     Context::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
     args.layout[0] = &layout0;
@@ -986,7 +986,7 @@ struct Program3 : public Program {
     const Layout& layout0,
     const Layout& layout1,
     const Layout& layout2,
-    OutputLog* log) noexcept {
+    OutputLog* log = nullptr) noexcept {
 
     Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
     args.layout[0] = &layout0;
@@ -1022,7 +1022,7 @@ struct Program4 : public Program {
     const Layout& layout1,
     const Layout& layout2,
     const Layout& layout3,
-    OutputLog* log) noexcept {
+    OutputLog* log = nullptr) noexcept {
 
     Context::CompileArgs args(body, Globals::kInvalidIndex, options, kNumArgs);
     args.layout[0] = &layout0;
@@ -1037,7 +1037,7 @@ struct Program4 : public Program {
     const Layout& layout1,
     const Layout& layout2,
     const Layout& layout3,
-    OutputLog* log) noexcept {
+    OutputLog* log = nullptr) noexcept {
 
     Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
     args.layout[0] = &layout0;
