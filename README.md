@@ -44,7 +44,7 @@ MPSL is a lightweight shader-like programming language written in C++. Its name 
 
 MPSL has been designed to be lightweight and embeddable - it doesn't depend on huge libraries like LLVM, it only uses a very lightweight library called [AsmJit](https://github.com/kobalicek/asmjit) as a JIT backend. It implements its own abstract syntax tree (AST) and intermediate representation (IR) of the input program, and then uses an IRToAsm translator to convert IR to machine code.
 
-Check out a working [mp_tutorial.cpp](./src/app/mp_tutorial.cpp) to see how MPSL APIs are designed and how MPSL engine is embedded and used within an application.
+Check out a working [mp_tutorial.cpp](./test/mp_tutorial.cpp) to see how MPSL APIs are designed and how MPSL engine is embedded and used within an application.
 
 
 MPSL Types
