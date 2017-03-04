@@ -37,7 +37,7 @@ namespace HashUtils {
   //
   // Get a hash of the given string `str` of `len` length. This function doesn't
   // require `str` to be NULL terminated.
-  MPSL_NOAPI uint32_t hashString(const char* str, size_t len) noexcept;
+  uint32_t hashString(const char* str, size_t len) noexcept;
   //! \overload
   static MPSL_INLINE uint32_t hashString(const StringRef& str) noexcept {
     return hashString(str.getData(), str.getLength());
@@ -46,7 +46,7 @@ namespace HashUtils {
   // \internal
   //
   // Get a prime number that is close to `x`, but always greater than or equal to `x`.
-  MPSL_NOAPI uint32_t closestPrime(uint32_t x) noexcept;
+  uint32_t closestPrime(uint32_t x) noexcept;
 };
 
 // ============================================================================

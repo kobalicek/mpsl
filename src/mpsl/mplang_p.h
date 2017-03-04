@@ -258,7 +258,7 @@ enum OpFlags {
 
   //! The operator is defined for boolean operands.
   kOpFlagBoolOp        = 0x00100000,
-  //! The operator is defined for ineger operands.
+  //! The operator is defined for integer operands.
   kOpFlagIntOp         = 0x00200000,
   //! The operator is defined for floating-point operands.
   kOpFlagFloatOp       = 0x00400000,

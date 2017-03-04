@@ -15,6 +15,7 @@
 #include "./mpsl_apibegin.h"
 
 namespace mpsl {
+
 using namespace asmjit;
 
 // ============================================================================
@@ -134,15 +135,17 @@ Error IRToX86::compileIRAsFunc(IRBuilder* ir) {
 
 Error IRToX86::compileIRAsPart(IRBuilder* ir) {
   // Compile the entry block and all other reacheable blocks.
-  IRBlock* block = ir->getMainBlock();
+  IRBlock* block = ir->getEntry();
   MPSL_PROPAGATE(compileConsecutiveBlocks(block));
 
   // Compile all remaining, reacheable, and non-assembled blocks.
-  block = ir->_blockFirst;
-  while (block) {
+  IRBlocks& blocks = ir->getBlocks();
+  size_t count = blocks.getLength();
+
+  for (size_t i = 0; i < count; i++) {
+    block = blocks[i];
     if (!block->isAssembled())
       compileConsecutiveBlocks(block);
-    block = block->_nextBlock;
   }
 
   return kErrorOk;

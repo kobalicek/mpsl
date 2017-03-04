@@ -43,40 +43,40 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI IRToX86(ZoneHeap* heap, X86Compiler* cc);
-  MPSL_NOAPI ~IRToX86();
+  IRToX86(ZoneHeap* heap, X86Compiler* cc);
+  ~IRToX86();
 
   // --------------------------------------------------------------------------
   // [Const Pool]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI void prepareConstPool();
+  void prepareConstPool();
 
-  MPSL_NOAPI X86Mem getConstantU64(uint64_t value);
-  MPSL_NOAPI X86Mem getConstantU64AsPD(uint64_t value);
-  MPSL_NOAPI X86Mem getConstantD64(double value);
-  MPSL_NOAPI X86Mem getConstantD64AsPD(double value);
-  MPSL_NOAPI X86Mem getConstantByValue(const Value& value, uint32_t width);
+  X86Mem getConstantU64(uint64_t value);
+  X86Mem getConstantU64AsPD(uint64_t value);
+  X86Mem getConstantD64(double value);
+  X86Mem getConstantD64AsPD(double value);
+  X86Mem getConstantByValue(const Value& value, uint32_t width);
 
   // --------------------------------------------------------------------------
   // [Compile]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error compileIRAsFunc(IRBuilder* ir);
-  MPSL_NOAPI Error compileIRAsPart(IRBuilder* ir);
-  MPSL_NOAPI Error compileConsecutiveBlocks(IRBlock* block);
-  MPSL_NOAPI Error compileBasicBlock(IRBlock* block, IRBlock* next);
+  Error compileIRAsFunc(IRBuilder* ir);
+  Error compileIRAsPart(IRBuilder* ir);
+  Error compileConsecutiveBlocks(IRBlock* block);
+  Error compileBasicBlock(IRBlock* block, IRBlock* next);
 
   MPSL_INLINE void emit2x(uint32_t instId, const Operand& o0, const Operand& o1) { _cc->emit(instId, o0, o1); }
-  MPSL_NOAPI void emit3i(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
-  MPSL_NOAPI void emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
-  MPSL_NOAPI void emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
-  MPSL_NOAPI void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
-  MPSL_NOAPI void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
+  void emit3i(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
+  void emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
+  void emit3f(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
+  void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
+  void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
 
-  MPSL_NOAPI X86Gp varAsPtr(IRReg* irVar);
-  MPSL_NOAPI X86Gp varAsI32(IRReg* irVar);
-  MPSL_NOAPI X86Xmm varAsXmm(IRReg* irVar);
+  X86Gp varAsPtr(IRReg* irVar);
+  X86Gp varAsI32(IRReg* irVar);
+  X86Xmm varAsXmm(IRReg* irVar);
 
   // --------------------------------------------------------------------------
   // [Members]

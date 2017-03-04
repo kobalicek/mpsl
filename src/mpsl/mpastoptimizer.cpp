@@ -141,69 +141,60 @@ _DeleteNode:
 }
 
 Error AstOptimizer::onBranch(AstBranch* node) noexcept {
-  uint32_t i = 0, count = node->getLength();
-  while (i < count) {
-    AstCondition* cond = static_cast<AstCondition*>(node->getAt(i));
-    if (cond->hasExp())
-      MPSL_PROPAGATE(onNode(cond->getExp()));
+  if (node->hasCond()) {
+    MPSL_PROPAGATE(onNode(node->getCond()));
+    AstNode* cond = node->getCond();
 
-    AstNode* exp = cond->getExp();
-    bool alwaysTaken = false;
+    if (cond->isImm()) {
+      uint32_t typeId = cond->getTypeInfo() & kTypeIdMask;
 
-    if (exp == nullptr) {
-      if (i != count - 1)
-        return MPSL_TRACE_ERROR(kErrorInvalidState);
+      AstImm* imm = cond->as<AstImm>();
+      AstNode* alwaysTaken = nullptr;
+      AstNode* neverTaken = nullptr;
 
-      // If this is the only node we remove the branch. This case will never
-      // be produced by a parser or semantic analysis, but can be generated
-      // by the optimizer in case that previous branches were removed.
-      alwaysTaken = (i == 0);
-    }
-    else {
-      uint32_t typeId = exp->getTypeInfo() & kTypeIdMask;
-      if (exp->isImm()) {
-        AstImm* imm = static_cast<AstImm*>(exp);
-        alwaysTaken = mpGetBooleanValue(&imm->_value, typeId);
-
-        if (!alwaysTaken) {
-          // Never taken - just remove this branch and keep others.
-          _ast->deleteNode(node->removeAt(i));
-          count--;
-
-          // Prevent incrementing `i`.
-          continue;
-        }
-      }
-    }
-
-    if (cond->hasBody()) {
-      bool prevUnreachable = _unreachable;
-      MPSL_PROPAGATE(onNode(cond->getBody()));
-      _unreachable = prevUnreachable;
-    }
-
-    if (alwaysTaken) {
-      if (i == 0) {
-        // If this is the first branch we will simplify `if/else (a) {b}` to `{b}`.
-        AstNode* body = cond->unlinkBody();
-        _ast->deleteNode(node->getParent()->replaceNode(node, body));
+      // Simplify if (cond) {a} else {b} to either {a} or {b}.
+      if (mpGetBooleanValue(&imm->_value, typeId)) {
+        if (node->hasThen())
+          alwaysTaken = node->unlinkThen();
+        if (node->hasElse())
+          neverTaken = node->unlinkElse();
       }
       else {
-        // Otherwise this will become the `else` clause.
-        while (--count > i)
-          _ast->deleteNode(node->removeAt(count));
+        if (node->hasThen())
+          neverTaken = node->unlinkThen();
+        if (node->hasElse())
+          alwaysTaken = node->unlinkElse();
       }
+
+      if (neverTaken)
+        _ast->deleteNode(neverTaken);
+
+      _ast->deleteNode(
+        node->getParent()->replaceNode(
+          node, alwaysTaken));
+
+      if (alwaysTaken) {
+        bool prevUnreachable = _unreachable;
+        MPSL_PROPAGATE(onNode(alwaysTaken));
+        _unreachable = prevUnreachable;
+      }
+
       return kErrorOk;
     }
-
-    i++;
   }
 
-  return kErrorOk;
-}
+  if (node->hasThen()) {
+    bool prevUnreachable = _unreachable;
+    MPSL_PROPAGATE(onNode(node->getThen()));
+    _unreachable = prevUnreachable;
+  }
 
-Error AstOptimizer::onCondition(AstCondition* node) noexcept {
-  MPSL_ASSERT(!"Reached");
+  if (node->hasElse()) {
+    bool prevUnreachable = _unreachable;
+    MPSL_PROPAGATE(onNode(node->getElse()));
+    _unreachable = prevUnreachable;
+  }
+
   return kErrorOk;
 }
 

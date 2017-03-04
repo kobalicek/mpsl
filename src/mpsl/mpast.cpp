@@ -101,7 +101,6 @@ static const AstNodeSize mpAstNodeSize[] = {
   ROW(AstNode::kTypeFunction , sizeof(AstFunction) ),
   ROW(AstNode::kTypeBlock    , sizeof(AstBlock)    ),
   ROW(AstNode::kTypeBranch   , sizeof(AstBranch)   ),
-  ROW(AstNode::kTypeCondition, sizeof(AstCondition)),
   ROW(AstNode::kTypeFor      , sizeof(AstLoop)     ),
   ROW(AstNode::kTypeWhile    , sizeof(AstLoop)     ),
   ROW(AstNode::kTypeDoWhile  , sizeof(AstLoop)     ),
@@ -182,7 +181,6 @@ void AstBuilder::deleteNode(AstNode* node) noexcept {
     case AstNode::kTypeFunction : static_cast<AstFunction* >(node)->destroy(this); break;
     case AstNode::kTypeBlock    : static_cast<AstBlock*    >(node)->destroy(this); break;
     case AstNode::kTypeBranch   : static_cast<AstBranch*   >(node)->destroy(this); break;
-    case AstNode::kTypeCondition: static_cast<AstCondition*>(node)->destroy(this); break;
     case AstNode::kTypeFor      :
     case AstNode::kTypeWhile    :
     case AstNode::kTypeDoWhile  : static_cast<AstLoop*     >(node)->destroy(this); break;
@@ -676,37 +674,24 @@ Error AstDump::onBlock(AstBlock* node) noexcept {
 }
 
 Error AstDump::onBranch(AstBranch* node) noexcept {
-  return onBlock(node);
-}
+  nest("If");
+  if (node->hasCond())
+    MPSL_PROPAGATE(onNode(node->getCond()));
+  else
+    MPSL_PROPAGATE(_sb.appendString("(no condition)"));
+  denest();
 
-Error AstDump::onCondition(AstCondition* node) noexcept {
-  // Get the type of the cond 'if', 'else if' or 'else'.
-  const char* condName = "Cond";
-
-  if (node->hasParent()) {
-    if (static_cast<AstBlock*>(node->getParent())->getAt(0) == node)
-      condName = "If";
-    else if (node->hasExp())
-      condName = "Else If";
-    else
-      condName = "Else";
-  }
-
-  nest("%s", condName);
-
-  if (node->hasExp()) {
-    nest("Exp");
-    MPSL_PROPAGATE(onNode(node->getExp()));
+  if (node->hasThen()) {
+    nest("Then");
+    MPSL_PROPAGATE(onNode(node->getThen()));
     denest();
   }
 
-  if (node->hasBody()) {
-    nest("Body");
-    MPSL_PROPAGATE(onNode(node->getBody()));
+  if (node->hasElse()) {
+    nest("Else");
+    MPSL_PROPAGATE(onNode(node->getElse()));
     denest();
   }
-
-  return denest();
 }
 
 Error AstDump::onLoop(AstLoop* node) noexcept {
@@ -947,21 +932,28 @@ Error AstAnalysis::onBlock(AstBlock* node) noexcept {
 }
 
 Error AstAnalysis::onBranch(AstBranch* node) noexcept {
-  return onBlock(node);
-}
-
-Error AstAnalysis::onCondition(AstCondition* node) noexcept {
-  if (node->hasExp()) {
-    MPSL_PROPAGATE(onNode(node->getExp()));
-    MPSL_PROPAGATE(boolCast(node, node->getExp()));
+  if (node->hasCond()) {
+    MPSL_PROPAGATE(onNode(node->getCond()));
+    MPSL_PROPAGATE(boolCast(node, node->getCond()));
   }
 
-  if (node->hasBody()) {
-    bool prevUnreachable = _unreachable;
-    MPSL_PROPAGATE(onNode(node->getBody()));
+  bool prevUnreachable = _unreachable;
+  bool thenUnreachable = prevUnreachable;
+  bool elseUnreachable = prevUnreachable;
+
+  if (node->hasThen()) {
     _unreachable = prevUnreachable;
+    MPSL_PROPAGATE(onNode(node->getThen()));
+    thenUnreachable = _unreachable;
   }
 
+  if (node->hasElse()) {
+    _unreachable = prevUnreachable;
+    MPSL_PROPAGATE(onNode(node->getElse()));
+    elseUnreachable = _unreachable;
+  }
+
+  _unreachable = prevUnreachable || (thenUnreachable & elseUnreachable);
   return kErrorOk;
 }
 

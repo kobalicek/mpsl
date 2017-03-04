@@ -133,11 +133,11 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
     AstSymbol* retType = localScope->resolveSymbol(str, token.hVal);
 
     if (retType == nullptr || !retType->isTypeName())
-      MPSL_PARSER_ERROR(token, "Expected a type-name.");
+      MPSL_PARSER_ERROR(token, "Expected type-name.");
     func->setRet(retType);
   }
   else if (uToken != kTokenVoid) {
-    MPSL_PARSER_ERROR(token, "Expected a type-name.");
+    MPSL_PARSER_ERROR(token, "Expected type-name.");
   }
 
   // Parse the function name.
@@ -163,7 +163,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
 
   // Parse the function arguments list.
   if (_tokenizer.next(&token) != kTokenLParen)
-    MPSL_PARSER_ERROR(token, "Expected a '(' token after a function name.");
+    MPSL_PARSER_ERROR(token, "Expected '(' token after a function name.");
 
   args->setPosition(token.getPosAsUInt());
   uToken = _tokenizer.next(&token);
@@ -334,7 +334,7 @@ Error Parser::parseStatement(AstBlock* block, uint32_t flags) noexcept {
   block->appendNode(expression);
 
   if (_tokenizer.next(&token) != kTokenSemicolon)
-    MPSL_PARSER_ERROR(token, "Expected a ';' after an expression.");
+    MPSL_PARSER_ERROR(token, "Expected ';' after an expression.");
 
   return kErrorOk;
 }
@@ -342,11 +342,13 @@ Error Parser::parseStatement(AstBlock* block, uint32_t flags) noexcept {
 // Parse <block|statement>;.
 Error Parser::parseBlockOrStatement(AstBlock* block) noexcept {
   Token token;
-  uint32_t uToken = _tokenizer.next(&token);
+  uint32_t uToken = _tokenizer.peek(&token);
 
-  // Parse the <block>, consume '{' token.
-  block->setPosition(token.getPosAsUInt());
   if (uToken == kTokenLCurl) {
+    // Parse <block>, consume '{' token.
+    block->setPosition(token.getPosAsUInt());
+    _tokenizer.consume();
+
     for (;;) {
       uToken = _tokenizer.peek(&token);
 
@@ -378,7 +380,7 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
 
   // Parse the type-name.
   if (_tokenizer.next(&token) != kTokenSymbol)
-    MPSL_PARSER_ERROR(token, "Expected a type-name after 'typedef' declaration.");
+    MPSL_PARSER_ERROR(token, "Expected type-name after 'typedef' declaration.");
 
   AstScope* scope = _currentScope;
 
@@ -391,7 +393,7 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
 
   // Parse the synonym.
   if (_tokenizer.next(&token) != kTokenSymbol)
-    MPSL_PARSER_ERROR(token, "Expected a synonym after the type-name.");
+    MPSL_PARSER_ERROR(token, "Expected a new type-name after the type-name.");
 
   // Create the synonym.
   str.set(_tokenizer._start + token.position, token.length);
@@ -409,7 +411,7 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
 
   // Parse the ';' token.
   if (_tokenizer.next(&token) != kTokenSemicolon)
-    MPSL_PARSER_ERROR(token, "Expected a ';' after 'typedef' declaration.");
+    MPSL_PARSER_ERROR(token, "Expected ';' after 'typedef' declaration.");
 
   return kErrorOk;
 }
@@ -430,7 +432,7 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
 
   // Parse the type-name.
   if (uToken != kTokenSymbol)
-    MPSL_PARSER_ERROR(token, "Expected a type-name.");
+    MPSL_PARSER_ERROR(token, "Expected type-name.");
 
   // Resolve the type-name.
   str.set(_tokenizer._start + token.position, token.length);
@@ -439,7 +441,7 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
   AstSymbol* typeSym = scope->resolveSymbol(str, token.hVal);
 
   if (typeSym == nullptr || !typeSym->isTypeName())
-    MPSL_PARSER_ERROR(token, "Expected a type-name.");
+    MPSL_PARSER_ERROR(token, "Expected type-name.");
 
   for (;;) {
     // Parse the variable name.
@@ -540,63 +542,66 @@ Error Parser::parseIfElse(AstBlock* block) noexcept {
 
   // Parse the '(' token.
   if (_tokenizer.next(&token) != kTokenLParen)
-    MPSL_PARSER_ERROR(token, "Expected a '(' after 'if' statement.");
+    MPSL_PARSER_ERROR(token, "Expected '(' after 'if' keyword.");
 
   AstBranch* branch;
 
   MPSL_PROPAGATE(block->willAdd());
   MPSL_NULLCHECK(branch = _ast->newNode<AstBranch>());
 
-  block->appendNode(branch);
-  bool isLast = false;
-
+  // block->appendNode(branch);
   branch->setPosition(position);
   position = token.getPosAsUInt();
 
+  //bool isLast = false;
+  AstBranch* first = branch;
   for (;;) {
-    AstCondition* cond;
-    if (branch->willAdd() != kErrorOk || (cond = _ast->newNode<AstCondition>()) == nullptr) {
-      _ast->deleteNode(branch);
-      return MPSL_TRACE_ERROR(kErrorNoMemory);
-    }
-    cond->setPosition(position);
+    // Parse the condition inside '(' and ')'.
+    AstNode* cond;
+    MPSL_PROPAGATE_(parseExpression(&cond), { _ast->deleteNode(first); });
+    branch->setCond(cond);
 
-    if (!isLast) {
-      // Parse the expression inside '(' and ')'.
-      AstNode* expression;
-      MPSL_PROPAGATE_(parseExpression(&expression), { _ast->deleteNode(branch); });
-      cond->setExp(expression);
-
-      if (_tokenizer.next(&token) != kTokenRParen) {
-        _ast->deleteNode(branch);
-        MPSL_PARSER_ERROR(token, "Expected a ')' after the end of condition.");
-      }
+    if (_tokenizer.next(&token) != kTokenRParen) {
+      _ast->deleteNode(first);
+      MPSL_PARSER_ERROR(token, "Expected ')' after the end of condition.");
     }
 
-    AstBlock* body = _ast->newNode<AstBlock>();
-    MPSL_NULLCHECK_(body, { _ast->deleteNode(branch); });
-    cond->setBody(body);
+    // Parse then branch.
+    AstBlock* then = _ast->newNode<AstBlock>();
+    MPSL_NULLCHECK_(then, { _ast->deleteNode(first); });
+    branch->setThen(then);
+    MPSL_PROPAGATE_(parseBlockOrStatement(then), { _ast->deleteNode(first); });
 
-    MPSL_PROPAGATE_(parseBlockOrStatement(body), {
-      _ast->deleteNode(branch);
-    });
-
-    if (isLast)
-      return kErrorOk;
-
-    // Parse "else if (<cond>) <block|statement>" or "else <block|statement>".
+    // Parse else branch.
     if (_tokenizer.peek(&token) == kTokenElse) {
       position = token.getPosAsUInt();
       if (_tokenizer.consumeAndPeek(&token) == kTokenIf) {
+        // Parse "else if ...".
+        MPSL_NULLCHECK_(branch = _ast->newNode<AstBranch>(), { _ast->deleteNode(first); });
+        branch->setElse(branch);
+
         // Parse the '(' token.
-        if (_tokenizer.consumeAndNext(&token) != kTokenLParen)
-          MPSL_PARSER_ERROR(token, "Expected a '(' after 'else if' statement.");
+        if (_tokenizer.consumeAndNext(&token) != kTokenLParen) {
+          _ast->deleteNode(first);
+          MPSL_PARSER_ERROR(token, "Expected '(' after 'else if' keyword.");
+        }
+
+        // And continue parsing the condition inside '(' and ')'.
+        continue;
       }
       else {
-        isLast = true;
+        // Parse "else <block|statement>".
+        AstBlock* else_ = _ast->newNode<AstBlock>();
+        MPSL_NULLCHECK_(else_, { _ast->deleteNode(first); });
+        branch->setElse(else_);
+        MPSL_PROPAGATE_(parseBlockOrStatement(else_), { _ast->deleteNode(first); });
+
+        block->appendNode(first);
+        return kErrorOk;
       }
     }
     else {
+      block->appendNode(first);
       return kErrorOk;
     }
   }
@@ -634,7 +639,7 @@ Error Parser::parseFor(AstBlock* block) noexcept {
 
   // Parse the '(' token.
   if (_tokenizer.next(&token) != kTokenLParen)
-    MPSL_PARSER_ERROR(token, "Expected a '(' token after the 'for' statement.");
+    MPSL_PARSER_ERROR(token, "Expected '(' after the 'for' statement.");
 
   // Parse the <init> section.
   bool hasVarDecl = false;
@@ -664,7 +669,7 @@ Error Parser::parseFor(AstBlock* block) noexcept {
       init->appendNode(expression);
 
       if (_tokenizer.next(&token) != kTokenSemicolon)
-        MPSL_PARSER_ERROR(token, "Expected a ';' token after the 'for' initializer.");
+        MPSL_PARSER_ERROR(token, "Expected ';' after the 'for' initializer.");
     }
   }
 
@@ -677,7 +682,7 @@ Error Parser::parseFor(AstBlock* block) noexcept {
 
   // Parse the ';' token after <cond>.
   if (_tokenizer.next(&token) != kTokenSemicolon)
-    MPSL_PARSER_ERROR(token, "Expected a ';' token after the 'for' condition.");
+    MPSL_PARSER_ERROR(token, "Expected ';' after the 'for' condition.");
 
   // Parse the <iter> section including ')' token.
   uToken = _tokenizer.peek(&token);
@@ -698,7 +703,7 @@ Error Parser::parseFor(AstBlock* block) noexcept {
 
       // Parse the ',' token - <iter> separator.
       if (uToken != kTokenColon)
-        MPSL_PARSER_ERROR(token, "Expected ',' or ')' tokens after iterator.");
+        MPSL_PARSER_ERROR(token, "Expected ',' or ')' after iterator.");
     }
   }
 
@@ -730,7 +735,7 @@ Error Parser::parseWhile(AstBlock* block) noexcept {
 
   // Parse the '(' token.
   if (_tokenizer.next(&token) != kTokenLParen)
-    MPSL_PARSER_ERROR(token, "Expected a '(' token after the 'while' statement.");
+    MPSL_PARSER_ERROR(token, "Expected '(' after the 'while' statement.");
 
   // Parse the <cond> section.
   AstNode* cond;
@@ -739,7 +744,7 @@ Error Parser::parseWhile(AstBlock* block) noexcept {
 
   // Parse the ')' token.
   if (_tokenizer.next(&token) != kTokenRParen)
-    MPSL_PARSER_ERROR(token, "Expected a ')' token after the 'while' condition.");
+    MPSL_PARSER_ERROR(token, "Expected ')' after the 'while' condition.");
 
   // Parse the <block|statement>.
   MPSL_PROPAGATE(parseBlockOrStatement(body));
@@ -774,11 +779,11 @@ Error Parser::parseDoWhile(AstBlock* block) noexcept {
 
   // Parse the 'while' statement.
   if (_tokenizer.next(&token) != kTokenWhile)
-    MPSL_PARSER_ERROR(token, "Expected a 'while' keyword after the 'do-while' body.");
+    MPSL_PARSER_ERROR(token, "Expected 'while' keyword after the 'do-while' body.");
 
   // Parse the '(' token.
   if (_tokenizer.next(&token) != kTokenLParen)
-    MPSL_PARSER_ERROR(token, "Expected a '(' token after the 'while' statement.");
+    MPSL_PARSER_ERROR(token, "Expected '(' after the 'while' statement.");
 
   // Parse the <cond>.
   AstNode* cond;
@@ -787,11 +792,11 @@ Error Parser::parseDoWhile(AstBlock* block) noexcept {
 
   // Parse the ')' token.
   if (_tokenizer.next(&token) != kTokenRParen)
-    MPSL_PARSER_ERROR(token, "Expected a ')' token after the 'do-while' condition.");
+    MPSL_PARSER_ERROR(token, "Expected ')' after the 'do-while' condition.");
 
   // Parse the ';' token.
   if (_tokenizer.next(&token) != kTokenSemicolon)
-    MPSL_PARSER_ERROR(token, "Expected a ';' token after the 'do-while' block.");
+    MPSL_PARSER_ERROR(token, "Expected ';' after the 'do-while' block.");
 
   return kErrorOk;
 }
@@ -800,14 +805,14 @@ Error Parser::parseDoWhile(AstBlock* block) noexcept {
 Error Parser::parseBreak(AstBlock* block) noexcept {
   Token token;
 
-  // Parse the 'break' statement.
+  // Parse the 'break' keyword.
   _tokenizer.next(&token);
   MPSL_ASSERT(token.token == kTokenBreak);
   uint32_t position = token.getPosAsUInt();
 
   // Parse the return expression or ';'.
   if (_tokenizer.next(&token) != kTokenSemicolon)
-    MPSL_PARSER_ERROR(token, "Expected a ';' after 'break' statement.");
+    MPSL_PARSER_ERROR(token, "Expected ';' after 'break' keyword.");
 
   AstBreak* node;
   MPSL_PROPAGATE(block->willAdd());
@@ -823,14 +828,14 @@ Error Parser::parseBreak(AstBlock* block) noexcept {
 Error Parser::parseContinue(AstBlock* block) noexcept {
   Token token;
 
-  // Parse the 'continue' statement.
+  // Parse the 'continue' keyword.
   _tokenizer.next(&token);
   MPSL_ASSERT(token.token == kTokenContinue);
   uint32_t position = token.getPosAsUInt();
 
   // Parse the return expression or ';'.
   if (_tokenizer.next(&token) != kTokenSemicolon)
-    MPSL_PARSER_ERROR(token, "Expected a ';' after 'continue' statement.");
+    MPSL_PARSER_ERROR(token, "Expected ';' after 'continue' keyword.");
 
   AstContinue* node;
   MPSL_PROPAGATE(block->willAdd());
@@ -846,12 +851,11 @@ Error Parser::parseContinue(AstBlock* block) noexcept {
 Error Parser::parseReturn(AstBlock* block) noexcept {
   Token token;
 
-  // Parse the 'return' statement.
+  // Parse the 'return' keyword.
   _tokenizer.next(&token);
   MPSL_ASSERT(token.token == kTokenReturn);
 
   AstReturn* ret;
-
   MPSL_PROPAGATE(block->willAdd());
   MPSL_NULLCHECK(ret = _ast->newNode<AstReturn>());
 
@@ -860,12 +864,12 @@ Error Parser::parseReturn(AstBlock* block) noexcept {
 
   // Parse the return expression or ';'.
   if (_tokenizer.peek(&token) != kTokenSemicolon) {
-    AstNode* ex;
-    MPSL_PROPAGATE_(parseExpression(&ex), { _ast->deleteNode(ret); });
-    ret->setChild(ex);
+    AstNode* expression;
+    MPSL_PROPAGATE(parseExpression(&expression));
+    ret->setChild(expression);
 
     if (_tokenizer.next(&token) != kTokenSemicolon)
-      MPSL_PARSER_ERROR(token, "Expected a ';' after 'return' statement.");
+      MPSL_PARSER_ERROR(token, "Expected ';' after 'return' keyword.");
     return kErrorOk;
   }
   else {
@@ -1016,7 +1020,7 @@ _Repeat1:
 
           if (sym && sym->isTypeName()) {
             if (_tokenizer.consumeAndNext(&token) != kTokenRParen)
-              MPSL_PARSER_ERROR(token, "Expected a ')' token.");
+              MPSL_PARSER_ERROR(token, "Expected ')' token.");
 
             AstUnaryOp* zNode = _ast->newNode<AstUnaryOp>(kOpCast, sym->getTypeInfo());
             MPSL_NULLCHECK(zNode);
@@ -1039,7 +1043,7 @@ _Repeat1:
           MPSL_PROPAGATE(parseExpression(&zNode));
 
           if (_tokenizer.next(&token) != kTokenRParen)
-            MPSL_PARSER_ERROR(token, "Expected a ')' token.");
+            MPSL_PARSER_ERROR(token, "Expected ')' token.");
 
           if (unary == nullptr)
             tNode = zNode;
@@ -1355,7 +1359,7 @@ Error Parser::parseCall(AstCall** pNodeOut) noexcept {
 
   uToken = _tokenizer.next(&token);
   if (uToken != kTokenLParen)
-    MPSL_PARSER_ERROR(token, "Expected a '(' token after a function name.");
+    MPSL_PARSER_ERROR(token, "Expected '(' after a function name.");
 
   AstCall* callNode = _ast->newNode<AstCall>();
   MPSL_NULLCHECK(callNode);
@@ -1384,7 +1388,7 @@ Error Parser::parseCall(AstCall** pNodeOut) noexcept {
 
       if (uToken != kTokenComma) {
         _ast->deleteNode(callNode);
-        MPSL_PARSER_ERROR(token, "Expected either ',' or ')' token.");
+        MPSL_PARSER_ERROR(token, "Expected either ',' or ')'.");
       }
 
       _tokenizer.consume();

@@ -44,9 +44,6 @@ void IRBlock::_fixupAfterNeutering() noexcept {
 
 IRBuilder::IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept
   : _heap(heap),
-    _entryBlock(nullptr),
-    _blockFirst(nullptr),
-    _blockLast(nullptr),
     _numSlots(numSlots),
     _blockIdGen(0),
     _varIdGen(0) {
@@ -58,7 +55,9 @@ IRBuilder::IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept
       _dataSlots[i] = nullptr;
   }
 }
-IRBuilder::~IRBuilder() noexcept {}
+IRBuilder::~IRBuilder() noexcept {
+  _blocks.release(_heap);
+}
 
 // ============================================================================
 // [mpsl::IRBuilder - Factory]
@@ -120,24 +119,32 @@ IRImm* IRBuilder::newImmByTypeInfo(const Value& value, uint32_t typeInfo) noexce
 }
 
 IRBlock* IRBuilder::newBlock() noexcept {
+  if (MPSL_UNLIKELY(_blocks.willGrow(_heap, 1) != kErrorOk))
+    return nullptr;
+
   IRBlock* block = newObject<IRBlock>();
-  if (block == nullptr) return nullptr;
+  if (MPSL_UNLIKELY(block == nullptr))
+    return nullptr;
 
   // Assign block ID.
   block->_id = ++_blockIdGen;
 
-  // Add to the `_blockList`.
-  if (_blockLast) {
-    MPSL_ASSERT(_blockFirst != nullptr);
-    block->_prevBlock = _blockLast;
-    _blockLast->_nextBlock = block;
-  }
-  else {
-    _blockFirst = _blockLast = block;
-  }
-
-  _blockLast = block;
+  _blocks.appendUnsafe(block);
   return block;
+}
+
+Error IRBuilder::connectBlocks(IRBlock* predecessor, IRBlock* successor) noexcept {
+  // First check if these blocks are not already connected.
+  MPSL_ASSERT(!predecessor->_successors.contains(successor));
+  MPSL_ASSERT(!successor->_predecessors.contains(predecessor));
+
+  MPSL_PROPAGATE(predecessor->_successors.willGrow(_heap, 1));
+  MPSL_PROPAGATE(successor->_predecessors.willGrow(_heap, 1));
+
+  predecessor->_successors.appendUnsafe(successor);
+  successor->_predecessors.appendUnsafe(predecessor);
+
+  return kErrorOk;
 }
 
 void IRBuilder::deleteInst(IRInst* inst) noexcept {
@@ -183,27 +190,9 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
         if (inst) deleteInst(inst);
       }
 
-      // Delete from `_blockList`.
-      IRBlock* prev = block->_prevBlock;
-      IRBlock* next = block->_nextBlock;
-
-      if (prev) {
-        MPSL_ASSERT(block != _blockFirst);
-        prev->_nextBlock = next;
-      }
-      else {
-        MPSL_ASSERT(block == _blockFirst);
-        _blockFirst = next;
-      }
-
-      if (next) {
-        MPSL_ASSERT(block != _blockLast);
-        next->_prevBlock = prev;
-      }
-      else {
-        MPSL_ASSERT(block == _blockLast);
-        _blockLast = prev;
-      }
+      // TODO: Blocks should not be deleted, just marked as removed.
+      block->_body.release(_heap);
+      _blocks[block->getId()] = nullptr;
 
       objectSize = sizeof(IRBlock);
       break;
@@ -220,14 +209,14 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
 // [mpsl::IRBuilder - Init]
 // ============================================================================
 
-Error IRBuilder::initEntryBlock() noexcept {
-  MPSL_ASSERT(_entryBlock == nullptr);
+Error IRBuilder::initEntry() noexcept {
+  MPSL_ASSERT(_blocks.isEmpty());
 
-  _entryBlock = newBlock();
-  MPSL_NULLCHECK(_entryBlock);
+  IRBlock* entry = newBlock();
+  MPSL_NULLCHECK(entry);
 
-  _entryBlock->_blockData._blockType = IRBlock::kKindEntry;
-  _entryBlock->_refCount = 1;
+  entry->_blockData._blockType = IRBlock::kKindEntry;
+  entry->_refCount = 1;
 
   return kErrorOk;
 }
@@ -292,13 +281,16 @@ Error IRBuilder::emitFetch(IRBlock* block, IRReg* dst, IRObject* src) noexcept {
 // [mpsl::IRBuilder - Dump]
 // ============================================================================
 
-MPSL_NOAPI Error IRBuilder::dump(StringBuilder& sb) noexcept {
-  IRBlock* block = _blockFirst;
+Error IRBuilder::dump(StringBuilder& sb) noexcept {
+  IRBlocks& blocks = getBlocks();
+  size_t count = blocks.getLength();
 
-  while (block) {
+  for (size_t i = 0; i < count; i++) {
+    IRBlock* block = blocks[i];
+    const IRBody& body = block->getBody();
+
     sb.appendFormat(".B%u\n", block->getId());
 
-    const IRBody& body = block->getBody();
     for (size_t i = 0, len = body.getLength(); i < len; i++) {
       IRInst* inst = body[i];
 
@@ -352,8 +344,6 @@ MPSL_NOAPI Error IRBuilder::dump(StringBuilder& sb) noexcept {
 
       sb.appendString("\n");
     }
-
-    block = block->_nextBlock;
   }
 
   return kErrorOk;

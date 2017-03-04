@@ -371,6 +371,7 @@ int main(int argc, char* argv[]) {
   Test test(options);
 
   // Test MPSL basics.
+  /*
   test.basicTest("int     main() { return ia + ib; }", mpsl::kTypeInt    , makeIVal(10   ));
   test.basicTest("float   main() { return fa + fb; }", mpsl::kTypeFloat  , makeFVal(10.0f));
   test.basicTest("double  main() { return da + db; }", mpsl::kTypeDouble , makeDVal(10.0 ));
@@ -404,21 +405,22 @@ int main(int argc, char* argv[]) {
   test.basicTest("double4 main() { return (d4a + d4b) * d4c - d4a; }", mpsl::kTypeDouble4, makeDVal(-21.0 , -32.0 , 37.0 , 46.0 ));
 
   // Test vector swizzling.
-  test.basicTest("int4    main() { return i4a.xxxx; }", mpsl::kTypeInt4, makeIVal(1, 1, 1, 1));
-  test.basicTest("int4    main() { return i4a.xyxy; }", mpsl::kTypeInt4, makeIVal(1, 2, 1, 2));
-  test.basicTest("float4  main() { return f4a.xxxx; }", mpsl::kTypeFloat4, makeFVal(1, 1, 1, 1));
-  test.basicTest("float4  main() { return f4a.xyxy; }", mpsl::kTypeFloat4, makeFVal(1, 2, 1, 2));
+  test.basicTest("int4    main() { return i4a.xxxx; }", mpsl::kTypeInt4   , makeIVal(1, 1, 1, 1));
+  test.basicTest("int4    main() { return i4a.xyxy; }", mpsl::kTypeInt4   , makeIVal(1, 2, 1, 2));
+  test.basicTest("float4  main() { return f4a.xxxx; }", mpsl::kTypeFloat4 , makeFVal(1, 1, 1, 1));
+  test.basicTest("float4  main() { return f4a.xyxy; }", mpsl::kTypeFloat4 , makeFVal(1, 2, 1, 2));
   test.basicTest("double4 main() { return d4a.xxxx; }", mpsl::kTypeDouble4, makeDVal(1, 1, 1, 1));
   test.basicTest("double4 main() { return d4a.xyxy; }", mpsl::kTypeDouble4, makeDVal(1, 2, 1, 2));
-/*
+  */
+
   // Test control flow - branches.
-  test.basicTest("int main() { if (ib == 9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(1));
-  test.basicTest("int main() { if (ib != 9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(0));
-  test.basicTest("int main() { if (ib >= 9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(1));
-  test.basicTest("int main() { if (ib >  9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(0));
-  test.basicTest("int main() { if (ib <= 9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(1));
-  test.basicTest("int main() { if (ib <  9) return 1; else return 0; }", mpsl::kTypeInt, makeIVal(0));
-*/
+  test.basicTest("int main() { if (ia == 1) return ib; else return ic; }", mpsl::kTypeInt, makeIVal( 9));
+  test.basicTest("int main() { if (ia != 1) return ib; else return ic; }", mpsl::kTypeInt, makeIVal(-2));
+  test.basicTest("int main() { if (ia >= 1) return ib; else return ic; }", mpsl::kTypeInt, makeIVal( 9));
+  test.basicTest("int main() { if (ia >  1) return ib; else return ic; }", mpsl::kTypeInt, makeIVal(-2));
+  test.basicTest("int main() { if (ia <= 1) return ib; else return ic; }", mpsl::kTypeInt, makeIVal( 9));
+  test.basicTest("int main() { if (ia <  1) return ib; else return ic; }", mpsl::kTypeInt, makeIVal(-2));
+
 /*
   // Test creating and calling functions inside the shader.
   test.basicTest("int dummy(int a, int b) { return a + b; }\n"

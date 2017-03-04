@@ -17,7 +17,7 @@
 
 namespace mpsl {
 
-MPSL_NOAPI Error mpIRPass(IRBuilder* ir) noexcept;
+Error mpIRPass(IRBuilder* ir) noexcept;
 
 } // mpsl namespace
 

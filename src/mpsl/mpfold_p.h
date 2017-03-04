@@ -31,11 +31,11 @@ namespace Fold {
 // [mpsl::Fold - AST-Based Constant Folding]
 // ============================================================================
 
-MPSL_NOAPI Error foldCast(Value& dVal, uint32_t dTypeInfo, const Value& sVal, uint32_t sTypeInfo) noexcept;
-MPSL_NOAPI Error foldSwizzle(const uint8_t* swizzleArray, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept;
-MPSL_NOAPI Error foldUnaryOp(uint32_t op, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept;
+Error foldCast(Value& dVal, uint32_t dTypeInfo, const Value& sVal, uint32_t sTypeInfo) noexcept;
+Error foldSwizzle(const uint8_t* swizzleArray, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept;
+Error foldUnaryOp(uint32_t op, Value& dVal, const Value& sVal, uint32_t sTypeInfo) noexcept;
 
-MPSL_NOAPI Error foldBinaryOp(uint32_t op, Value& dVal,
+Error foldBinaryOp(uint32_t op, Value& dVal,
   const Value& lVal, uint32_t lTypeInfo,
   const Value& rVal, uint32_t rTypeInfo) noexcept;
 
@@ -43,8 +43,8 @@ MPSL_NOAPI Error foldBinaryOp(uint32_t op, Value& dVal,
 // [mpsl::Fold - IR-Based Constant Folding]
 // ============================================================================
 
-MPSL_NOAPI Error foldInst(uint32_t inst, Value& dVal, const Value& sVal) noexcept;
-MPSL_NOAPI Error foldInst(uint32_t inst, Value& dVal, const Value& lVal, const Value& rVal) noexcept;
+Error foldInst(uint32_t inst, Value& dVal, const Value& sVal) noexcept;
+Error foldInst(uint32_t inst, Value& dVal, const Value& lVal, const Value& rVal) noexcept;
 
 } // Fold namespace
 } // mpsl namespace

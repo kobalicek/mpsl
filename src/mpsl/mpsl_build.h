@@ -520,12 +520,6 @@
 #endif
 // [@CC_API}@]
 
-// [@CC_NOAPI{@]
-// \def MPSL_NOAPI
-// The decorated function is considered private and is not exported.
-#define MPSL_NOAPI
-// [@CC_NOAPI}@]
-
 // [@CC_VIRTAPI{@]
 // \def MPSL_VIRTAPI
 // The decorated class has a virtual table and is part of mpsl API.

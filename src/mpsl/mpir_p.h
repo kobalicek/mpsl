@@ -24,13 +24,147 @@ namespace mpsl {
 
 class IRBuilder;
 class IRObject;
+class IRBlock;
 class IRReg;
 class IRMem;
 class IRImm;
 class IRInst;
-class IRBlock;
 
 typedef ZoneVector<IRInst*> IRBody;
+typedef ZoneVector<IRBlock*> IRBlocks;
+
+// ============================================================================
+// [mpsl::IRBuilder]
+// ============================================================================
+
+class IRBuilder {
+public:
+  MPSL_NONCOPYABLE(IRBuilder)
+
+  // --------------------------------------------------------------------------
+  // [Construction / Destruction]
+  // --------------------------------------------------------------------------
+
+  IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept;
+  ~IRBuilder() noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Accessors]
+  // --------------------------------------------------------------------------
+
+  MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _heap; }
+
+  MPSL_INLINE IRBlocks& getBlocks() noexcept { return _blocks; }
+  MPSL_INLINE const IRBlocks& getBlocks() const noexcept { return _blocks; }
+
+  MPSL_INLINE IRBlocks& getExits() noexcept { return _exits; }
+  MPSL_INLINE const IRBlocks& getExits() const noexcept { return _exits; }
+
+  MPSL_INLINE IRBlock* getEntry() const noexcept {
+    MPSL_ASSERT(!_blocks.isEmpty());
+    return _blocks[0];
+  }
+
+  MPSL_INLINE IRReg* getDataPtr(uint32_t slot) const noexcept {
+    MPSL_ASSERT(slot < _numSlots);
+    return _dataSlots[slot];
+  }
+
+  MPSL_INLINE uint32_t getNumSlots() const noexcept { return _numSlots; }
+
+  // --------------------------------------------------------------------------
+  // [Factory]
+  // --------------------------------------------------------------------------
+
+#define MPSL_ALLOC_IR_OBJECT(SIZE) \
+  void* obj = _heap->alloc(SIZE); \
+  if (MPSL_UNLIKELY(obj == nullptr)) \
+    return nullptr
+
+  template<typename T>
+  MPSL_INLINE T* newObject() noexcept {
+    MPSL_ALLOC_IR_OBJECT(sizeof(T));
+    return new(obj) T(this);
+  }
+
+  template<typename T, typename P0>
+  MPSL_INLINE T* newObject(P0 p0) noexcept {
+    MPSL_ALLOC_IR_OBJECT(sizeof(T));
+    return new(obj) T(this, p0);
+  }
+
+  template<typename T, typename P0, typename P1>
+  MPSL_INLINE T* newObject(P0 p0, P1 p1) noexcept {
+    MPSL_ALLOC_IR_OBJECT(sizeof(T));
+    return new(obj) T(this, p0, p1);
+  }
+
+  template<typename T, typename P0, typename P1, typename P2>
+  MPSL_INLINE T* newObject(P0 p0, P1 p1, P2 p2) noexcept {
+    MPSL_ALLOC_IR_OBJECT(sizeof(T));
+    return new(obj) T(this, p0, p1, p2);
+  }
+#undef MPSL_ALLOC_IR_OBJECT
+
+  IRReg* newVar(uint32_t reg, uint32_t width) noexcept;
+  IRReg* newVarByTypeInfo(uint32_t typeInfo) noexcept;
+
+  IRMem* newMem(IRReg* base, IRReg* index, int32_t offset) noexcept;
+
+  IRImm* newImm(const Value& value, uint32_t reg, uint32_t immSize) noexcept;
+  IRImm* newImmByTypeInfo(const Value& value, uint32_t typeInfo) noexcept;
+
+  IRBlock* newBlock() noexcept;
+  Error connectBlocks(IRBlock* predecessor, IRBlock* successor) noexcept;
+
+  MPSL_INLINE IRInst* _newInst(uint32_t instCode, uint32_t opCount) noexcept;
+  MPSL_INLINE IRInst* newInst(uint32_t instCode, IRObject* o0) noexcept;
+  MPSL_INLINE IRInst* newInst(uint32_t instCode, IRObject* o0, IRObject* o1) noexcept;
+  MPSL_INLINE IRInst* newInst(uint32_t instCode, IRObject* o0, IRObject* o1, IRObject* o2) noexcept;
+
+  void deleteInst(IRInst* obj) noexcept;
+  void deleteObject(IRObject* obj) noexcept;
+  MPSL_INLINE void derefObject(IRObject* obj) noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Init]
+  // --------------------------------------------------------------------------
+
+  Error initEntry() noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Emit]
+  // --------------------------------------------------------------------------
+
+  Error emitInst(IRBlock* block, uint32_t instCode, IRObject* o0) noexcept;
+  Error emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObject* o1) noexcept;
+  Error emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObject* o1, IRObject* o2) noexcept;
+
+  Error emitMove(IRBlock* block, IRReg* dst, IRReg* src) noexcept;
+  // TODO: Probably remove.
+  Error emitFetch(IRBlock* block, IRReg* dst, IRObject* src) noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Dump]
+  // --------------------------------------------------------------------------
+
+  Error dump(StringBuilder& sb) noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Members]
+  // --------------------------------------------------------------------------
+
+  ZoneHeap* _heap;                       //!< Memory heap used to allocate IR objects.
+  IRBlocks _blocks;                      //!< IR basic blocks.
+  IRBlocks _exits;                       //!< IR basic blocks without successors (exits).
+
+  //! Entry point arguments.
+  IRReg* _dataSlots[Globals::kMaxArgumentsCount];
+  uint32_t _numSlots;                    //!< Number of entry-point arguments.
+
+  uint32_t _blockIdGen;                  //!< Block ID generator.
+  uint32_t _varIdGen;                    //!< Variable ID generator.
+};
 
 // ============================================================================
 // [mpsl::IRObject]
@@ -103,50 +237,32 @@ public:
   // --------------------------------------------------------------------------
 
   struct AnyData {
-    //! Type of the IRObject, see \ref IRObjectType.
-    uint8_t _objectType;
-    //! \internal.
-    uint8_t _reserved[7];
+    uint8_t _objectType;                 //!< Type of the IRObject, see \ref IRObjectType.
+    uint8_t _reserved[7];                //!< \internal.
   };
 
   struct VarData {
-    //! Type of the IRObject, see \ref IRObjectType.
-    uint8_t _objectType;
-    //! Type of the IRReg's register, see \ref IRRegType.
-    uint8_t _reg;
-    //! Register width used (in bytes).
-    uint8_t _width;
-    //! \internal
-    uint8_t _reserved[1];
-    //! JIT compiler associated ID.
-    uint32_t _jitId;
+    uint8_t _objectType;                 //!< Type of the IRObject, see \ref IRObjectType.
+    uint8_t _reg;                        //!< Type of the IRReg's register, see \ref IRRegType.
+    uint8_t _width;                      //!< Register width used (in bytes).
+    uint8_t _reserved[1];                //!< \internal
+    uint32_t _jitId;                     //!< JIT compiler associated ID.
   };
 
   struct ImmData {
-    //! Type of the IRObject, see \ref IRObjectType.
-    uint8_t _objectType;
-    //! Type of this object, see \ref IRRegType.
-    uint8_t _reg;
-    //! Size of the immediate in bytes.
-    uint8_t _width;
-    //! \internal
-    uint8_t _reserved[1];
-
-    //! Type information of the immediate (for debugging).
-    uint32_t _typeInfo;
+    uint8_t _objectType;                 //!< Type of the IRObject, see \ref IRObjectType.
+    uint8_t _reg;                        //!< Type of this object, see \ref IRRegType.
+    uint8_t _width;                      //!< Size of the immediate in bytes.
+    uint8_t _reserved[1];                //!< \internal
+    uint32_t _typeInfo;                  //!< Type information of the immediate (for debugging).
   };
 
   struct BlockData {
-    //! Type of the IRObject, see \ref IRObjectType.
-    uint8_t _objectType;
-    //! Type of the IRBlock.
-    uint8_t _blockType;
-    //! Whether the block has been assembled by JIT compiler.
-    uint8_t _isAssembled;
-    //! \internal.
-    uint8_t _reserved[1];
-    //! JIT compiler associated ID.
-    uint32_t _jitId;
+    uint8_t _objectType;                 //!< Type of the IRObject, see \ref IRObjectType.
+    uint8_t _blockType;                  //!< Type of the IRBlock.
+    uint8_t _isAssembled;                //!< Whether the block has been assembled by JIT compiler.
+    uint8_t _reserved[1];                //!< \internal.
+    uint32_t _jitId;                     //!< JIT compiler associated ID.
   };
 
   union {
@@ -165,6 +281,11 @@ public:
   //! Increased every time this IRObject is used as an operand.
   uint32_t _refCount;
 };
+
+MPSL_INLINE void IRBuilder::derefObject(IRObject* obj) noexcept {
+  if (--obj->_refCount == 0)
+    deleteObject(obj);
+}
 
 // ============================================================================
 // [mpsl::IRReg]
@@ -343,6 +464,54 @@ public:
   IRObject* _opArray[kMaxOperands];
 };
 
+MPSL_INLINE IRInst* IRBuilder::_newInst(uint32_t instCode, uint32_t opCount) noexcept {
+  size_t size = (sizeof(IRInst) - sizeof(IRObject*)) + sizeof(IRObject*) * opCount;
+  void* inst = _heap->alloc(size);
+
+  if (inst == nullptr)
+    return nullptr;
+
+  return new(inst) IRInst(this, instCode, opCount);
+}
+
+MPSL_INLINE IRInst* IRBuilder::newInst(uint32_t instCode, IRObject* o0) noexcept {
+  IRInst* inst = _newInst(instCode, 1);
+  if (inst == nullptr) return nullptr;
+
+  inst->_opArray[0] = o0;
+  o0->addRef();
+
+  return inst;
+}
+
+MPSL_INLINE IRInst* IRBuilder::newInst(uint32_t instCode, IRObject* o0, IRObject* o1) noexcept {
+  IRInst* inst = _newInst(instCode, 2);
+  if (inst == nullptr) return nullptr;
+
+  inst->_opArray[0] = o0;
+  inst->_opArray[1] = o1;
+
+  o0->addRef();
+  o1->addRef();
+
+  return inst;
+}
+
+MPSL_INLINE IRInst* IRBuilder::newInst(uint32_t instCode, IRObject* o0, IRObject* o1, IRObject* o2) noexcept {
+  IRInst* inst = _newInst(instCode, 3);
+  if (inst == nullptr) return nullptr;
+
+  inst->_opArray[0] = o0;
+  inst->_opArray[1] = o1;
+  inst->_opArray[2] = o2;
+
+  o0->addRef();
+  o1->addRef();
+  o2->addRef();
+
+  return inst;
+}
+
 // ============================================================================
 // [mpsl::IRBlock]
 // ============================================================================
@@ -352,17 +521,25 @@ public:
   MPSL_NONCOPYABLE(IRBlock)
 
   //! Block kind.
-  enum Kind{
+  enum Kind {
     kKindBasic = 0,                      //!< Basic block.
-    kKindEntry = 1,                      //!< Function entry.
-    kKindExit  = 2                       //!< Function exit.
+    kKindEntry = 1,                      //!< Entry block (no predecessors).
+    kKindExit  = 2                       //!< Exit block (no successors).
   };
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE IRBlock(IRBuilder* ir) noexcept;
+  MPSL_INLINE IRBlock(IRBuilder* ir) noexcept
+    : IRObject(ir, kTypeBlock),
+      _ir(ir),
+      _body(),
+      _requiresFixup(false) {
+    _blockData._blockType = kKindBasic;
+    _blockData._isAssembled = false;
+    _blockData._jitId = kInvalidRegId;
+  }
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -377,11 +554,22 @@ public:
   MPSL_INLINE uint32_t getJitId() const noexcept { return _blockData._jitId; }
   MPSL_INLINE void setJitId(uint32_t id) noexcept { _blockData._jitId = id; }
 
+  MPSL_INLINE bool hasPredecessors() const noexcept { return !_predecessors.isEmpty(); }
+  MPSL_INLINE IRBlocks& getPredecessors() noexcept { return _predecessors; }
+  MPSL_INLINE const IRBlocks& getPredecessors() const noexcept { return _predecessors; }
+
+  MPSL_INLINE bool hasSuccessors() const noexcept { return !_successors.isEmpty(); }
+  MPSL_INLINE IRBlocks& getSuccessors() noexcept { return _successors; }
+  MPSL_INLINE const IRBlocks& getSuccessors() const noexcept { return _successors; }
+
+  MPSL_INLINE Error addSuccessor(IRBlock* successor) noexcept { return _ir->connectBlocks(this, successor); }
+  MPSL_INLINE Error addPredecessor(IRBlock* predecessor) noexcept { return _ir->connectBlocks(predecessor, this); }
+
   MPSL_INLINE IRBody& getBody() noexcept { return _body; }
   MPSL_INLINE const IRBody& getBody() const noexcept { return _body; }
 
-  MPSL_INLINE Error append(IRInst* inst) noexcept;
-  MPSL_INLINE Error prepend(IRInst* inst) noexcept;
+  MPSL_INLINE Error append(IRInst* inst) noexcept { return _body.append(_ir->_heap, inst); }
+  MPSL_INLINE Error prepend(IRInst* inst) noexcept { return _body.prepend(_ir->_heap, inst); }
 
   MPSL_INLINE void neuterAt(size_t i) noexcept {
     MPSL_ASSERT(i < _body.getLength());
@@ -389,7 +577,7 @@ public:
     _requiresFixup = true;
   }
 
-  MPSL_NOAPI void _fixupAfterNeutering() noexcept;
+  void _fixupAfterNeutering() noexcept;
 
   MPSL_INLINE void fixupAfterNeutering() noexcept {
     if (_requiresFixup)
@@ -401,9 +589,8 @@ public:
   // --------------------------------------------------------------------------
 
   IRBuilder* _ir;                        //!< IR builder.
-  IRBlock* _prevBlock;                   //!< Previous block in IRBuilder's block list.
-  IRBlock* _nextBlock;                   //!< Next block in IRBuilder's block list.
-
+  IRBlocks _predecessors;                //!< Block's predecessors.
+  IRBlocks _successors;                  //!< Block's successors.
   IRBody _body;                          //!< Block body (instructions).
   bool _requiresFixup;                   //!< Body contains nulls and must be fixed.
 };
@@ -414,8 +601,9 @@ public:
 
 //! A pair of two IR objects.
 //!
-//! Used to split 256-bit wide operations to 128-bit in case the target
-//! doesn't support 256-bit wide registers (all pre-AVX architectures, ARM).
+//! Used to split 256-bit wide operations to 128-bit in case the target doesn't
+//! support 256-bit wide registers, which is relevant for all architectures
+//! before AVX2 and ARM.
 template<typename T>
 class IRPair {
 public:
@@ -461,198 +649,6 @@ public:
     T* obj[2];
   };
 };
-
-// ============================================================================
-// [mpsl::IRBuilder]
-// ============================================================================
-
-class IRBuilder {
-public:
-  MPSL_NONCOPYABLE(IRBuilder)
-
-  // --------------------------------------------------------------------------
-  // [Construction / Destruction]
-  // --------------------------------------------------------------------------
-
-  MPSL_NOAPI IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept;
-  MPSL_NOAPI ~IRBuilder() noexcept;
-
-  // --------------------------------------------------------------------------
-  // [Accessors]
-  // --------------------------------------------------------------------------
-
-  MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _heap; }
-  MPSL_INLINE IRBlock* getMainBlock() const noexcept { return _entryBlock; }
-
-  MPSL_INLINE IRReg* getDataPtr(uint32_t slot) const noexcept {
-    MPSL_ASSERT(slot < _numSlots);
-    return _dataSlots[slot];
-  }
-
-  MPSL_INLINE uint32_t getNumSlots() const noexcept { return _numSlots; }
-
-  // --------------------------------------------------------------------------
-  // [Factory]
-  // --------------------------------------------------------------------------
-
-#define MPSL_ALLOC_IR_OBJECT(_Size_) \
-  void* obj = _heap->alloc(_Size_); \
-  if (MPSL_UNLIKELY(obj == nullptr)) \
-    return nullptr
-
-  template<typename T>
-  MPSL_INLINE T* newObject() noexcept {
-    MPSL_ALLOC_IR_OBJECT(sizeof(T));
-    return new(obj) T(this);
-  }
-
-  template<typename T, typename P0>
-  MPSL_INLINE T* newObject(P0 p0) noexcept {
-    MPSL_ALLOC_IR_OBJECT(sizeof(T));
-    return new(obj) T(this, p0);
-  }
-
-  template<typename T, typename P0, typename P1>
-  MPSL_INLINE T* newObject(P0 p0, P1 p1) noexcept {
-    MPSL_ALLOC_IR_OBJECT(sizeof(T));
-    return new(obj) T(this, p0, p1);
-  }
-
-  template<typename T, typename P0, typename P1, typename P2>
-  MPSL_INLINE T* newObject(P0 p0, P1 p1, P2 p2) noexcept {
-    MPSL_ALLOC_IR_OBJECT(sizeof(T));
-    return new(obj) T(this, p0, p1, p2);
-  }
-#undef MPSL_ALLOC_IR_OBJECT
-
-  MPSL_NOAPI IRReg* newVar(uint32_t reg, uint32_t width) noexcept;
-  MPSL_NOAPI IRReg* newVarByTypeInfo(uint32_t typeInfo) noexcept;
-
-  MPSL_NOAPI IRMem* newMem(IRReg* base, IRReg* index, int32_t offset) noexcept;
-
-  MPSL_NOAPI IRImm* newImm(const Value& value, uint32_t reg, uint32_t immSize) noexcept;
-  MPSL_NOAPI IRImm* newImmByTypeInfo(const Value& value, uint32_t typeInfo) noexcept;
-
-  MPSL_NOAPI IRBlock* newBlock() noexcept;
-
-  MPSL_INLINE IRInst* _newInst(uint32_t instCode, uint32_t opCount) noexcept {
-    size_t size = (sizeof(IRInst) - sizeof(IRObject*)) + sizeof(IRObject*) * opCount;
-    void* inst = _heap->alloc(size);
-
-    if (inst == nullptr)
-      return nullptr;
-
-    return new(inst) IRInst(this, instCode, opCount);
-  }
-
-  MPSL_INLINE IRInst* newInst(uint32_t instCode, IRObject* o0) noexcept {
-    IRInst* inst = _newInst(instCode, 1);
-    if (inst == nullptr) return nullptr;
-
-    inst->_opArray[0] = o0;
-    o0->addRef();
-
-    return inst;
-  }
-
-  MPSL_INLINE IRInst* newInst(uint32_t instCode, IRObject* o0, IRObject* o1) noexcept {
-    IRInst* inst = _newInst(instCode, 2);
-    if (inst == nullptr) return nullptr;
-
-    inst->_opArray[0] = o0;
-    inst->_opArray[1] = o1;
-
-    o0->addRef();
-    o1->addRef();
-
-    return inst;
-  }
-
-  MPSL_INLINE IRInst* newInst(uint32_t instCode, IRObject* o0, IRObject* o1, IRObject* o2) noexcept {
-    IRInst* inst = _newInst(instCode, 3);
-    if (inst == nullptr) return nullptr;
-
-    inst->_opArray[0] = o0;
-    inst->_opArray[1] = o1;
-    inst->_opArray[2] = o2;
-
-    o0->addRef();
-    o1->addRef();
-    o2->addRef();
-
-    return inst;
-  }
-
-  MPSL_NOAPI void deleteInst(IRInst* obj) noexcept;
-  MPSL_NOAPI void deleteObject(IRObject* obj) noexcept;
-
-  MPSL_INLINE void derefObject(IRObject* obj) noexcept {
-    if (--obj->_refCount == 0)
-      deleteObject(obj);
-  }
-
-  // --------------------------------------------------------------------------
-  // [Init]
-  // --------------------------------------------------------------------------
-
-  MPSL_NOAPI Error initEntryBlock() noexcept;
-
-  // --------------------------------------------------------------------------
-  // [Emit]
-  // --------------------------------------------------------------------------
-
-  MPSL_NOAPI Error emitInst(IRBlock* block, uint32_t instCode, IRObject* o0) noexcept;
-  MPSL_NOAPI Error emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObject* o1) noexcept;
-  MPSL_NOAPI Error emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObject* o1, IRObject* o2) noexcept;
-
-  MPSL_NOAPI Error emitMove(IRBlock* block, IRReg* dst, IRReg* src) noexcept;
-  // TODO: Probably remove.
-  MPSL_NOAPI Error emitFetch(IRBlock* block, IRReg* dst, IRObject* src) noexcept;
-
-  // --------------------------------------------------------------------------
-  // [Dump]
-  // --------------------------------------------------------------------------
-
-  MPSL_NOAPI Error dump(StringBuilder& sb) noexcept;
-
-  // --------------------------------------------------------------------------
-  // [Members]
-  // --------------------------------------------------------------------------
-
-  //! Memory heap used to allocate `IRObject`s.
-  ZoneHeap* _heap;
-  //! Main block.
-  IRBlock* _entryBlock;
-  //! First block managed by `IRBuilder`.
-  IRBlock* _blockFirst;
-  //! Last block managed by `IRBuilder`.
-  IRBlock* _blockLast;
-
-  //! Entry point arguments.
-  IRReg* _dataSlots[Globals::kMaxArgumentsCount];
-  //! Number of entry-point arguments.
-  uint32_t _numSlots;
-
-  //! Block ID generator.
-  uint32_t _blockIdGen;
-  //! Variable ID generator.
-  uint32_t _varIdGen;
-};
-
-MPSL_INLINE IRBlock::IRBlock(IRBuilder* ir) noexcept
-  : IRObject(ir, kTypeBlock),
-    _ir(ir),
-    _prevBlock(nullptr),
-    _nextBlock(nullptr),
-    _body(),
-    _requiresFixup(false) {
-  _blockData._blockType = kKindBasic;
-  _blockData._isAssembled = false;
-  _blockData._jitId = kInvalidRegId;
-}
-
-MPSL_INLINE Error IRBlock::append(IRInst* inst) noexcept { return _body.append(_ir->_heap, inst); }
-MPSL_INLINE Error IRBlock::prepend(IRInst* inst) noexcept { return _body.prepend(_ir->_heap, inst); }
 
 } // mpsl namespace
 

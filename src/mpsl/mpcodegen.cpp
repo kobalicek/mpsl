@@ -105,8 +105,8 @@ Error CodeGen::onProgram(AstProgram* node, Result& out) noexcept {
     if (child->getNodeType() == AstNode::kTypeFunction) {
       AstFunction* func = static_cast<AstFunction*>(child);
       if (func->getFunc()->eq("main", 4)) {
-        MPSL_PROPAGATE(_ir->initEntryBlock());
-        _block = _ir->getMainBlock();
+        MPSL_PROPAGATE(_ir->initEntry());
+        _block = _ir->getEntry();
         return onFunction(func, out);
       }
     }
@@ -116,7 +116,7 @@ Error CodeGen::onProgram(AstProgram* node, Result& out) noexcept {
 }
 
 // NOTE: This is only called once per "main()". Other functions are simply
-// inlined during the AST to IR translation.
+// inlined during AST to IR translation.
 Error CodeGen::onFunction(AstFunction* node, Result& out) noexcept {
   if (node->hasBody()) {
     MPSL_PROPAGATE(_nestedFunctions.put(node));
@@ -139,12 +139,6 @@ Error CodeGen::onBlock(AstBlock* node, Result& out) noexcept {
 }
 
 Error CodeGen::onBranch(AstBranch* node, Result& out) noexcept {
-  // TODO:
-  MPSL_ASSERT(!"Implemented");
-  return kErrorOk;
-}
-
-Error CodeGen::onCondition(AstCondition* node, Result& out) noexcept {
   // TODO:
   MPSL_ASSERT(!"Implemented");
   return kErrorOk;

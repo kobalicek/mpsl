@@ -316,8 +316,8 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI AstScope(AstBuilder* ast, AstScope* parent, uint32_t scopeType) noexcept;
-  MPSL_NOAPI ~AstScope() noexcept;
+  AstScope(AstBuilder* ast, AstScope* parent, uint32_t scopeType) noexcept;
+  ~AstScope() noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -352,7 +352,7 @@ public:
   //! Resolve the symbol by traversing all parent scopes if not found in this
   //! one. An optional `scopeOut` argument can be used to get scope where the
   //! `name` has been found.
-  MPSL_NOAPI AstSymbol* resolveSymbol(const StringRef& name, uint32_t hVal, AstScope** scopeOut = nullptr) noexcept;
+  AstSymbol* resolveSymbol(const StringRef& name, uint32_t hVal, AstScope** scopeOut = nullptr) noexcept;
 
   MPSL_INLINE AstSymbol* resolveSymbol(const StringRef& name) noexcept {
     return resolveSymbol(name, HashUtils::hashString(name.getData(), name.getLength()));
@@ -389,8 +389,6 @@ public:
     kTypeBlock,                          //!< Node is `AstBlock`.
 
     kTypeBranch,                         //!< Node is `AstBranch`.
-    kTypeCondition,                      //!< Node is `AstCondition`.
-
     kTypeFor,                            //!< Node is `AstLoop` describing `for () { ... }`.
     kTypeWhile,                          //!< Node is `AstLoop` describing `while () { ... }`.
     kTypeDoWhile,                        //!< Node is `AstLoop` describing `do { ... } while ()`.
@@ -435,6 +433,12 @@ public:
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
+
+  template<typename T>
+  MPSL_INLINE T* as() noexcept { return static_cast<T*>(this); }
+
+  template<typename T>
+  MPSL_INLINE const T* as() const noexcept { return static_cast<const T*>(this); }
 
   //! Get the `AstBuilder` instance that created this node.
   MPSL_INLINE AstBuilder* getAst() const noexcept { return _ast; }
@@ -738,11 +742,11 @@ public:
 
   MPSL_INLINE AstFunction(AstBuilder* ast) noexcept
     : AstNode(ast, kTypeFunction, (AstNode**)&_args, 2),
+      _args(nullptr),
+      _body(nullptr),
       _scope(nullptr),
       _func(nullptr),
-      _ret(nullptr),
-      _args(nullptr),
-      _body(nullptr) {}
+      _ret(nullptr) {}
 
   MPSL_INLINE void destroy(AstBuilder* ast) noexcept {
     ast->deleteScope(getScope());
@@ -779,7 +783,7 @@ public:
 // [mpsl::AstBranch]
 // ============================================================================
 
-class AstBranch : public AstBlock {
+class AstBranch : public AstNode {
 public:
   MPSL_NONCOPYABLE(AstBranch)
 
@@ -788,41 +792,24 @@ public:
   // --------------------------------------------------------------------------
 
   MPSL_INLINE AstBranch(AstBuilder* ast) noexcept
-    : AstBlock(ast, kTypeBranch) {}
-};
-
-// ============================================================================
-// [mpsl::AstCondition]
-// ============================================================================
-
-class AstCondition : public AstNode {
-public:
-  MPSL_NONCOPYABLE(AstCondition)
-
-  // --------------------------------------------------------------------------
-  // [Construction / Destruction]
-  // --------------------------------------------------------------------------
-
-  MPSL_INLINE AstCondition(AstBuilder* ast) noexcept
-    : AstNode(ast, kTypeCondition, &_exp, 2),
-      _exp(nullptr),
-      _body(nullptr) {}
+    : AstNode(ast, kTypeBranch, &_cond, 3),
+      _cond(nullptr),
+      _then(nullptr),
+      _else(nullptr) {}
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE AstNode** getChildren() const noexcept { return (AstNode**)&_exp; }
-
-  MPSL_INLINE bool isIf() const noexcept { return _exp != nullptr; }
-  MPSL_INLINE bool isElse() const noexcept { return _exp == nullptr; }
+  MPSL_INLINE AstNode** getChildren() const noexcept { return (AstNode**)&_cond; }
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
-  MPSL_AST_CHILD(0, AstNode, Exp, _exp);
-  MPSL_AST_CHILD(1, AstBlock, Body, _body);
+  MPSL_AST_CHILD(0, AstNode, Cond, _cond);
+  MPSL_AST_CHILD(1, AstNode, Then, _then);
+  MPSL_AST_CHILD(2, AstNode, Else, _else);
 };
 
 // ============================================================================
@@ -1202,7 +1189,6 @@ public:
       case AstNode::kTypeFunction : return static_cast<Impl*>(this)->onFunction (static_cast<AstFunction* >(node));
       case AstNode::kTypeBlock    : return static_cast<Impl*>(this)->onBlock    (static_cast<AstBlock*    >(node));
       case AstNode::kTypeBranch   : return static_cast<Impl*>(this)->onBranch   (static_cast<AstBranch*   >(node));
-      case AstNode::kTypeCondition: return static_cast<Impl*>(this)->onCondition(static_cast<AstCondition*>(node));
       case AstNode::kTypeFor      :
       case AstNode::kTypeWhile    :
       case AstNode::kTypeDoWhile  : return static_cast<Impl*>(this)->onLoop     (static_cast<AstLoop*     >(node));
@@ -1261,7 +1247,6 @@ public:
       case AstNode::kTypeFunction : return static_cast<Impl*>(this)->onFunction (static_cast<AstFunction* >(node), args);
       case AstNode::kTypeBlock    : return static_cast<Impl*>(this)->onBlock    (static_cast<AstBlock*    >(node), args);
       case AstNode::kTypeBranch   : return static_cast<Impl*>(this)->onBranch   (static_cast<AstBranch*   >(node), args);
-      case AstNode::kTypeCondition: return static_cast<Impl*>(this)->onCondition(static_cast<AstCondition*>(node), args);
       case AstNode::kTypeFor      :
       case AstNode::kTypeWhile    :
       case AstNode::kTypeDoWhile  : return static_cast<Impl*>(this)->onLoop     (static_cast<AstLoop*     >(node), args);
@@ -1310,30 +1295,29 @@ public:
   // [OnNode]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error onProgram(AstProgram* node) noexcept;
-  MPSL_NOAPI Error onFunction(AstFunction* node) noexcept;
-  MPSL_NOAPI Error onBlock(AstBlock* node) noexcept;
-  MPSL_NOAPI Error onBranch(AstBranch* node) noexcept;
-  MPSL_NOAPI Error onCondition(AstCondition* node) noexcept;
-  MPSL_NOAPI Error onLoop(AstLoop* node) noexcept;
-  MPSL_NOAPI Error onBreak(AstBreak* node) noexcept;
-  MPSL_NOAPI Error onContinue(AstContinue* node) noexcept;
-  MPSL_NOAPI Error onReturn(AstReturn* node) noexcept;
-  MPSL_NOAPI Error onVarDecl(AstVarDecl* node) noexcept;
-  MPSL_NOAPI Error onVarMemb(AstVarMemb* node) noexcept;
-  MPSL_NOAPI Error onVar(AstVar* node) noexcept;
-  MPSL_NOAPI Error onImm(AstImm* node) noexcept;
-  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node) noexcept;
-  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node) noexcept;
-  MPSL_NOAPI Error onCall(AstCall* node) noexcept;
+  Error onProgram(AstProgram* node) noexcept;
+  Error onFunction(AstFunction* node) noexcept;
+  Error onBlock(AstBlock* node) noexcept;
+  Error onBranch(AstBranch* node) noexcept;
+  Error onLoop(AstLoop* node) noexcept;
+  Error onBreak(AstBreak* node) noexcept;
+  Error onContinue(AstContinue* node) noexcept;
+  Error onReturn(AstReturn* node) noexcept;
+  Error onVarDecl(AstVarDecl* node) noexcept;
+  Error onVarMemb(AstVarMemb* node) noexcept;
+  Error onVar(AstVar* node) noexcept;
+  Error onImm(AstImm* node) noexcept;
+  Error onUnaryOp(AstUnaryOp* node) noexcept;
+  Error onBinaryOp(AstBinaryOp* node) noexcept;
+  Error onCall(AstCall* node) noexcept;
 
   // --------------------------------------------------------------------------
   // [Helpers]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error info(const char* fmt, ...) noexcept;
-  MPSL_NOAPI Error nest(const char* fmt, ...) noexcept;
-  MPSL_NOAPI Error denest() noexcept;
+  Error info(const char* fmt, ...) noexcept;
+  Error nest(const char* fmt, ...) noexcept;
+  Error denest() noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -1358,29 +1342,28 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI AstAnalysis(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
-  MPSL_NOAPI ~AstAnalysis() noexcept;
+  AstAnalysis(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
+  ~AstAnalysis() noexcept;
 
   // --------------------------------------------------------------------------
   // [OnNode]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error onProgram(AstProgram* node) noexcept;
-  MPSL_NOAPI Error onFunction(AstFunction* node) noexcept;
-  MPSL_NOAPI Error onBlock(AstBlock* node) noexcept;
-  MPSL_NOAPI Error onBranch(AstBranch* node) noexcept;
-  MPSL_NOAPI Error onCondition(AstCondition* node) noexcept;
-  MPSL_NOAPI Error onLoop(AstLoop* node) noexcept;
-  MPSL_NOAPI Error onBreak(AstBreak* node) noexcept;
-  MPSL_NOAPI Error onContinue(AstContinue* node) noexcept;
-  MPSL_NOAPI Error onReturn(AstReturn* node) noexcept;
-  MPSL_NOAPI Error onVarDecl(AstVarDecl* node) noexcept;
-  MPSL_NOAPI Error onVarMemb(AstVarMemb* node) noexcept;
-  MPSL_NOAPI Error onVar(AstVar* node) noexcept;
-  MPSL_NOAPI Error onImm(AstImm* node) noexcept;
-  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node) noexcept;
-  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node) noexcept;
-  MPSL_NOAPI Error onCall(AstCall* node) noexcept;
+  Error onProgram(AstProgram* node) noexcept;
+  Error onFunction(AstFunction* node) noexcept;
+  Error onBlock(AstBlock* node) noexcept;
+  Error onBranch(AstBranch* node) noexcept;
+  Error onLoop(AstLoop* node) noexcept;
+  Error onBreak(AstBreak* node) noexcept;
+  Error onContinue(AstContinue* node) noexcept;
+  Error onReturn(AstReturn* node) noexcept;
+  Error onVarDecl(AstVarDecl* node) noexcept;
+  Error onVarMemb(AstVarMemb* node) noexcept;
+  Error onVar(AstVar* node) noexcept;
+  Error onImm(AstImm* node) noexcept;
+  Error onUnaryOp(AstUnaryOp* node) noexcept;
+  Error onBinaryOp(AstBinaryOp* node) noexcept;
+  Error onCall(AstCall* node) noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -1393,21 +1376,21 @@ public:
   // [CheckAssignment]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error checkAssignment(AstNode* node, uint32_t op) noexcept;
+  Error checkAssignment(AstNode* node, uint32_t op) noexcept;
 
   // --------------------------------------------------------------------------
   // [Cast]
   // --------------------------------------------------------------------------
 
   //! Perform an implicit cast.
-  MPSL_NOAPI uint32_t implicitCast(AstNode* node, AstNode* child, uint32_t type) noexcept;
+  uint32_t implicitCast(AstNode* node, AstNode* child, uint32_t type) noexcept;
 
   //! Perform an internal cast to `bool` or `__qbool`.
-  MPSL_NOAPI uint32_t boolCast(AstNode* node, AstNode* child) noexcept;
+  uint32_t boolCast(AstNode* node, AstNode* child) noexcept;
 
   // TODO: Move to `AstBuilder::onInvalidCast()`.
   //! Report an invalid implicit or explicit cast.
-  MPSL_NOAPI Error invalidCast(uint32_t position, const char* msg, uint32_t fromTypeInfo, uint32_t toTypeInfo) noexcept;
+  Error invalidCast(uint32_t position, const char* msg, uint32_t fromTypeInfo, uint32_t toTypeInfo) noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]

@@ -43,7 +43,7 @@ public:
 
   typedef CodeGenResult Result;
 
-  typedef Set< AstFunction* > FunctionSet;
+  typedef Set< AstFunction*              > FunctionSet;
   typedef Map< AstSymbol*, IRPair<IRReg> > VarMap;
   typedef Map< AstSymbol*, IRMem*        > MemMap;
 
@@ -60,29 +60,28 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI CodeGen(AstBuilder* ast, IRBuilder* ir) noexcept;
-  MPSL_NOAPI ~CodeGen() noexcept;
+  CodeGen(AstBuilder* ast, IRBuilder* ir) noexcept;
+  ~CodeGen() noexcept;
 
   // --------------------------------------------------------------------------
   // [OnNode]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error onProgram(AstProgram* node, Result& out) noexcept;
-  MPSL_NOAPI Error onFunction(AstFunction* node, Result& out) noexcept;
-  MPSL_NOAPI Error onBlock(AstBlock* node, Result& out) noexcept;
-  MPSL_NOAPI Error onBranch(AstBranch* node, Result& out) noexcept;
-  MPSL_NOAPI Error onCondition(AstCondition* node, Result& out) noexcept;
-  MPSL_NOAPI Error onLoop(AstLoop* node, Result& out) noexcept;
-  MPSL_NOAPI Error onBreak(AstBreak* node, Result& out) noexcept;
-  MPSL_NOAPI Error onContinue(AstContinue* node, Result& out) noexcept;
-  MPSL_NOAPI Error onReturn(AstReturn* node, Result& out) noexcept;
-  MPSL_NOAPI Error onVarDecl(AstVarDecl* node, Result& out) noexcept;
-  MPSL_NOAPI Error onVarMemb(AstVarMemb* node, Result& out) noexcept;
-  MPSL_NOAPI Error onVar(AstVar* node, Result& out) noexcept;
-  MPSL_NOAPI Error onImm(AstImm* node, Result& out) noexcept;
-  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node, Result& out) noexcept;
-  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node, Result& out) noexcept;
-  MPSL_NOAPI Error onCall(AstCall* node, Result& out) noexcept;
+  Error onProgram(AstProgram* node, Result& out) noexcept;
+  Error onFunction(AstFunction* node, Result& out) noexcept;
+  Error onBlock(AstBlock* node, Result& out) noexcept;
+  Error onBranch(AstBranch* node, Result& out) noexcept;
+  Error onLoop(AstLoop* node, Result& out) noexcept;
+  Error onBreak(AstBreak* node, Result& out) noexcept;
+  Error onContinue(AstContinue* node, Result& out) noexcept;
+  Error onReturn(AstReturn* node, Result& out) noexcept;
+  Error onVarDecl(AstVarDecl* node, Result& out) noexcept;
+  Error onVarMemb(AstVarMemb* node, Result& out) noexcept;
+  Error onVar(AstVar* node, Result& out) noexcept;
+  Error onImm(AstImm* node, Result& out) noexcept;
+  Error onUnaryOp(AstUnaryOp* node, Result& out) noexcept;
+  Error onBinaryOp(AstBinaryOp* node, Result& out) noexcept;
+  Error onCall(AstCall* node, Result& out) noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -99,28 +98,28 @@ public:
   // [Utilities]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error mapVarToAst(AstSymbol* sym, IRPair<IRReg> var) noexcept;
+  Error mapVarToAst(AstSymbol* sym, IRPair<IRReg> var) noexcept;
 
-  MPSL_NOAPI Error newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept;
-  MPSL_NOAPI Error newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeInfo) noexcept;
-  MPSL_NOAPI Error addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) noexcept;
+  Error newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept;
+  Error newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeInfo) noexcept;
+  Error addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) noexcept;
 
-  MPSL_NOAPI Error asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept;
+  Error asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeInfo) noexcept;
 
-  MPSL_NOAPI Error emitMove(IRPair<IRReg> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept;
-  MPSL_NOAPI Error emitStore(IRPair<IRObject> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept;
-  MPSL_NOAPI Error emitInst2(uint32_t instCode,
+  Error emitMove(IRPair<IRReg> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept;
+  Error emitStore(IRPair<IRObject> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept;
+  Error emitInst2(uint32_t instCode,
     IRPair<IRObject> o0,
     IRPair<IRObject> o1, uint32_t typeInfo) noexcept;
 
-  MPSL_NOAPI Error emitInst3(uint32_t instCode,
+  Error emitInst3(uint32_t instCode,
     IRPair<IRObject> o0,
     IRPair<IRObject> o1,
     IRPair<IRObject> o2, uint32_t typeInfo) noexcept;
 
   // TODO: Rename after API is completed.
-  MPSL_NOAPI Error emitFetchX(IRReg* dst, IRMem* src, uint32_t typeInfo) noexcept;
-  MPSL_NOAPI Error emitStoreX(IRMem* dst, IRReg* src, uint32_t typeInfo) noexcept;
+  Error emitFetchX(IRReg* dst, IRMem* src, uint32_t typeInfo) noexcept;
+  Error emitStoreX(IRMem* dst, IRReg* src, uint32_t typeInfo) noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]

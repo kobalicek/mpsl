@@ -152,7 +152,7 @@ enum InternalOptions {
 // ============================================================================
 
 //! \internal
-MPSL_NOAPI void mpAssertionFailed(const char* exp, const char* file, int line) noexcept;
+void mpAssertionFailed(const char* exp, const char* file, int line) noexcept;
 
 // ============================================================================
 // [mpsl::mpTraceError]
@@ -165,7 +165,7 @@ MPSL_NOAPI void mpAssertionFailed(const char* exp, const char* file, int line) n
 //! The mpTraceError function can be used to track any error reported by MPSL.
 //! Put a breakpoint inside mpTraceError and the program execution will be
 //! stopped immediately after the error is created.
-MPSL_NOAPI Error mpTraceError(Error error) noexcept;
+Error mpTraceError(Error error) noexcept;
 
 // ============================================================================
 // [mpsl::RuntimeData]
@@ -214,7 +214,10 @@ public:
 // ============================================================================
 
 //! Error reporter.
-struct ErrorReporter {
+class ErrorReporter {
+public:
+  MPSL_NONCOPYABLE(ErrorReporter)
+
   MPSL_INLINE ErrorReporter(const char* body, size_t len, uint32_t options, OutputLog* log) noexcept
     : _body(body),
       _len(len),

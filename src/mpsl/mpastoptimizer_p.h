@@ -29,29 +29,28 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI AstOptimizer(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
-  MPSL_NOAPI ~AstOptimizer() noexcept;
+  AstOptimizer(AstBuilder* ast, ErrorReporter* errorReporter) noexcept;
+  ~AstOptimizer() noexcept;
 
   // --------------------------------------------------------------------------
   // [OnNode]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error onProgram(AstProgram* node) noexcept;
-  MPSL_NOAPI Error onFunction(AstFunction* node) noexcept;
-  MPSL_NOAPI Error onBlock(AstBlock* node) noexcept;
-  MPSL_NOAPI Error onBranch(AstBranch* node) noexcept;
-  MPSL_NOAPI Error onCondition(AstCondition* node) noexcept;
-  MPSL_NOAPI Error onLoop(AstLoop* node) noexcept;
-  MPSL_NOAPI Error onBreak(AstBreak* node) noexcept;
-  MPSL_NOAPI Error onContinue(AstContinue* node) noexcept;
-  MPSL_NOAPI Error onReturn(AstReturn* node) noexcept;
-  MPSL_NOAPI Error onVarDecl(AstVarDecl* node) noexcept;
-  MPSL_NOAPI Error onVarMemb(AstVarMemb* node) noexcept;
-  MPSL_NOAPI Error onVar(AstVar* node) noexcept;
-  MPSL_NOAPI Error onImm(AstImm* node) noexcept;
-  MPSL_NOAPI Error onUnaryOp(AstUnaryOp* node) noexcept;
-  MPSL_NOAPI Error onBinaryOp(AstBinaryOp* node) noexcept;
-  MPSL_NOAPI Error onCall(AstCall* node) noexcept;
+  Error onProgram(AstProgram* node) noexcept;
+  Error onFunction(AstFunction* node) noexcept;
+  Error onBlock(AstBlock* node) noexcept;
+  Error onBranch(AstBranch* node) noexcept;
+  Error onLoop(AstLoop* node) noexcept;
+  Error onBreak(AstBreak* node) noexcept;
+  Error onContinue(AstContinue* node) noexcept;
+  Error onReturn(AstReturn* node) noexcept;
+  Error onVarDecl(AstVarDecl* node) noexcept;
+  Error onVarMemb(AstVarMemb* node) noexcept;
+  Error onVar(AstVar* node) noexcept;
+  Error onImm(AstImm* node) noexcept;
+  Error onUnaryOp(AstUnaryOp* node) noexcept;
+  Error onBinaryOp(AstBinaryOp* node) noexcept;
+  Error onCall(AstCall* node) noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]

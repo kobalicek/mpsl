@@ -62,27 +62,27 @@ public:
   // [Parse]
   // --------------------------------------------------------------------------
 
-  MPSL_NOAPI Error parseProgram(AstProgram* block) noexcept;
-  MPSL_NOAPI Error parseFunction(AstProgram* block) noexcept;
+  Error parseProgram(AstProgram* block) noexcept;
+  Error parseFunction(AstProgram* block) noexcept;
 
-  MPSL_NOAPI Error parseStatement(AstBlock* block, uint32_t flags) noexcept;
-  MPSL_NOAPI Error parseBlockOrStatement(AstBlock* block) noexcept;
+  Error parseStatement(AstBlock* block, uint32_t flags) noexcept;
+  Error parseBlockOrStatement(AstBlock* block) noexcept;
 
-  MPSL_NOAPI Error parseTypedef(AstBlock* block) noexcept;
-  MPSL_NOAPI Error parseVarDecl(AstBlock* block) noexcept;
-  MPSL_NOAPI Error parseIfElse(AstBlock* block) noexcept;
+  Error parseTypedef(AstBlock* block) noexcept;
+  Error parseVarDecl(AstBlock* block) noexcept;
+  Error parseIfElse(AstBlock* block) noexcept;
 
-  MPSL_NOAPI Error parseFor(AstBlock* block) noexcept;
-  MPSL_NOAPI Error parseWhile(AstBlock* block) noexcept;
-  MPSL_NOAPI Error parseDoWhile(AstBlock* block) noexcept;
+  Error parseFor(AstBlock* block) noexcept;
+  Error parseWhile(AstBlock* block) noexcept;
+  Error parseDoWhile(AstBlock* block) noexcept;
 
-  MPSL_NOAPI Error parseBreak(AstBlock* block) noexcept;
-  MPSL_NOAPI Error parseContinue(AstBlock* block) noexcept;
-  MPSL_NOAPI Error parseReturn(AstBlock* block) noexcept;
+  Error parseBreak(AstBlock* block) noexcept;
+  Error parseContinue(AstBlock* block) noexcept;
+  Error parseReturn(AstBlock* block) noexcept;
 
-  MPSL_NOAPI Error parseExpression(AstNode** pNodeOut) noexcept;
-  MPSL_NOAPI Error parseVariable(AstVar** pNodeOut) noexcept;
-  MPSL_NOAPI Error parseCall(AstCall** pNodeOut) noexcept;
+  Error parseExpression(AstNode** pNodeOut) noexcept;
+  Error parseVariable(AstVar** pNodeOut) noexcept;
+  Error parseCall(AstCall** pNodeOut) noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]

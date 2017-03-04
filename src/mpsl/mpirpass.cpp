@@ -42,11 +42,14 @@ static Error mpIRPassBlock(IRBuilder* ir, IRBlock* block) noexcept {
 }
 
 Error mpIRPass(IRBuilder* ir) noexcept {
-  IRBlock* block = ir->_blockFirst;
-  while (block) {
+  IRBlocks& blocks = ir->getBlocks();
+  size_t count = blocks.getLength();
+
+  for (size_t i = 0; i < count; i++) {
+    IRBlock* block = blocks[i];
     MPSL_PROPAGATE(mpIRPassBlock(ir, block));
-    block = block->_nextBlock;
   }
+
   return kErrorOk;
 }
 

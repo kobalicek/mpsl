@@ -595,7 +595,7 @@ Error foldCast(
 
       // Cast to a boolean.
       case COMB(kTypeBool  , kTypeQBool ): out.u[i] = sVal.q[i] ? kB32_1 : kB32_0; break;
-      case COMB(kTypeQBool , kTypeBool  ): out.u[i] = sVal.u[i] ? kB64_1 : kB64_0; break;
+      case COMB(kTypeQBool , kTypeBool  ): out.q[i] = sVal.u[i] ? kB64_1 : kB64_0; break;
 
       // Cast to an integer.
       case COMB(kTypeInt   , kTypeBool  ): out.i[i] = sVal.u[i] ? 1 : 0; break;
