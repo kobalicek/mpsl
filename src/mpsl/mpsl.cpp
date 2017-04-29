@@ -56,7 +56,7 @@ MPSL_INLINE T* mpObjectAddRef(T* self) noexcept {
 
 template<typename T>
 MPSL_INLINE void mpObjectRelease(T* self) noexcept {
-  if (self->_refCount != 0 && mpAtomicDec(&self->_refCount) == 1)
+  if (self->_refCount != 0 && !mpAtomicDec(&self->_refCount))
     self->destroy();
 }
 
