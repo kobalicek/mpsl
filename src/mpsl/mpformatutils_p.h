@@ -26,19 +26,19 @@ namespace mpsl {
 namespace FormatUtils {
 
 //! Append MPSL specific formatted string `fmt` into `sb`.
-StringBuilder& sformat(StringBuilder& sb, const char* fmt, ...) noexcept;
+String& sformat(String& sb, const char* fmt, ...) noexcept;
 //! Append MPSL specific formatted string `fmt` into `sb` (`va_list` version).
-StringBuilder& vformat(StringBuilder& sb, const char* fmt, va_list ap) noexcept;
+String& vformat(String& sb, const char* fmt, va_list ap) noexcept;
 
 //! Append a formatted type name and related information of `type`.
 //!
 //! Provided also by `sformat`'s `"%{Type}"` extension.
-StringBuilder& formatType(StringBuilder& sb, uint32_t typeInfo) noexcept;
+String& formatType(String& sb, uint32_t typeInfo) noexcept;
 
 //! Append a formatted `value` (scalar or vector) of type `type`.
 //!
 //! Provided also by `sformat`'s `"%{Value}"` extension.
-StringBuilder& formatValue(StringBuilder& sb, uint32_t typeInfo, const Value* value) noexcept;
+String& formatValue(String& sb, uint32_t typeInfo, const Value* value) noexcept;
 
 //! Append a formatted swizzle letters.
 void formatSwizzleArray(char* dst, const uint8_t* swizzleArray, uint32_t count) noexcept;

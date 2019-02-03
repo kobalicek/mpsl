@@ -21,11 +21,11 @@ namespace mpsl {
 
 #define MPSL_PARSER_WARNING(TOKEN, ...)                                       \
   _errorReporter->onWarning(                                                  \
-    static_cast<uint32_t>(TOKEN.position), __VA_ARGS__)
+    static_cast<uint32_t>(TOKEN.position()), __VA_ARGS__)
 
 #define MPSL_PARSER_ERROR(TOKEN, ...)                                         \
   return _errorReporter->onError(                                             \
-    kErrorInvalidSyntax, static_cast<uint32_t>(TOKEN.position), __VA_ARGS__)
+    kErrorInvalidSyntax, static_cast<uint32_t>(TOKEN.position()), __VA_ARGS__)
 
 // ============================================================================
 // [mpsl::AstNestedScope]
@@ -49,11 +49,11 @@ public:
   }
 
   MPSL_INLINE ~AstNestedScope() noexcept {
-    AstScope* parent = getParent();
-    MPSL_ASSERT(parent != nullptr);
+    AstScope* p = parent();
+    MPSL_ASSERT(p != nullptr);
 
-    _parser->_currentScope = parent;
-    parent->_symbols.mergeToInvisibleSlot(this->_symbols);
+    _parser->_currentScope = p;
+    p->_symbols.mergeToInvisibleSlot(this->_symbols);
   }
 
   // --------------------------------------------------------------------------
@@ -104,7 +104,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
   uint32_t uToken;
   StringRef str;
 
-  AstScope* globalScope = _ast->getGlobalScope();
+  AstScope* globalScope = _ast->globalScope();
   AstScope* localScope;
 
   MPSL_PROPAGATE(block->willAdd());
@@ -126,11 +126,11 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
 
   // Parse the function return type.
   uToken = _tokenizer.next(&token);
-  func->setPosition(token.getPosAsUInt());
+  func->setPosition(token.positionAsUInt());
 
   if (uToken == kTokenSymbol) {
-    str.set(_tokenizer._start + token.position, token.length);
-    AstSymbol* retType = localScope->resolveSymbol(str, token.hVal);
+    str.set(_tokenizer._start + token.position(), token.size());
+    AstSymbol* retType = localScope->resolveSymbol(str, token.hashCode());
 
     if (retType == nullptr || !retType->isTypeName())
       MPSL_PARSER_ERROR(token, "Expected type-name.");
@@ -144,13 +144,13 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
   if (_tokenizer.next(&token) != kTokenSymbol)
     MPSL_PARSER_ERROR(token, "Expected a function name.");
 
-  str.set(_tokenizer._start + token.position, token.length);
-  AstSymbol* funcSym = localScope->resolveSymbol(str, token.hVal);
+  str.set(_tokenizer._start + token.position(), token.size());
+  AstSymbol* funcSym = localScope->resolveSymbol(str, token.hashCode());
 
   if (funcSym)
-    MPSL_PARSER_ERROR(token, "Attempt to redefine '%s'.", funcSym->getName());
+    MPSL_PARSER_ERROR(token, "Attempt to redefine '%s'.", funcSym->name());
 
-  funcSym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeFunction, globalScope->getScopeType());
+  funcSym = _ast->newSymbol(str, token.hashCode(), AstSymbol::kTypeFunction, globalScope->scopeType());
   MPSL_NULLCHECK(funcSym);
 
   // Function name has to be put into the parent scope, otherwise the symbol
@@ -165,7 +165,7 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
   if (_tokenizer.next(&token) != kTokenLParen)
     MPSL_PARSER_ERROR(token, "Expected '(' token after a function name.");
 
-  args->setPosition(token.getPosAsUInt());
+  args->setPosition(token.positionAsUInt());
   uToken = _tokenizer.next(&token);
 
   if (uToken != kTokenRParen) {
@@ -175,8 +175,8 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
         MPSL_PARSER_ERROR(token, "Expected an argument type.");
 
       // Resolve the argument type.
-      str.set(_tokenizer._start + token.position, token.length);
-      AstSymbol* argType = localScope->resolveSymbol(str, token.hVal);
+      str.set(_tokenizer._start + token.position(), token.size());
+      AstSymbol* argType = localScope->resolveSymbol(str, token.hashCode());
 
       if (argType == nullptr || !argType->isTypeName())
         MPSL_PARSER_ERROR(token, "Expected an argument type.");
@@ -186,25 +186,23 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
         MPSL_PARSER_ERROR(token, "Expected an argument name.");
 
       // Resolve the argument name.
-      str.set(_tokenizer._start + token.position, token.length);
+      str.set(_tokenizer._start + token.position(), token.size());
       AstScope* argScope;
-      AstSymbol* argSym = localScope->resolveSymbol(str, token.hVal, &argScope);
+      AstSymbol* argSym = localScope->resolveSymbol(str, token.hashCode(), &argScope);
 
       if (argSym) {
         if (!argSym->isVariable())
-          MPSL_PARSER_ERROR(token, "Can't use %{SymbolType} '%s' as an argument name.",
-            argSym->getSymbolType(), argSym->getName());
+          MPSL_PARSER_ERROR(token, "Can't use %{SymbolType} '%s' as an argument name.", argSym->symbolType(), argSym->name());
 
         if (argScope == localScope)
-          MPSL_PARSER_ERROR(token, "Can't redeclare argument '%s'.",
-            argSym->getName());
+          MPSL_PARSER_ERROR(token, "Can't redeclare argument '%s'.", argSym->name());
       }
 
-      argSym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeVariable, AstScope::kTypeLocal);
+      argSym = _ast->newSymbol(str, token.hashCode(), AstSymbol::kTypeVariable, AstScope::kTypeLocal);
       MPSL_NULLCHECK(argSym);
 
       argSym->setDeclared();
-      argSym->setTypeInfo(argType->getTypeInfo());
+      argSym->setTypeInfo(argType->typeInfo());
       localScope->putSymbol(argSym);
 
       // Create/Append the argument node.
@@ -212,9 +210,9 @@ Error Parser::parseFunction(AstProgram* block) noexcept {
       AstVarDecl* argDecl = _ast->newNode<AstVarDecl>();
       MPSL_NULLCHECK(argDecl);
 
-      argDecl->setPosition(token.getPosAsUInt());
+      argDecl->setPosition(token.positionAsUInt());
       argDecl->setSymbol(argSym);
-      argDecl->setTypeInfo(argSym->getTypeInfo());
+      argDecl->setTypeInfo(argSym->typeInfo());
 
       argSym->setNode(argDecl);
       args->appendNode(argDecl);
@@ -316,8 +314,8 @@ Error Parser::parseStatement(AstBlock* block, uint32_t flags) noexcept {
 
   // Parse a variable declaration.
   if (uToken == kTokenSymbol) {
-    StringRef str(_tokenizer._start + token.position, token.length);
-    AstSymbol* sym = _currentScope->resolveSymbol(str, token.hVal);
+    StringRef str(_tokenizer._start + token.position(), token.size());
+    AstSymbol* sym = _currentScope->resolveSymbol(str, token.hashCode());
 
     if (sym && sym->isTypeName()) {
       if (!(flags & kEnableNewSymbols))
@@ -346,7 +344,7 @@ Error Parser::parseBlockOrStatement(AstBlock* block) noexcept {
 
   if (uToken == kTokenLCurl) {
     // Parse <block>, consume '{' token.
-    block->setPosition(token.getPosAsUInt());
+    block->setPosition(token.positionAsUInt());
     _tokenizer.consume();
 
     for (;;) {
@@ -375,8 +373,7 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
 
   // Parse the 'typedef' statement.
   _tokenizer.next(&token);
-  MPSL_ASSERT(token.token == kTokenTypeDef);
-  uint32_t position = token.getPosAsUInt();
+  MPSL_ASSERT(token.tokenType() == kTokenTypeDef);
 
   // Parse the type-name.
   if (_tokenizer.next(&token) != kTokenSymbol)
@@ -385,8 +382,8 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
   AstScope* scope = _currentScope;
 
   // Resolve the type-name.
-  str.set(_tokenizer._start + token.position, token.length);
-  AstSymbol* typeSym = scope->resolveSymbol(str, token.hVal);
+  str.set(_tokenizer._start + token.position(), token.size());
+  AstSymbol* typeSym = scope->resolveSymbol(str, token.hashCode());
 
   if (typeSym == nullptr || !typeSym->isTypeName())
     MPSL_PARSER_ERROR(token, "Unresolved type-name after 'typedef' declaration.");
@@ -396,17 +393,17 @@ Error Parser::parseTypedef(AstBlock* block) noexcept {
     MPSL_PARSER_ERROR(token, "Expected a new type-name after the type-name.");
 
   // Create the synonym.
-  str.set(_tokenizer._start + token.position, token.length);
-  AstSymbol* synonym = scope->resolveSymbol(str, token.hVal);
+  str.set(_tokenizer._start + token.position(), token.size());
+  AstSymbol* synonym = scope->resolveSymbol(str, token.hashCode());
 
   if (synonym)
-    MPSL_PARSER_ERROR(token, "Attempt to redefine '%s'.", synonym->getName());
+    MPSL_PARSER_ERROR(token, "Attempt to redefine '%s'.", synonym->name());
 
-  synonym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeTypeName, scope->getScopeType());
+  synonym = _ast->newSymbol(str, token.hashCode(), AstSymbol::kTypeTypeName, scope->scopeType());
   MPSL_NULLCHECK(synonym);
 
   synonym->setDeclared();
-  synonym->setTypeInfo(typeSym->getTypeInfo());
+  synonym->setTypeInfo(typeSym->typeInfo());
   scope->putSymbol(synonym);
 
   // Parse the ';' token.
@@ -424,7 +421,7 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
 
   bool isFirst = true;
   bool isConst = uToken == kTokenConst;
-  uint32_t position = token.getPosAsUInt();
+  uint32_t position = token.positionAsUInt();
 
   // Parse the optional 'const' keyword and type-name.
   if (isConst)
@@ -435,10 +432,10 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
     MPSL_PARSER_ERROR(token, "Expected type-name.");
 
   // Resolve the type-name.
-  str.set(_tokenizer._start + token.position, token.length);
+  str.set(_tokenizer._start + token.position(), token.size());
 
   AstScope* scope = _currentScope;
-  AstSymbol* typeSym = scope->resolveSymbol(str, token.hVal);
+  AstSymbol* typeSym = scope->resolveSymbol(str, token.hashCode());
 
   if (typeSym == nullptr || !typeSym->isTypeName())
     MPSL_PARSER_ERROR(token, "Expected type-name.");
@@ -453,32 +450,31 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
     MPSL_PROPAGATE(block->willAdd());
 
     if (!isFirst)
-      position = token.getPosAsUInt();
+      position = token.positionAsUInt();
 
     // Resolve the variable name.
     AstSymbol* vSym;
     AstScope* vScope;
 
-    str.set(_tokenizer._start + token.position, token.length);
-    if ((vSym = scope->resolveSymbol(str, token.hVal, &vScope)) != nullptr) {
+    str.set(_tokenizer._start + token.position(), token.size());
+    if ((vSym = scope->resolveSymbol(str, token.hashCode(), &vScope)) != nullptr) {
       if (!vSym->isVariable() || scope == vScope)
-        MPSL_PARSER_ERROR(token, "Attempt to redefine %{SymbolType} '%s'.",
-          vSym->getSymbolType(), vSym->getName());
+        MPSL_PARSER_ERROR(token, "Attempt to redefine %{SymbolType} '%s'.", vSym->symbolType(), vSym->name());
 
-      if (vSym->hasNode()) {
+      if (vSym->node()) {
         uint32_t line, column;
-        _errorReporter->getLineAndColumn(vSym->getNode()->getPosition(), line, column);
-        MPSL_PARSER_WARNING(token, "Variable '%s' shadows a variable declared at [%d:%d].", vSym->getName(), line, column);
+        _errorReporter->getLineAndColumn(vSym->node()->position(), line, column);
+        MPSL_PARSER_WARNING(token, "Variable '%s' shadows a variable declared at [%d:%d].", vSym->name(), line, column);
       }
       else {
-        MPSL_PARSER_WARNING(token, "Variable '%s' shadows a variable of the same name.", vSym->getName());
+        MPSL_PARSER_WARNING(token, "Variable '%s' shadows a variable of the same name.", vSym->name());
       }
     }
 
-    vSym = _ast->newSymbol(str, token.hVal, AstSymbol::kTypeVariable, scope->getScopeType());
+    vSym = _ast->newSymbol(str, token.hashCode(), AstSymbol::kTypeVariable, scope->scopeType());
     MPSL_NULLCHECK(vSym);
 
-    uint32_t typeInfo = typeSym->getTypeInfo();
+    uint32_t typeInfo = typeSym->typeInfo();
 
     if (isConst)
       typeInfo |= kTypeRead;
@@ -512,7 +508,7 @@ Error Parser::parseVarDecl(AstBlock* block) noexcept {
     // Parse the ',' or ';' tokens.
     if (uToken == kTokenComma || uToken == kTokenSemicolon) {
       if (isConst && !isAssigned)
-        MPSL_PARSER_ERROR(token, "Unassigned constant '%s'.", vSym->getName());
+        MPSL_PARSER_ERROR(token, "Unassigned constant '%s'.", vSym->name());
 
       block->appendNode(decl);
 
@@ -537,8 +533,8 @@ Error Parser::parseIfElse(AstBlock* block) noexcept {
 
   // Parse the 'if' statement.
   _tokenizer.next(&token);
-  MPSL_ASSERT(token.token == kTokenIf);
-  uint32_t position = token.getPosAsUInt();
+  MPSL_ASSERT(token.tokenType() == kTokenIf);
+  uint32_t position = token.positionAsUInt();
 
   // Parse the '(' token.
   if (_tokenizer.next(&token) != kTokenLParen)
@@ -551,15 +547,15 @@ Error Parser::parseIfElse(AstBlock* block) noexcept {
 
   // block->appendNode(branch);
   branch->setPosition(position);
-  position = token.getPosAsUInt();
+  position = token.positionAsUInt();
 
   //bool isLast = false;
   AstBranch* first = branch;
   for (;;) {
     // Parse the condition inside '(' and ')'.
-    AstNode* cond;
-    MPSL_PROPAGATE_(parseExpression(&cond), { _ast->deleteNode(first); });
-    branch->setCond(cond);
+    AstNode* condition;
+    MPSL_PROPAGATE_(parseExpression(&condition), { _ast->deleteNode(first); });
+    branch->setCondition(condition);
 
     if (_tokenizer.next(&token) != kTokenRParen) {
       _ast->deleteNode(first);
@@ -567,18 +563,18 @@ Error Parser::parseIfElse(AstBlock* block) noexcept {
     }
 
     // Parse then branch.
-    AstBlock* then = _ast->newNode<AstBlock>();
-    MPSL_NULLCHECK_(then, { _ast->deleteNode(first); });
-    branch->setThen(then);
-    MPSL_PROPAGATE_(parseBlockOrStatement(then), { _ast->deleteNode(first); });
+    AstBlock* thenBody = _ast->newNode<AstBlock>();
+    MPSL_NULLCHECK_(thenBody, { _ast->deleteNode(first); });
+    branch->setThenBody(thenBody);
+    MPSL_PROPAGATE_(parseBlockOrStatement(thenBody), { _ast->deleteNode(first); });
 
     // Parse else branch.
     if (_tokenizer.peek(&token) == kTokenElse) {
-      position = token.getPosAsUInt();
+      position = token.positionAsUInt();
       if (_tokenizer.consumeAndPeek(&token) == kTokenIf) {
         // Parse "else if ...".
         MPSL_NULLCHECK_(branch = _ast->newNode<AstBranch>(), { _ast->deleteNode(first); });
-        branch->setElse(branch);
+        branch->setElseBody(branch);
 
         // Parse the '(' token.
         if (_tokenizer.consumeAndNext(&token) != kTokenLParen) {
@@ -591,10 +587,10 @@ Error Parser::parseIfElse(AstBlock* block) noexcept {
       }
       else {
         // Parse "else <block|statement>".
-        AstBlock* else_ = _ast->newNode<AstBlock>();
-        MPSL_NULLCHECK_(else_, { _ast->deleteNode(first); });
-        branch->setElse(else_);
-        MPSL_PROPAGATE_(parseBlockOrStatement(else_), { _ast->deleteNode(first); });
+        AstBlock* elseBody = _ast->newNode<AstBlock>();
+        MPSL_NULLCHECK_(elseBody, { _ast->deleteNode(first); });
+        branch->setElseBody(elseBody);
+        MPSL_PROPAGATE_(parseBlockOrStatement(elseBody), { _ast->deleteNode(first); });
 
         block->appendNode(first);
         return kErrorOk;
@@ -607,13 +603,13 @@ Error Parser::parseIfElse(AstBlock* block) noexcept {
   }
 }
 
-// Parse: "for (<init>; <cond>; <iter>) <block|statement>".
+// Parse: "for (<forInit>; <condition>; <iter>) <block|statement>".
 Error Parser::parseFor(AstBlock* block) noexcept {
   Token token;
 
   // Parse the 'for' statement.
   _tokenizer.next(&token);
-  MPSL_ASSERT(token.token == kTokenFor);
+  MPSL_ASSERT(token.tokenType() == kTokenFor);
 
   // Create/Append the 'AstLoop' and essential sub-nodes.
   AstNestedScope tmpScope(this);
@@ -622,16 +618,16 @@ Error Parser::parseFor(AstBlock* block) noexcept {
   MPSL_PROPAGATE(block->willAdd());
   MPSL_NULLCHECK(for_ = _ast->newNode<AstLoop>(AstNode::kTypeFor));
 
-  for_->setPosition(token.getPosAsUInt());
+  for_->setPosition(token.positionAsUInt());
   block->appendNode(for_);
 
-  AstBlock* init = _ast->newNode<AstBlock>();
-  MPSL_NULLCHECK(init);
-  for_->setInit(init);
+  AstBlock* forInit = _ast->newNode<AstBlock>();
+  MPSL_NULLCHECK(forInit);
+  for_->setForInit(forInit);
 
   AstBlock* iter = _ast->newNode<AstBlock>();
   MPSL_NULLCHECK(iter);
-  for_->setIter(iter);
+  for_->setForIter(iter);
 
   AstBlock* body = _ast->newNode<AstBlock>();
   MPSL_NULLCHECK(body);
@@ -641,18 +637,18 @@ Error Parser::parseFor(AstBlock* block) noexcept {
   if (_tokenizer.next(&token) != kTokenLParen)
     MPSL_PARSER_ERROR(token, "Expected '(' after the 'for' statement.");
 
-  // Parse the <init> section.
+  // Parse the <forInit> section.
   bool hasVarDecl = false;
 
   uint32_t uToken = _tokenizer.peek(&token);
-  init->setPosition(token.getPosAsUInt());
+  forInit->setPosition(token.positionAsUInt());
 
   if (uToken == kTokenSymbol) {
-    StringRef str(_tokenizer._start + token.position, token.length);
-    AstSymbol* sym = tmpScope.resolveSymbol(str, token.hVal);
+    StringRef str(_tokenizer._start + token.position(), token.size());
+    AstSymbol* sym = tmpScope.resolveSymbol(str, token.hashCode());
 
     if (sym && sym->isTypeName()) {
-      MPSL_PROPAGATE(parseVarDecl(init));
+      MPSL_PROPAGATE(parseVarDecl(forInit));
       hasVarDecl = true;
     }
   }
@@ -664,29 +660,29 @@ Error Parser::parseFor(AstBlock* block) noexcept {
     else {
       AstNode* expression;
 
-      MPSL_PROPAGATE(init->willAdd());
+      MPSL_PROPAGATE(forInit->willAdd());
       MPSL_PROPAGATE(parseExpression(&expression));
-      init->appendNode(expression);
+      forInit->appendNode(expression);
 
       if (_tokenizer.next(&token) != kTokenSemicolon)
         MPSL_PARSER_ERROR(token, "Expected ';' after the 'for' initializer.");
     }
   }
 
-  // Parse the <cond> section.
+  // Parse the <condition> section.
   if (_tokenizer.peek(&token) != kTokenSemicolon) {
-    AstNode* cond;
-    MPSL_PROPAGATE(parseExpression(&cond));
-    for_->setCond(cond);
+    AstNode* condition;
+    MPSL_PROPAGATE(parseExpression(&condition));
+    for_->setCondition(condition);
   }
 
-  // Parse the ';' token after <cond>.
+  // Parse the ';' token after <condition>.
   if (_tokenizer.next(&token) != kTokenSemicolon)
     MPSL_PARSER_ERROR(token, "Expected ';' after the 'for' condition.");
 
   // Parse the <iter> section including ')' token.
   uToken = _tokenizer.peek(&token);
-  iter->setPosition(token.getPosAsUInt());
+  iter->setPosition(token.positionAsUInt());
 
   if (uToken != kTokenRParen) {
     for (;;) {
@@ -711,13 +707,13 @@ Error Parser::parseFor(AstBlock* block) noexcept {
   return parseBlockOrStatement(body);
 }
 
-// Parse: "while (<cond>) <block|statement>".
+// Parse: "while (<condition>) <block|statement>".
 Error Parser::parseWhile(AstBlock* block) noexcept {
   Token token;
 
   // Parse the 'while' statement.
   _tokenizer.next(&token);
-  MPSL_ASSERT(token.token == kTokenWhile);
+  MPSL_ASSERT(token.tokenType() == kTokenWhile);
 
   // Create/Append the 'AstLoop' and essential sub-nodes.
   AstNestedScope tmpScope(this);
@@ -726,7 +722,7 @@ Error Parser::parseWhile(AstBlock* block) noexcept {
   MPSL_PROPAGATE(block->willAdd());
   MPSL_NULLCHECK(while_ = _ast->newNode<AstLoop>(AstNode::kTypeWhile));
 
-  while_->setPosition(token.getPosAsUInt());
+  while_->setPosition(token.positionAsUInt());
   block->appendNode(while_);
 
   AstBlock* body = _ast->newNode<AstBlock>();
@@ -737,10 +733,10 @@ Error Parser::parseWhile(AstBlock* block) noexcept {
   if (_tokenizer.next(&token) != kTokenLParen)
     MPSL_PARSER_ERROR(token, "Expected '(' after the 'while' statement.");
 
-  // Parse the <cond> section.
-  AstNode* cond;
-  MPSL_PROPAGATE(parseExpression(&cond));
-  while_->setCond(cond);
+  // Parse the <condition> section.
+  AstNode* condition;
+  MPSL_PROPAGATE(parseExpression(&condition));
+  while_->setCondition(condition);
 
   // Parse the ')' token.
   if (_tokenizer.next(&token) != kTokenRParen)
@@ -752,13 +748,13 @@ Error Parser::parseWhile(AstBlock* block) noexcept {
   return kErrorOk;
 }
 
-// Parse: "do <block|statement> while (<cond>)".
+// Parse: "do <block|statement> while (<condition>)".
 Error Parser::parseDoWhile(AstBlock* block) noexcept {
   Token token;
 
   // Parse the 'do' statement.
   _tokenizer.next(&token);
-  MPSL_ASSERT(token.token == kTokenDo);
+  MPSL_ASSERT(token.tokenType() == kTokenDo);
 
   // Create/Append the 'AstLoop' and essential sub-nodes.
   AstNestedScope tmpScope(this);
@@ -767,7 +763,7 @@ Error Parser::parseDoWhile(AstBlock* block) noexcept {
   MPSL_PROPAGATE(block->willAdd());
   MPSL_NULLCHECK(doWhile = _ast->newNode<AstLoop>(AstNode::kTypeDoWhile));
 
-  doWhile->setPosition(token.getPosAsUInt());
+  doWhile->setPosition(token.positionAsUInt());
   block->appendNode(doWhile);
 
   AstBlock* body = _ast->newNode<AstBlock>();
@@ -775,7 +771,7 @@ Error Parser::parseDoWhile(AstBlock* block) noexcept {
   doWhile->setBody(body);
 
   // Parse the body.
-  MPSL_PROPAGATE(parseBlockOrStatement(doWhile->getBody()));
+  MPSL_PROPAGATE(parseBlockOrStatement(doWhile->body()));
 
   // Parse the 'while' statement.
   if (_tokenizer.next(&token) != kTokenWhile)
@@ -785,10 +781,10 @@ Error Parser::parseDoWhile(AstBlock* block) noexcept {
   if (_tokenizer.next(&token) != kTokenLParen)
     MPSL_PARSER_ERROR(token, "Expected '(' after the 'while' statement.");
 
-  // Parse the <cond>.
-  AstNode* cond;
-  MPSL_PROPAGATE(parseExpression(&cond));
-  doWhile->setCond(cond);
+  // Parse the <condition>.
+  AstNode* condition;
+  MPSL_PROPAGATE(parseExpression(&condition));
+  doWhile->setCondition(condition);
 
   // Parse the ')' token.
   if (_tokenizer.next(&token) != kTokenRParen)
@@ -807,8 +803,8 @@ Error Parser::parseBreak(AstBlock* block) noexcept {
 
   // Parse the 'break' keyword.
   _tokenizer.next(&token);
-  MPSL_ASSERT(token.token == kTokenBreak);
-  uint32_t position = token.getPosAsUInt();
+  MPSL_ASSERT(token.tokenType() == kTokenBreak);
+  uint32_t position = token.positionAsUInt();
 
   // Parse the return expression or ';'.
   if (_tokenizer.next(&token) != kTokenSemicolon)
@@ -830,8 +826,8 @@ Error Parser::parseContinue(AstBlock* block) noexcept {
 
   // Parse the 'continue' keyword.
   _tokenizer.next(&token);
-  MPSL_ASSERT(token.token == kTokenContinue);
-  uint32_t position = token.getPosAsUInt();
+  MPSL_ASSERT(token.tokenType() == kTokenContinue);
+  uint32_t position = token.positionAsUInt();
 
   // Parse the return expression or ';'.
   if (_tokenizer.next(&token) != kTokenSemicolon)
@@ -853,13 +849,13 @@ Error Parser::parseReturn(AstBlock* block) noexcept {
 
   // Parse the 'return' keyword.
   _tokenizer.next(&token);
-  MPSL_ASSERT(token.token == kTokenReturn);
+  MPSL_ASSERT(token.tokenType() == kTokenReturn);
 
   AstReturn* ret;
   MPSL_PROPAGATE(block->willAdd());
   MPSL_NULLCHECK(ret = _ast->newNode<AstReturn>());
 
-  ret->setPosition(token.getPosAsUInt());
+  ret->setPosition(token.positionAsUInt());
   block->appendNode(ret);
 
   // Parse the return expression or ';'.
@@ -943,25 +939,25 @@ _Repeat1:
 
       // Parse a symbol (variable, object.member, or function call).
       case kTokenSymbol: {
-        StringRef str(_tokenizer._start + token.position, token.length);
-        AstSymbol* sym = scope->resolveSymbol(str, token.hVal);
+        StringRef str(_tokenizer._start + token.position(), token.size());
+        AstSymbol* sym = scope->resolveSymbol(str, token.hashCode());
 
         if (sym == nullptr)
           MPSL_PARSER_ERROR(token, "Unresolved symbol.");
 
         if (sym->isTypeName())
-          MPSL_PARSER_ERROR(token, "Unexpected type-name '%s'.", sym->getName());
+          MPSL_PARSER_ERROR(token, "Unexpected type-name '%s'.", sym->name());
 
         AstNode* zNode;
         if (sym->isVariable()) {
           if (!sym->isDeclared())
-            MPSL_PARSER_ERROR(token, "Can't use variable '%s' that is being declared.", sym->getName());
+            MPSL_PARSER_ERROR(token, "Can't use variable '%s' that is being declared.", sym->name());
 
           zNode = _ast->newNode<AstVar>();
           MPSL_NULLCHECK(zNode);
 
-          zNode->setPosition(token.getPosAsUInt());
-          zNode->setTypeInfo(sym->getTypeInfo());
+          zNode->setPosition(token.positionAsUInt());
+          zNode->setTypeInfo(sym->typeInfo());
           static_cast<AstVar*>(zNode)->setSymbol(sym);
         }
         else {
@@ -982,13 +978,13 @@ _Repeat1:
         AstImm* zNode = _ast->newNode<AstImm>();
         MPSL_NULLCHECK(zNode);
 
-        zNode->setPosition(token.getPosAsUInt());
-        zNode->setTypeInfo(token.nType | kTypeRead);
+        zNode->setPosition(token.positionAsUInt());
+        zNode->setTypeInfo(token.numberType() | kTypeRead);
 
-        switch (token.nType) {
-          case kTypeInt   : zNode->_value.i[0] = static_cast<int>(token.value); break;
-          case kTypeFloat : zNode->_value.f[0] = static_cast<float>(token.value); break;
-          case kTypeDouble: zNode->_value.d[0] = token.value; break;
+        switch (token.numberType()) {
+          case kTypeInt   : zNode->_value.i[0] = static_cast<int>(token.value()); break;
+          case kTypeFloat : zNode->_value.f[0] = static_cast<float>(token.value()); break;
+          case kTypeDouble: zNode->_value.d[0] = token.value(); break;
 
           default:
             MPSL_ASSERT(!"Reached");
@@ -1011,18 +1007,18 @@ _Repeat1:
 
       // Parse '(cast)' operator or '(...)' sub-expression.
       case kTokenLParen: {
-        uint32_t position = token.getPosAsUInt();
+        uint32_t position = token.positionAsUInt();
 
         // Parse 'cast' operator.
         if (_tokenizer.peek(&token) == kTokenSymbol) {
-          StringRef str(_tokenizer._start + token.position, token.length);
-          AstSymbol* sym = scope->resolveSymbol(str, token.hVal);
+          StringRef str(_tokenizer._start + token.position(), token.size());
+          AstSymbol* sym = scope->resolveSymbol(str, token.hashCode());
 
           if (sym && sym->isTypeName()) {
             if (_tokenizer.consumeAndNext(&token) != kTokenRParen)
               MPSL_PARSER_ERROR(token, "Expected ')' token.");
 
-            AstUnaryOp* zNode = _ast->newNode<AstUnaryOp>(kOpCast, sym->getTypeInfo());
+            AstUnaryOp* zNode = _ast->newNode<AstUnaryOp>(kOpCast, sym->typeInfo());
             MPSL_NULLCHECK(zNode);
             zNode->setPosition(position);
 
@@ -1065,7 +1061,7 @@ _Unary: {
         // Parse the unary operator.
         AstUnaryOp* opNode = _ast->newNode<AstUnaryOp>(op);
         MPSL_NULLCHECK(opNode);
-        opNode->setPosition(token.getPosAsUInt());
+        opNode->setPosition(token.positionAsUInt());
 
         if (unary == nullptr)
           tNode = opNode;
@@ -1098,7 +1094,7 @@ _Repeat2:
           oNode->setRight(tNode);
           // Iterate to the top-most node.
           while (oNode->hasParent())
-            oNode = static_cast<AstBinaryOp*>(oNode->getParent());
+            oNode = static_cast<AstBinaryOp*>(oNode->parent());
           tNode = oNode;
         }
 
@@ -1111,13 +1107,13 @@ _Repeat2:
       case kTokenMinusMinus  : op = kOpPostDec; goto _UnaryPostfixOp;
 _UnaryPostfixOp: {
         // Fail if the current node is not a variable.
-        AstNode* aNode = unary ? unary->getChild() : tNode;
-        if (aNode == nullptr || (aNode->getNodeType() != AstNode::kTypeVar && aNode->getNodeType() != AstNode::kTypeVarMemb))
+        AstNode* aNode = unary ? unary->child() : tNode;
+        if (aNode == nullptr || (aNode->nodeType() != AstNode::kTypeVar && aNode->nodeType() != AstNode::kTypeVarMemb))
           MPSL_PARSER_ERROR(token, "Unexpected postfix operator.");
 
         AstUnaryOp* zNode = _ast->newNode<AstUnaryOp>(op);
         MPSL_NULLCHECK(zNode);
-        zNode->setPosition(token.getPosAsUInt());
+        zNode->setPosition(token.positionAsUInt());
 
         if (unary == nullptr) {
           zNode->setChild(aNode);
@@ -1135,10 +1131,10 @@ _UnaryPostfixOp: {
       // Parse '.' object's accessor.
       case kTokenDot: {
         // Fail if the current node is not a variable.
-        uint32_t position = token.getPosAsUInt();
-        AstNode* aNode = unary ? unary->getChild() : tNode;
+        uint32_t position = token.positionAsUInt();
+        AstNode* aNode = unary ? unary->child() : tNode;
 
-        if (aNode == nullptr || (aNode->getNodeType() != AstNode::kTypeVar && aNode->getNodeType() != AstNode::kTypeVarMemb))
+        if (aNode == nullptr || (aNode->nodeType() != AstNode::kTypeVar && aNode->nodeType() != AstNode::kTypeVarMemb))
           MPSL_PARSER_ERROR(token, "Unexpected member access.");
 
         if (_tokenizer.next(&token) != kTokenSymbol)
@@ -1148,11 +1144,11 @@ _UnaryPostfixOp: {
         MPSL_NULLCHECK(zNode);
 
         // TODO: Memory leak, it should be allocated as a part of `AstVarMemb`.
-        char* zMemb = _ast->newString(_tokenizer._start + token.position, token.length);
+        char* zMemb = _ast->newString(_tokenizer._start + token.position(), token.size());
         MPSL_NULLCHECK_(zMemb, { _ast->deleteNode(zNode); });
 
         zNode->setPosition(position);
-        zNode->setField(zMemb, token.length);
+        zNode->setField(zMemb, token.size());
 
         if (unary == nullptr) {
           zNode->setChild(aNode);
@@ -1203,7 +1199,7 @@ _UnaryPostfixOp: {
 _Binary: {
         AstBinaryOp* zNode = _ast->newNode<AstBinaryOp>(op);
         MPSL_NULLCHECK(zNode);
-        zNode->setPosition(token.getPosAsUInt());
+        zNode->setPosition(token.positionAsUInt());
 
         if (oNode == nullptr) {
           // oNode <------+
@@ -1218,8 +1214,8 @@ _Binary: {
           break;
         }
 
-        uint32_t oPrec = OpInfo::get(oNode->getOp()).precedence;
-        uint32_t zPrec = OpInfo::get(op).precedence;
+        uint32_t oPrec = OpInfo::get(oNode->opType()).precedence();
+        uint32_t zPrec = OpInfo::get(op).precedence();
 
         if (oPrec > zPrec) {
           // oNode <----------+
@@ -1245,9 +1241,9 @@ _Binary: {
             // Terminate conditions:
             //   1. oNode has higher precedence than zNode.
             //   2. oNode has equal precedence and right-to-left associativity.
-            if (OpInfo::get(oNode->getOp()).rightAssociate(zPrec))
+            if (OpInfo::get(oNode->opType()).rightAssociate(zPrec))
               break;
-            oNode = static_cast<AstBinaryOp*>(oNode->getParent());
+            oNode = static_cast<AstBinaryOp*>(oNode->parent());
           }
 
           // oNode <------+
@@ -1259,7 +1255,7 @@ _Binary: {
           // |    /       \            |
           // | (...)    (tNode)        | oNode will become a top-level node.
           // +-------------------------+
-          if (!oNode->hasParent() && !OpInfo::get(oNode->getOp()).rightAssociate(zPrec)) {
+          if (!oNode->hasParent() && !OpInfo::get(oNode->opType()).rightAssociate(zPrec)) {
             zNode->setLeft(oNode);
           }
           // oNode <----------+
@@ -1302,8 +1298,8 @@ Error Parser::parseVariable(AstVar** pNodeOut) noexcept {
 
     // Parse the variable.
     if (uToken == kTokenSymbol) {
-      StringRef str(_tokenizer._start + token.position, token.length);
-      sym = _currentScope->resolveSymbol(str, token.hVal);
+      StringRef str(_tokenizer._start + token.position(), token.size());
+      sym = _currentScope->resolveSymbol(str, token.hashCode());
 
       if (sym == nullptr || !sym->isVariable())
         MPSL_PARSER_ERROR(token, "Expected a variable.");
@@ -1319,7 +1315,7 @@ Error Parser::parseVariable(AstVar** pNodeOut) noexcept {
     }
   }
 
-  uint32_t position = token.getPosAsUInt();
+  uint32_t position = token.positionAsUInt();
   while (nParen > 0) {
     uToken = _tokenizer.next(&token);
     if (uToken != kTokenRParen) {
@@ -1333,7 +1329,7 @@ Error Parser::parseVariable(AstVar** pNodeOut) noexcept {
 
   node->setPosition(position);
   node->setSymbol(sym);
-  node->setTypeInfo(sym->getTypeInfo());
+  node->setTypeInfo(sym->typeInfo());
 
   *pNodeOut = node;
   return kErrorOk;
@@ -1346,10 +1342,10 @@ Error Parser::parseCall(AstCall** pNodeOut) noexcept {
 
   uToken = _tokenizer.next(&token);
   MPSL_ASSERT(uToken == kTokenSymbol);
-  uint32_t position = token.getPosAsUInt();
+  uint32_t position = token.positionAsUInt();
 
-  StringRef str(_tokenizer._start + token.position, token.length);
-  AstSymbol* sym = _currentScope->resolveSymbol(str, token.hVal);
+  StringRef str(_tokenizer._start + token.position(), token.size());
+  AstSymbol* sym = _currentScope->resolveSymbol(str, token.hashCode());
 
   if (sym == nullptr)
     MPSL_PARSER_ERROR(token, "Unresolved symbol.");

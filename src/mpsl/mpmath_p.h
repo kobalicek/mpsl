@@ -36,16 +36,16 @@ union FloatBits {
   // [Utilities]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE bool isNan() const noexcept { return (u & 0x7FFFFFFFU) > 0x7F800000U; }
-  MPSL_INLINE bool isInf() const noexcept { return (u & 0x7FFFFFFFU) == 0x7F800000U; }
-  MPSL_INLINE bool isFinite() const noexcept { return (u & 0x7F800000U) != 0x7F800000U; }
+  MPSL_INLINE bool isNan() const noexcept { return (u & 0x7FFFFFFFu) > 0x7F800000u; }
+  MPSL_INLINE bool isInf() const noexcept { return (u & 0x7FFFFFFFu) == 0x7F800000u; }
+  MPSL_INLINE bool isFinite() const noexcept { return (u & 0x7F800000u) != 0x7F800000u; }
 
-  MPSL_INLINE FloatBits& setNan() noexcept { u = 0x7FC00000U; return *this; }
-  MPSL_INLINE FloatBits& setInf() noexcept { u = 0x7F800000U; return *this; }
+  MPSL_INLINE FloatBits& setNan() noexcept { u = 0x7FC00000u; return *this; }
+  MPSL_INLINE FloatBits& setInf() noexcept { u = 0x7F800000u; return *this; }
 
-  MPSL_INLINE FloatBits& invSign() noexcept { u ^= 0x80000000U; return *this; }
-  MPSL_INLINE FloatBits& setSign() noexcept { u |= 0x80000000U; return *this; }
-  MPSL_INLINE FloatBits& clearSign() noexcept { u &= ~0x80000000U; return *this; }
+  MPSL_INLINE FloatBits& invSign() noexcept { u ^= 0x80000000u; return *this; }
+  MPSL_INLINE FloatBits& setSign() noexcept { u |= 0x80000000u; return *this; }
+  MPSL_INLINE FloatBits& clearSign() noexcept { u &= ~0x80000000u; return *this; }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -76,31 +76,31 @@ union DoubleBits {
 
   MPSL_INLINE bool isNan() const noexcept {
     if (MPSL_ARCH_64BIT)
-      return (u & ASMJIT_UINT64_C(0x7FFFFFFFFFFFFFFF)) > ASMJIT_UINT64_C(0x7F80000000000000);
+      return (u & 0x7FFFFFFFFFFFFFFFu) > 0x7F80000000000000u;
     else
-      return ((hi & 0x7FF00000U)) == 0x7FF00000U && ((hi & 0x000FFFFFU) | lo) != 0x00000000U;
+      return ((hi & 0x7FF00000u)) == 0x7FF00000u && ((hi & 0x000FFFFFu) | lo) != 0x00000000u;
   }
 
   MPSL_INLINE bool isInf() const noexcept {
     if (MPSL_ARCH_64BIT)
-      return (u & ASMJIT_UINT64_C(0x7FFFFFFFFFFFFFFF)) == ASMJIT_UINT64_C(0x7F80000000000000);
+      return (u & 0x7FFFFFFFFFFFFFFFu) == 0x7F80000000000000u;
     else
-      return (hi & 0x7FFFFFFFU) == 0x7FF00000U && lo == 0x00000000U;
+      return (hi & 0x7FFFFFFFu) == 0x7FF00000u && lo == 0x00000000u;
   }
 
   MPSL_INLINE bool isFinite() const noexcept {
     if (MPSL_ARCH_64BIT)
-      return (u & ASMJIT_UINT64_C(0x7FF0000000000000)) != ASMJIT_UINT64_C(0x7FF0000000000000);
+      return (u & 0x7FF0000000000000u) != 0x7FF0000000000000u;
     else
-      return (hi & 0x7FF00000U) != 0x7FF00000U;
+      return (hi & 0x7FF00000u) != 0x7FF00000u;
   }
 
-  MPSL_INLINE DoubleBits& setNan() noexcept { u = ASMJIT_UINT64_C(0x7FF8000000000000); return *this; }
-  MPSL_INLINE DoubleBits& setInf() noexcept { u = ASMJIT_UINT64_C(0x7FF0000000000000); return *this; }
+  MPSL_INLINE DoubleBits& setNan() noexcept { u = 0x7FF8000000000000u; return *this; }
+  MPSL_INLINE DoubleBits& setInf() noexcept { u = 0x7FF0000000000000u; return *this; }
 
-  MPSL_INLINE DoubleBits& invSign() noexcept { hi ^= 0x80000000U; return *this; }
-  MPSL_INLINE DoubleBits& setSign() noexcept { hi |= 0x80000000U; return *this; }
-  MPSL_INLINE DoubleBits& clearSign() noexcept { hi&= ~0x80000000U; return *this; }
+  MPSL_INLINE DoubleBits& invSign() noexcept { hi ^= 0x80000000u; return *this; }
+  MPSL_INLINE DoubleBits& setSign() noexcept { hi |= 0x80000000u; return *this; }
+  MPSL_INLINE DoubleBits& clearSign() noexcept { hi&= ~0x80000000u; return *this; }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -137,11 +137,11 @@ template<typename T> MPSL_INLINE T mpBound(T x, T xMin, T xMax) noexcept {
 // [mpsl::Math - NaN / Inf]
 // ============================================================================
 
-static MPSL_INLINE float mpGetNanF() noexcept { static const FloatBits value = { 0x7FC00000U }; return value.f; }
-static MPSL_INLINE float mpGetInfF() noexcept { static const FloatBits value = { 0x7F800000U }; return value.f; }
+static MPSL_INLINE float mpGetNanF() noexcept { static const FloatBits value = { 0x7FC00000u }; return value.f; }
+static MPSL_INLINE float mpGetInfF() noexcept { static const FloatBits value = { 0x7F800000u }; return value.f; }
 
-static MPSL_INLINE double mpGetNanD() noexcept { static const DoubleBits value = { ASMJIT_UINT64_C(0x7FF8000000000000) }; return value.d; }
-static MPSL_INLINE double mpGetInfD() noexcept { static const DoubleBits value = { ASMJIT_UINT64_C(0x7FF0000000000000) }; return value.d; }
+static MPSL_INLINE double mpGetNanD() noexcept { static const DoubleBits value = { 0x7FF8000000000000u }; return value.d; }
+static MPSL_INLINE double mpGetInfD() noexcept { static const DoubleBits value = { 0x7FF0000000000000u }; return value.d; }
 
 static MPSL_INLINE bool mpIsNanF(float x) noexcept { return FloatBits::fromFloat(x).isNan(); }
 static MPSL_INLINE bool mpIsInfF(float x) noexcept { return FloatBits::fromFloat(x).isInf(); }
@@ -209,24 +209,24 @@ static MPSL_INLINE double mpRoundEvenD(double x) noexcept { return ::rint(x); }
 // ============================================================================
 
 static MPSL_INLINE bool mpSignBitF(float x) noexcept {
-  return FloatBits::fromFloat(x).u >= 0x80000000U;
+  return FloatBits::fromFloat(x).u >= 0x80000000u;
 }
 
 static MPSL_INLINE bool mpSignBitD(double x) noexcept {
-  return DoubleBits::fromDouble(x).hi >= 0x80000000U;
+  return DoubleBits::fromDouble(x).hi >= 0x80000000u;
 }
 
 static MPSL_INLINE float mpCopySignF(float x, float y) noexcept {
   FloatBits bits = FloatBits::fromFloat(x);
-  bits.u &= 0x7FFFFFFFU;
-  bits.u |= FloatBits::fromFloat(y).u & 0x80000000U;
+  bits.u &= 0x7FFFFFFFu;
+  bits.u |= FloatBits::fromFloat(y).u & 0x80000000u;
   return bits.f;
 }
 
 static MPSL_INLINE double mpCopySignD(double x, double y) noexcept {
   DoubleBits bits = DoubleBits::fromDouble(x);
-  bits.hi &= 0x7FFFFFFFU;
-  bits.hi |= DoubleBits::fromDouble(y).hi & 0x80000000U;
+  bits.hi &= 0x7FFFFFFFu;
+  bits.hi |= DoubleBits::fromDouble(y).hi & 0x80000000u;
   return bits.d;
 }
 

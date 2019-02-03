@@ -29,8 +29,8 @@
 // when MPSL's source code is embedded directly in another project, it implies
 // static build as well.
 //
-// #define MPSL_EMBED                // MPSL is embedded.
-// #define MPSL_STATIC               // Define to enable static-library build.
+// #define MPSL_BUILD_EMBED          // MPSL is embedded.
+// #define MPSL_BUILD_STATIC         // Define to enable static-library build.
 
 // MPSL Build Modes
 // ----------------
@@ -55,9 +55,9 @@
 # endif
 #endif
 
-// MPSL_EMBED implies MPSL_STATIC.
-#if defined(MPSL_EMBED) && !defined(MPSL_STATIC)
-# define MPSL_STATIC
+// MPSL_BUILD_EMBED implies MPSL_BUILD_STATIC.
+#if defined(MPSL_BUILD_EMBED) && !defined(MPSL_BUILD_STATIC)
+# define MPSL_BUILD_STATIC
 #endif
 
 // ============================================================================
@@ -85,89 +85,6 @@
 # endif
 #endif
 // [@WIN32_CRT_NO_DEPRECATE}@]
-
-// ============================================================================
-// [blend::Build - OS]
-// ============================================================================
-
-// [@OS{@]
-#if defined(_WIN32) || defined(_WINDOWS)
-#define MPSL_OS_WINDOWS       (1)
-#else
-#define MPSL_OS_WINDOWS       (0)
-#endif
-
-#if defined(__APPLE__)
-# include <TargetConditionals.h>
-# define MPSL_OS_MAC          (TARGET_OS_MAC)
-# define MPSL_OS_IOS          (TARGET_OS_IPHONE)
-#else
-# define MPSL_OS_MAC          (0)
-# define MPSL_OS_IOS          (0)
-#endif
-
-#if defined(__ANDROID__)
-# define MPSL_OS_ANDROID      (1)
-#else
-# define MPSL_OS_ANDROID      (0)
-#endif
-
-#if defined(__linux__) || defined(__ANDROID__)
-# define MPSL_OS_LINUX        (1)
-#else
-# define MPSL_OS_LINUX        (0)
-#endif
-
-#if defined(__DragonFly__)
-# define MPSL_OS_DRAGONFLYBSD (1)
-#else
-# define MPSL_OS_DRAGONFLYBSD (0)
-#endif
-
-#if defined(__FreeBSD__)
-# define MPSL_OS_FREEBSD      (1)
-#else
-# define MPSL_OS_FREEBSD      (0)
-#endif
-
-#if defined(__NetBSD__)
-# define MPSL_OS_NETBSD       (1)
-#else
-# define MPSL_OS_NETBSD       (0)
-#endif
-
-#if defined(__OpenBSD__)
-# define MPSL_OS_OPENBSD      (1)
-#else
-# define MPSL_OS_OPENBSD      (0)
-#endif
-
-#if defined(__QNXNTO__)
-# define MPSL_OS_QNX          (1)
-#else
-# define MPSL_OS_QNX          (0)
-#endif
-
-#if defined(__sun)
-# define MPSL_OS_SOLARIS      (1)
-#else
-# define MPSL_OS_SOLARIS      (0)
-#endif
-
-#if defined(__CYGWIN__)
-# define MPSL_OS_CYGWIN       (1)
-#else
-# define MPSL_OS_CYGWIN       (0)
-#endif
-
-#define MPSL_OS_BSD ( \
-        MPSL_OS_FREEBSD       || \
-        MPSL_OS_DRAGONFLYBSD  || \
-        MPSL_OS_NETBSD        || \
-        MPSL_OS_OPENBSD       || \
-        MPSL_OS_MAC)
-#define MPSL_OS_POSIX         (!MPSL_OS_WINDOWS)
-// [@OS}@]
 
 // ============================================================================
 // [blend::Build - ARCH]
@@ -496,9 +413,9 @@
 // \def MPSL_API
 // The decorated function is mpsl API and should be exported.
 #if !defined(MPSL_API)
-# if defined(MPSL_STATIC)
+# if defined(MPSL_BUILD_STATIC)
 #  define MPSL_API
-# elif MPSL_OS_WINDOWS
+# elif defined(_WIN32)
 #  if (MPSL_CC_GCC || MPSL_CC_CLANG) && !MPSL_CC_MINGW
 #   if defined(MPSL_EXPORTS)
 #    define MPSL_API __attribute__((__dllexport__))
@@ -530,7 +447,7 @@
 // class is exported. However, GCC has some strange behavior that even if
 // one or more symbol is exported it doesn't export typeinfo unless the
 // class itself is decorated with "visibility(default)" (i.e. mpsl_API).
-#if (MPSL_CC_GCC || MPSL_CC_CLANG) && !MPSL_OS_WINDOWS
+#if !defined(_WIN32) && (MPSL_CC_GCC || MPSL_CC_CLANG)
 # define MPSL_VIRTAPI MPSL_API
 #else
 # define MPSL_VIRTAPI
@@ -588,16 +505,6 @@
 # define MPSL_CDECL
 #endif
 // [@CC_CDECL}@]
-
-// [@CC_NOEXCEPT{@]
-// \def MPSL_NOEXCEPT
-// The decorated function never throws an exception (noexcept).
-#if MPSL_CC_HAS_NOEXCEPT
-# define MPSL_NOEXCEPT noexcept
-#else
-# define MPSL_NOEXCEPT
-#endif
-// [@CC_NOEXCEPT}@]
 
 // [@CC_MACRO{@]
 // \def MPSL_MACRO_BEGIN

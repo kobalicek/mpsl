@@ -120,51 +120,50 @@ struct Token {
   // --------------------------------------------------------------------------
 
   MPSL_INLINE void reset() noexcept {
-    position = 0;
-    length = 0;
-    value = 0.0;
-    token = kTokenInvalid;
+    _position = 0;
+    _size = 0;
+    _value = 0.0;
+    _tokenType = kTokenInvalid;
   }
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE uint32_t setData(size_t position, size_t length, uint32_t hValOrNType, uint32_t token) noexcept {
-    this->position = position;
-    this->length = length;
-    this->hVal = hValOrNType;
-    this->token = token;
+  MPSL_INLINE uint32_t setData(size_t position, size_t size, uint32_t hashCodeOrNumberType, uint32_t tokenType) noexcept {
+    _position = position;
+    _size = size;
+    _hashCode = hashCodeOrNumberType;
+    _tokenType = tokenType;
 
-    return token;
+    return tokenType;
   }
 
-  MPSL_INLINE uint32_t getPosAsUInt() const noexcept {
-    MPSL_ASSERT(position < ~static_cast<uint32_t>(0));
-    return static_cast<uint32_t>(position);
+  MPSL_INLINE uint32_t tokenType() const noexcept { return _tokenType; }
+  MPSL_INLINE uint32_t hashCode() const noexcept { return _hashCode; }
+  MPSL_INLINE uint32_t numberType() const noexcept { return _numberType; }
+
+  MPSL_INLINE size_t position() const noexcept { return _position; }
+  MPSL_INLINE uint32_t positionAsUInt() const noexcept {
+    MPSL_ASSERT(_position < ~static_cast<uint32_t>(0));
+    return static_cast<uint32_t>(_position);
   }
+
+  MPSL_INLINE size_t size() const noexcept { return _size; }
+  MPSL_INLINE double value() const noexcept { return _value; }
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
-  //! Token position from the beginning of the input.
-  size_t position;
-  //! Token string length.
-  size_t length;
-
+  uint32_t _tokenType;                   //!< Token type.
   union {
-    //! Token hash (only if the token is symbol or keyword).
-    uint32_t hVal;
-    //! Number type if the token is `kTokenNumber`.
-    uint32_t nType;
+    uint32_t _hashCode;                  //!< Token hash (only if the token is symbol or keyword).
+    uint32_t _numberType;                //!< Number type if the token is `kTokenNumber`.
   };
-
-  //! Token type.
-  uint32_t token;
-
-  //! Token value (if the token is a number).
-  double value;
+  size_t _position;                      //!< Token position from the beginning of the input.
+  size_t _size;                          //!< Token string size.
+  double _value;                         //!< Token value (if the token is a number).
 };
 
 // ============================================================================
@@ -198,18 +197,18 @@ struct Tokenizer {
   //! Set the token that will be returned by `next()` and `peek()` functions.
   MPSL_INLINE void set(Token* token) noexcept {
     // We have to update also _p in case that multiple tokens were put back.
-    _p = _start + token->position + token->length;
+    _p = _start + token->position() + token->size();
     _token = *token;
   }
 
   //! Consume a token got by using peek().
   MPSL_INLINE void consume() noexcept {
-    _token.token = kTokenInvalid;
+    _token._tokenType = kTokenInvalid;
   }
 
   //! Consume a token got by using peek() and call `peek()`.
   //!
-  //! NOTE: Can be called only immediately after peek().
+  //! \note Can be called only immediately after peek().
   MPSL_INLINE uint32_t consumeAndPeek(Token* token) noexcept {
     consume();
     return peek(token);
@@ -217,7 +216,7 @@ struct Tokenizer {
 
   //! Consume a token got by using peek() and call `next()`.
   //!
-  //! NOTE: Can be called only immediately after peek().
+  //! \note Can be called only immediately after peek().
   MPSL_INLINE uint32_t consumeAndNext(Token* token) noexcept {
     consume();
     return next(token);

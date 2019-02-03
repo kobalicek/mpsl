@@ -57,10 +57,10 @@ const uint32_t mpImplicitCast[kTypeCount] = {
 #define MPSL_VECTOR_LETTERS(I0, I1, I2, I3, I4, I5, I6, I7) \
   {                                                         \
     { I0, I1, I2, I3, I4, I5, I6, I7 },                     \
-    (1U << (I0 - 'a')) | (1U << (I1 - 'a')) |               \
-    (1U << (I2 - 'a')) | (1U << (I3 - 'a')) |               \
-    (1U << (I4 - 'a')) | (1U << (I5 - 'a')) |               \
-    (1U << (I6 - 'a')) | (1U << (I7 - 'a'))                 \
+    (1u << (I0 - 'a')) | (1u << (I1 - 'a')) |               \
+    (1u << (I2 - 'a')) | (1u << (I3 - 'a')) |               \
+    (1u << (I4 - 'a')) | (1u << (I5 - 'a')) |               \
+    (1u << (I6 - 'a')) | (1u << (I7 - 'a'))                 \
   }
 const VectorIdentifiers mpVectorIdentifiers[2] = {
   MPSL_VECTOR_LETTERS('x', 'y', 'z', 'w', 'i', 'j', 'k', 'l'),

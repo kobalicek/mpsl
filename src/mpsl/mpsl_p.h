@@ -110,30 +110,30 @@ namespace mpsl {
 // [Reuse]
 // ============================================================================
 
-// Reuse these classes - we depend on asmjit anyway and these are internal.
+// Reuse these classes for internal use as we depend on asmjit anyway.
 using asmjit::Lock;
-using asmjit::AutoLock;
+using asmjit::ScopedLock;
 
-using asmjit::StringBuilder;
-using asmjit::StringBuilderTmp;
+using asmjit::String;
+using asmjit::StringTmp;
 
 using asmjit::Zone;
-using asmjit::ZoneHeap;
 using asmjit::ZoneVector;
+using asmjit::ZoneAllocator;
 
 // ============================================================================
 // [mpsl::Miscellaneous]
 // ============================================================================
 
 enum { kInvalidDataSlot = 0xFF };
-enum { kInvalidRegId = asmjit::Globals::kInvalidRegId };
+enum { kInvalidRegId = asmjit::BaseReg::kIdBad };
 enum { kPointerWidth = static_cast<int>(sizeof(void*)) };
 
-static const uint32_t kB32_0 = 0x00000000U;
-static const uint32_t kB32_1 = 0xFFFFFFFFU;
+static const uint32_t kB32_0 = 0x00000000u;
+static const uint32_t kB32_1 = 0xFFFFFFFFu;
 
-static const uint64_t kB64_0 = ASMJIT_UINT64_C(0x0000000000000000);
-static const uint64_t kB64_1 = ASMJIT_UINT64_C(0xFFFFFFFFFFFFFFFF);
+static const uint64_t kB64_0 = 0x0000000000000000u;
+static const uint64_t kB64_1 = 0xFFFFFFFFFFFFFFFFu;
 
 // ============================================================================
 // [mpsl::InternalOptions]
@@ -197,7 +197,7 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE asmjit::JitRuntime* getRuntime() const noexcept {
+  MPSL_INLINE asmjit::JitRuntime* runtime() const noexcept {
     return const_cast<asmjit::JitRuntime*>(&_runtime);
   }
 
@@ -218,9 +218,9 @@ class ErrorReporter {
 public:
   MPSL_NONCOPYABLE(ErrorReporter)
 
-  MPSL_INLINE ErrorReporter(const char* body, size_t len, uint32_t options, OutputLog* log) noexcept
+  MPSL_INLINE ErrorReporter(const char* body, size_t size, uint32_t options, OutputLog* log) noexcept
     : _body(body),
-      _len(len),
+      _size(size),
       _options(options),
       _log(log) {
 
@@ -239,17 +239,17 @@ public:
   void getLineAndColumn(uint32_t position, uint32_t& line, uint32_t& column) noexcept;
 
   void onWarning(uint32_t position, const char* fmt, ...) noexcept;
-  void onWarning(uint32_t position, const StringBuilder& msg) noexcept;
+  void onWarning(uint32_t position, const String& msg) noexcept;
 
   Error onError(Error error, uint32_t position, const char* fmt, ...) noexcept;
-  Error onError(Error error, uint32_t position, const StringBuilder& msg) noexcept;
+  Error onError(Error error, uint32_t position, const String& msg) noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
   const char* _body;
-  size_t _len;
+  size_t _size;
 
   uint32_t _options;
   OutputLog* _log;

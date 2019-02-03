@@ -4,14 +4,9 @@ MPSL
 MathPresso's Shading Language with JIT Engine for C++.
 
   * [Official Repository (kobalicek/mpsl)](https://github.com/kobalicek/mpsl)
-  * [Official Blog (asmbits)] (https://asmbits.blogspot.com/ncr)
+  * [Official Blog (asmbits)](https://asmbits.blogspot.com/ncr)
   * [Official Chat (gitter)](https://gitter.im/kobalicek/mpsl)
   * [Permissive ZLIB license](./LICENSE.md)
-
-Important
----------
-
-MPSL requires asmjit:next branch unless it's already merged with asmjit:master.
 
 
 Disclaimer
@@ -237,7 +232,7 @@ MPSL Features
     * `vcmpgtb(x, y)` - compare packed bytes (signed) if greater than
     * `vcmpgtw(x, y)` - compare packed words (signed) if greater than
     * `vcmpgtd(x, y)` - compare packed dwords (signed) if greater than
-    
+
   * Built-in special constants:
     * `INF` - infinity
     * `NaN` - not a number
@@ -274,7 +269,7 @@ float4 main() {
 Where `a`, `b`, and a hidden return variable are provided by the embedder (including their types). This means that the same MPSL program is able to use different data layouts and different number of data arguments passed to the compiled shader.
 
 
-MPSL C++ API 
+MPSL C++ API
 ------------
 
 MPSL is written in C++ and provides C++ APIs for embedders. Here is a summary of MPSL's design choices:

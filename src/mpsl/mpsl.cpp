@@ -89,13 +89,13 @@ static MPSL_INLINE uint32_t mpLayoutGetRemainingSize(const Layout* self) noexcep
 }
 
 static MPSL_INLINE Layout::Member* mpLayoutFind(
-  const Layout* self, const char* name, size_t len) noexcept {
+  const Layout* self, const char* name, size_t size) noexcept {
 
   Layout::Member* m = self->_members;
   uint32_t count = self->_membersCount;
 
   for (uint32_t i = 0; i < count; i++)
-    if (m[i].nameLength == len && (len == 0 || ::memcmp(m[i].name, name, len) == 0))
+    if (m[i].nameSize == size && (size == 0 || ::memcmp(m[i].name, name, size) == 0))
       return &m[i];
 
   return nullptr;
@@ -114,23 +114,23 @@ static MPSL_NOINLINE Error mpLayoutResize(Layout* self, uint32_t dataSize) noexc
   Layout::Member* oldMember = reinterpret_cast<Layout::Member*>(oldData);
   Layout::Member* newMember = reinterpret_cast<Layout::Member*>(newData);
 
-  uint32_t len = self->_nameLength;
-  if (len != 0) {
-    dataIndex -= ++len;
+  uint32_t size = self->_nameSize;
+  if (size != 0) {
+    dataIndex -= ++size;
 
-    ::memcpy(newData + dataIndex, self->_name, len);
+    ::memcpy(newData + dataIndex, self->_name, size);
     self->_name = reinterpret_cast<char*>(newData + dataIndex);
   }
 
   for (uint32_t i = 0; i < count; i++, oldMember++, newMember++) {
-    len = oldMember->nameLength;
-    newMember->nameLength = len;
-    MPSL_ASSERT(len < dataIndex);
+    size = oldMember->nameSize;
+    newMember->nameSize = size;
+    MPSL_ASSERT(size < dataIndex);
 
-    dataIndex -= ++len;
+    dataIndex -= ++size;
     MPSL_ASSERT(dataIndex >= (i + 1) * sizeof(Layout::Member));
 
-    ::memcpy(newData + dataIndex, oldMember->name, len);
+    ::memcpy(newData + dataIndex, oldMember->name, size);
     newMember->name = reinterpret_cast<char*>(newData + dataIndex);
     newMember->typeInfo = oldMember->typeInfo;
     newMember->offset = oldMember->offset;
@@ -167,7 +167,7 @@ static MPSL_INLINE Error mpLayoutPrepareAdd(Layout* self, size_t n) noexcept {
 Layout::Layout() noexcept
   : _data(nullptr),
     _name(nullptr),
-    _nameLength(0),
+    _nameSize(0),
     _membersCount(0),
     _dataSize(0),
     _dataIndex(0) {}
@@ -175,7 +175,7 @@ Layout::Layout() noexcept
 Layout::Layout(uint8_t* data, uint32_t dataSize) noexcept
   : _data(data),
     _name(nullptr),
-    _nameLength(0),
+    _nameSize(0),
     _membersCount(0),
     _dataSize(dataSize),
     _dataIndex(dataSize) {}
@@ -191,66 +191,66 @@ Layout::~Layout() noexcept {
 // [mpsl::Layout - Interface]
 // ============================================================================
 
-Error Layout::_configure(const char* name, size_t len) noexcept {
-  if (len == Globals::kInvalidIndex)
-    len = name ? ::strlen(name) : (size_t)0;
+Error Layout::_configure(const char* name, size_t size) noexcept {
+  if (size == Globals::kInvalidIndex)
+    size = name ? ::strlen(name) : (size_t)0;
 
-  if (len > Globals::kMaxIdentifierLength)
+  if (size > Globals::kMaxIdentifierLength)
     return MPSL_TRACE_ERROR(kErrorInvalidArgument);
 
   if (_name)
     return MPSL_TRACE_ERROR(kErrorAlreadyConfigured);
 
-  len++; // Include NULL terminator.
-  MPSL_PROPAGATE(mpLayoutPrepareAdd(this, len));
+  size++; // Include NULL terminator.
+  MPSL_PROPAGATE(mpLayoutPrepareAdd(this, size));
 
-  uint32_t dataIndex = _dataIndex - static_cast<uint32_t>(len);
-  ::memcpy(_data + dataIndex, name, len);
+  uint32_t dataIndex = _dataIndex - static_cast<uint32_t>(size);
+  ::memcpy(_data + dataIndex, name, size);
 
   _name = reinterpret_cast<char*>(_data + dataIndex);
-  // Casting to `uint32_t` is safe, see `kMaxIdentifierLength`, store length
+  // Casting to `uint32_t` is safe, see `kMaxIdentifierLength`, store size
   // without a NULL terminator (hence `-1`).
-  _nameLength = static_cast<uint32_t>(len - 1);
+  _nameSize = static_cast<uint32_t>(size - 1);
 
   _dataIndex = dataIndex;
   return kErrorOk;
 }
 
-const Layout::Member* Layout::_get(const char* name, size_t len) const noexcept {
+const Layout::Member* Layout::_get(const char* name, size_t size) const noexcept {
   if (name == nullptr)
     return nullptr;
 
-  if (len == Globals::kInvalidIndex)
-    len = ::strlen(name);
+  if (size == Globals::kInvalidIndex)
+    size = ::strlen(name);
 
-  return mpLayoutFind(this, name, len);
+  return mpLayoutFind(this, name, size);
 }
 
-Error Layout::_add(const char* name, size_t len, uint32_t typeInfo, int32_t offset) noexcept {
+Error Layout::_add(const char* name, size_t size, uint32_t typeInfo, int32_t offset) noexcept {
   if (name == nullptr)
     return MPSL_TRACE_ERROR(kErrorInvalidArgument);
 
-  if (len == Globals::kInvalidIndex)
-    len = ::strlen(name);
+  if (size == Globals::kInvalidIndex)
+    size = ::strlen(name);
 
-  if (len > Globals::kMaxIdentifierLength)
+  if (size > Globals::kMaxIdentifierLength)
     return MPSL_TRACE_ERROR(kErrorInvalidArgument);
 
   uint32_t count = _membersCount;
   if (count >= Globals::kMaxMembersCount)
     return MPSL_TRACE_ERROR(kErrorTooManyMembers);
 
-  Member* member = mpLayoutFind(this, name, len);
+  Member* member = mpLayoutFind(this, name, size);
   if (member)
     return MPSL_TRACE_ERROR(kErrorAlreadyExists);
 
-  MPSL_PROPAGATE(mpLayoutPrepareAdd(this, len + 1 + static_cast<uint32_t>(sizeof(Member))));
+  MPSL_PROPAGATE(mpLayoutPrepareAdd(this, size + 1 + static_cast<uint32_t>(sizeof(Member))));
   member = _members + count;
-  uint32_t dataIndex = _dataIndex - (static_cast<uint32_t>(len) + 1);
+  uint32_t dataIndex = _dataIndex - (static_cast<uint32_t>(size) + 1);
 
-  ::memcpy(_data + dataIndex, name, len + 1);
+  ::memcpy(_data + dataIndex, name, size + 1);
   member->name = reinterpret_cast<char*>(_data + dataIndex);
-  member->nameLength = static_cast<uint32_t>(len);
+  member->nameSize = static_cast<uint32_t>(size);
   member->typeInfo = typeInfo;
   member->offset = offset;
 
@@ -336,20 +336,20 @@ Error Context::freeze() noexcept {
                                                                               \
     if (MPSL_UNLIKELY(_errorValue)) {                                         \
       if (_errorValue == kErrorSymbolCollision && log) {                      \
-        sbTmp.setFormat("Built-in symbol collision: '%s' already defined",    \
-          collidedSymbol->getName());                                         \
+        sbTmp.assignFormat("Built-in symbol collision: '%s' already defined", \
+          collidedSymbol->name());                                            \
         log->log(OutputLog::Message(                                          \
           OutputLog::kMessageError, 0, 0,                                     \
           StringRef("ERROR", 5),                                              \
-          StringRef(sbTmp.getData(), sbTmp.getLength())));                    \
+          StringRef(sbTmp.data(), sbTmp.size())));                            \
       }                                                                       \
       return _errorValue;                                                     \
     }                                                                         \
   } while (0)
 
 Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log) noexcept {
-  const char* body = ca.body.getData();
-  size_t len = ca.body.getLength();
+  const char* body = ca.body.data();
+  size_t size = ca.body.size();
 
   uint32_t options = ca.options;
   uint32_t numArgs = ca.numArgs;
@@ -377,15 +377,15 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   else
     options &= ~(kOptionVerbose | kOptionDebugAst | kOptionDebugIR | kOptionDebugASM);
 
-  if (len == Globals::kInvalidIndex)
-    len = ::strlen(body);
+  if (size == Globals::kInvalidIndex)
+    size = ::strlen(body);
 
-  Zone zone(32768 - Zone::kZoneOverhead);
-  ZoneHeap heap(&zone);
-  StringBuilderTmp<512> sbTmp;
+  Zone zone(32768 - Zone::kBlockOverhead);
+  ZoneAllocator allocator(&zone);
+  StringTmp<512> sbTmp;
 
-  AstBuilder ast(&heap);
-  IRBuilder ir(&heap, numArgs);
+  AstBuilder ast(&allocator);
+  IRBuilder ir(&allocator, numArgs);
 
   MPSL_PROPAGATE(ast.addProgramScope());
   MPSL_PROPAGATE(ast.addBuiltInTypes(mpTypeInfo, kTypeCount));
@@ -397,21 +397,21 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   }
 
   // Setup basic data structures used during parsing and compilation.
-  ErrorReporter errorReporter(body, len, options, log);
+  ErrorReporter errorReporter(body, size, options, log);
 
   // --------------------------------------------------------------------------
   // [AST]
   // --------------------------------------------------------------------------
 
   // Parse the source code into AST.
-  { MPSL_PROPAGATE(Parser(&ast, &errorReporter, body, len).parseProgram(ast.getProgramNode())); }
+  { MPSL_PROPAGATE(Parser(&ast, &errorReporter, body, size).parseProgram(ast.programNode())); }
 
   // Perform a semantic analysis of the parsed AST.
   //
   // It can add some nodes required by implicit casts and fail if the code is
   // semantically incorrect - for example invalid implicit cast, explicit-cast,
   // or function call. This pass doesn't do constant folding or optimizations.
-  { MPSL_PROPAGATE(AstAnalysis(&ast, &errorReporter).onProgram(ast.getProgramNode())); }
+  { MPSL_PROPAGATE(AstAnalysis(&ast, &errorReporter).onProgram(ast.programNode())); }
 
   if (options & kOptionDebugAst) {
     ast.dump(sbTmp);
@@ -419,7 +419,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
       OutputLog::Message(
         OutputLog::kMessageDump, 0, 0,
         StringRef(kDebugHeadingAST, MPSL_ARRAY_SIZE(kDebugHeadingAST) - 1),
-        StringRef(sbTmp.getData(), sbTmp.getLength())));
+        StringRef(sbTmp.data(), sbTmp.size())));
     sbTmp.clear();
   }
 
@@ -427,7 +427,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   // folding). This pass shouldn't do any unsafe optimizations and it's a bit
   // limited, but it's faster to do them now than doing these optimizations at
   // IR level.
-  { MPSL_PROPAGATE(AstOptimizer(&ast, &errorReporter).onProgram(ast.getProgramNode())); }
+  { MPSL_PROPAGATE(AstOptimizer(&ast, &errorReporter).onProgram(ast.programNode())); }
 
   if (options & kOptionDebugAst) {
     ast.dump(sbTmp);
@@ -435,7 +435,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
       OutputLog::Message(
         OutputLog::kMessageDump, 0, 0,
         StringRef(kDebugHeadingAST, MPSL_ARRAY_SIZE(kDebugHeadingAST) - 1),
-        StringRef(sbTmp.getData(), sbTmp.getLength())));
+        StringRef(sbTmp.data(), sbTmp.size())));
     sbTmp.clear();
   }
 
@@ -446,7 +446,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
   // Translate AST to IR.
   {
     CodeGen::Result unused(false);
-    MPSL_PROPAGATE(CodeGen(&ast, &ir).onProgram(ast.getProgramNode(), unused));
+    MPSL_PROPAGATE(CodeGen(&ast, &ir).onProgram(ast.programNode(), unused));
   }
 
   if (options & kOptionDebugIR) {
@@ -455,7 +455,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
       OutputLog::Message(
         OutputLog::kMessageDump, 0, 0,
         StringRef(kDebugHeadingIR, MPSL_ARRAY_SIZE(kDebugHeadingIR) - 1),
-        StringRef(sbTmp.getData(), sbTmp.getLength())));
+        StringRef(sbTmp.data(), sbTmp.size())));
     sbTmp.clear();
   }
 
@@ -467,7 +467,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
       OutputLog::Message(
         OutputLog::kMessageDump, 0, 0,
         StringRef(kDebugHeadingIR, MPSL_ARRAY_SIZE(kDebugHeadingIR) - 1),
-        StringRef(sbTmp.getData(), sbTmp.getLength())));
+        StringRef(sbTmp.data(), sbTmp.size())));
     sbTmp.clear();
   }
 
@@ -484,13 +484,13 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
     asmjit::StringLogger asmlog;
     asmjit::CodeHolder code;
 
-    code.init(rt->_runtime.getCodeInfo());
-    asmjit::X86Compiler c(&code);
+    code.init(rt->_runtime.codeInfo());
+    asmjit::x86::Compiler c(&code);
 
     if (options & kOptionDebugASM)
       code.setLogger(&asmlog);
 
-    IRToX86 compiler(&heap, &c);
+    IRToX86 compiler(&allocator, &c);
     if (options & kOptionDisableSSE4_1)
       compiler._enableSSE4_1 = false;
     MPSL_PROPAGATE(compiler.compileIRAsFunc(&ir));
@@ -506,7 +506,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
         OutputLog::Message(
           OutputLog::kMessageDump, 0, 0,
           StringRef(kDebugHeadingASM, MPSL_ARRAY_SIZE(kDebugHeadingASM) - 1),
-          StringRef(asmlog.getString(), asmlog.getLength())));
+          StringRef(asmlog.data(), asmlog.size())));
   }
 
   if (programD->_refCount == 1 && static_cast<RuntimeData*>(programD->_runtimeData) == rt) {
@@ -595,7 +595,7 @@ OutputLog::~OutputLog() noexcept {}
 
 void ErrorReporter::getLineAndColumn(uint32_t position, uint32_t& line, uint32_t& column) noexcept {
   // Should't happen, but be defensive.
-  if (static_cast<size_t>(position) >= _len) {
+  if (static_cast<size_t>(position) >= _size) {
     line = 0;
     column = 0;
     return;
@@ -627,7 +627,7 @@ void ErrorReporter::getLineAndColumn(uint32_t position, uint32_t& line, uint32_t
 
 void ErrorReporter::onWarning(uint32_t position, const char* fmt, ...) noexcept {
   if (reportsWarnings()) {
-    StringBuilderTmp<256> sb;
+    StringTmp<256> sb;
 
     va_list ap;
     va_start(ap, fmt);
@@ -638,7 +638,7 @@ void ErrorReporter::onWarning(uint32_t position, const char* fmt, ...) noexcept 
   }
 }
 
-void ErrorReporter::onWarning(uint32_t position, const StringBuilder& msg) noexcept {
+void ErrorReporter::onWarning(uint32_t position, const String& msg) noexcept {
   if (reportsWarnings()) {
     uint32_t line, column;
     getLineAndColumn(position, line, column);
@@ -646,13 +646,13 @@ void ErrorReporter::onWarning(uint32_t position, const StringBuilder& msg) noexc
       OutputLog::Message(
         OutputLog::kMessageWarning, line, column,
         StringRef("WARNING", 7),
-        StringRef(msg.getData(), msg.getLength())));
+        StringRef(msg.data(), msg.size())));
   }
 }
 
 Error ErrorReporter::onError(Error error, uint32_t position, const char* fmt, ...) noexcept {
   if (reportsErrors()) {
-    StringBuilderTmp<256> sb;
+    StringTmp<256> sb;
 
     va_list ap;
     va_start(ap, fmt);
@@ -666,12 +666,12 @@ Error ErrorReporter::onError(Error error, uint32_t position, const char* fmt, ..
   }
 }
 
-Error ErrorReporter::onError(Error error, uint32_t position, const StringBuilder& msg) noexcept {
+Error ErrorReporter::onError(Error error, uint32_t position, const String& msg) noexcept {
   if (reportsErrors()) {
     OutputLog::Message logMsg(
       OutputLog::kMessageError, 0, 0,
       StringRef("ERROR", 5),
-      StringRef(msg.getData(), msg.getLength()));
+      StringRef(msg.data(), msg.size()));
 
     getLineAndColumn(position, logMsg._line, logMsg._column);
     _log->log(logMsg);

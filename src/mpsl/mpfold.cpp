@@ -61,9 +61,9 @@ static MPSL_INLINE T imod(T x, T y) noexcept {
 static MPSL_INLINE uint32_t lzcnt_kernel(uint32_t x) noexcept {
 #if MPSL_CC_MSC_GE(14, 0, 0) && (MPSL_ARCH_X86 || MPSL_ARCH_X64 || MPSL_ARCH_ARM32 || MPSL_ARCH_ARM64)
   DWORD i;
-  return _BitScanForward(&i, x) ? uint32_t(i) : uint32_t(0xFFFFFFFFU);
+  return _BitScanForward(&i, x) ? uint32_t(i) : uint32_t(0xFFFFFFFFu);
 #elif MPSL_CC_GCC_GE(3, 4, 6) || MPSL_CC_CLANG
-  return x ? uint32_t(__builtin_ctz(x)) : uint32_t(0xFFFFFFFFU);
+  return x ? uint32_t(__builtin_ctz(x)) : uint32_t(0xFFFFFFFFu);
 #else
   uint32_t i = 1;
   while (x != 0) {
@@ -73,7 +73,7 @@ static MPSL_INLINE uint32_t lzcnt_kernel(uint32_t x) noexcept {
     i += 2;
     x >>= 2;
   }
-  return 0xFFFFFFFFU;
+  return 0xFFFFFFFFu;
 #endif
 }
 
@@ -82,15 +82,15 @@ static MPSL_INLINE uint32_t popcnt_kernel(uint32_t x) noexcept {
   return __builtin_popcount(x);
 #else
   // From: http://graphics.stanford.edu/~seander/bithacks.html
-  x = x - ((x >> 1) & 0x55555555U);
-  x = (x & 0x33333333U) + ((x >> 2) & 0x33333333U);
-  return (((x + (x >> 4)) & 0x0F0F0F0FU) * 0x01010101U) >> 24;
+  x = x - ((x >> 1) & 0x55555555u);
+  x = (x & 0x33333333u) + ((x >> 2) & 0x33333333u);
+  return (((x + (x >> 4)) & 0x0F0F0F0Fu) * 0x01010101u) >> 24;
 #endif
 }
 
 static MPSL_INLINE uint32_t vmaddwd_kernel(uint32_t x, uint32_t y) noexcept {
-  int32_t xLo = static_cast<int32_t>(x & 0xFFFFU);
-  int32_t yLo = static_cast<int32_t>(y & 0xFFFFU);
+  int32_t xLo = static_cast<int32_t>(x & 0xFFFFu);
+  int32_t yLo = static_cast<int32_t>(y & 0xFFFFu);
 
   int32_t xHi = static_cast<int32_t>(x >> 16);
   int32_t yHi = static_cast<int32_t>(y >> 16);
@@ -166,17 +166,17 @@ static MPSL_INLINE void fn(                                                    \
 FOLD_FN2(pcopy32   , uint32_t, uint32_t, uint32_t, s)
 FOLD_FN2(pcopy64   , uint64_t, uint64_t, uint64_t, s)
 
-FOLD_FN2(pinci     , uint32_t, uint32_t, uint32_t, s + 1U  )
+FOLD_FN2(pinci     , uint32_t, uint32_t, uint32_t, s + 1u  )
 FOLD_FN2(fincf     , float   , float   , float   , s + 1.0f)
 FOLD_FN2(fincd     , double  , double  , double  , s + 1.0 )
 
-FOLD_FN2(pdeci     , uint32_t, uint32_t, uint32_t, s + 1U  )
+FOLD_FN2(pdeci     , uint32_t, uint32_t, uint32_t, s + 1u  )
 FOLD_FN2(fdecf     , float   , float   , float   , s + 1.0f)
 FOLD_FN2(fdecd     , double  , double  , double  , s + 1.0 )
 
 FOLD_FN2(pnotd     , uint32_t, uint32_t, uint32_t, ~s)
 FOLD_FN2(pnotq     , uint64_t, uint64_t, uint64_t, ~s)
-FOLD_FN2(pnegd     , uint32_t, uint32_t, uint32_t, (~s) + static_cast<uint32_t>(1U))
+FOLD_FN2(pnegd     , uint32_t, uint32_t, uint32_t, (~s) + static_cast<uint32_t>(1u))
 
 FOLD_FN2(fisnanf   , uint32_t, float   , float   , mpIsNanF(s) ? kB32_0 : kB32_1)
 FOLD_FN2(fisnand   , uint64_t, double  , double  , mpIsNanD(s) ? kB64_0 : kB64_1)
@@ -280,23 +280,23 @@ FOLD_FN3(pand      , uint32_t, uint32_t, uint32_t, l & r)
 FOLD_FN3(por       , uint32_t, uint32_t, uint32_t, l | r)
 FOLD_FN3(pxor      , uint32_t, uint32_t, uint32_t, l ^ r)
 
-FOLD_FN3(paddb     , uint8_t , uint8_t , uint32_t, (l + r) & 0xFFU)
-FOLD_FN3(paddw     , uint16_t, uint16_t, uint32_t, (l + r) & 0xFFFFU)
+FOLD_FN3(paddb     , uint8_t , uint8_t , uint32_t, (l + r) & 0xFFu)
+FOLD_FN3(paddw     , uint16_t, uint16_t, uint32_t, (l + r) & 0xFFFFu)
 FOLD_FN3(paddd     , uint32_t, uint32_t, uint32_t, l + r)
 FOLD_FN3(paddq     , uint64_t, uint64_t, uint64_t, l + r)
 FOLD_FN3(paddssb   , int8_t  , int8_t  , int32_t , mpBound<int32_t>(l + r, -128, 127))
 FOLD_FN3(paddusb   , uint8_t , uint8_t , uint32_t, mpMin<int32_t>(l + r, 255))
 FOLD_FN3(paddssw   , int16_t , int16_t , int32_t , mpBound<int32_t>(l + r, -32768, 32767))
 FOLD_FN3(paddusw   , uint16_t, uint16_t, uint32_t, mpMin<int32_t>(l + r, 65535))
-FOLD_FN3(psubb     , uint8_t , uint8_t , uint32_t, (l - r) & 0xFFU)
-FOLD_FN3(psubw     , uint16_t, uint16_t, uint32_t, (l - r) & 0xFFFFU)
+FOLD_FN3(psubb     , uint8_t , uint8_t , uint32_t, (l - r) & 0xFFu)
+FOLD_FN3(psubw     , uint16_t, uint16_t, uint32_t, (l - r) & 0xFFFFu)
 FOLD_FN3(psubd     , uint32_t, uint32_t, uint32_t, l - r)
 FOLD_FN3(psubq     , uint64_t, uint64_t, uint64_t, l - r)
 FOLD_FN3(psubssb   , int8_t  , int8_t  , int32_t , mpBound<int32_t>(l - r, -128, 127))
 FOLD_FN3(psubusb   , uint8_t , uint8_t , uint32_t, (l >= r) ? l - r : static_cast<uint32_t>(0))
 FOLD_FN3(psubssw   , int16_t , int16_t , int32_t , mpBound<int32_t>(l - r, -32768, 32767))
 FOLD_FN3(psubusw   , uint16_t, uint16_t, uint32_t, (l >= r) ? l - r : static_cast<uint32_t>(0))
-FOLD_FN3(pmulw     , uint16_t, uint16_t, uint32_t, (l * r) & 0xFFFFU)
+FOLD_FN3(pmulw     , uint16_t, uint16_t, uint32_t, (l * r) & 0xFFFFu)
 FOLD_FN3(pmulhsw   , int16_t , int16_t , int32_t , (l * r) >> 16)
 FOLD_FN3(pmulhuw   , uint16_t, uint16_t, uint32_t, (l * r) >> 16)
 FOLD_FN3(pmuld     , uint16_t, uint16_t, uint32_t, l * r)
@@ -314,8 +314,8 @@ FOLD_FN3(pmaxsw    , int16_t , int16_t , int32_t , mpMax<int32_t>(l, r))
 FOLD_FN3(pmaxuw    , uint16_t, uint16_t, uint32_t, mpMax<uint32_t>(l, r))
 FOLD_FN3(pmaxsd    , int32_t , int32_t , int32_t , mpMax<int32_t>(l, r))
 FOLD_FN3(pmaxud    , uint32_t, uint32_t, uint32_t, mpMax<uint32_t>(l, r))
-FOLD_IMM(psllw     , uint16_t, uint16_t, uint32_t, (l << r) & 0xFFFFU)
-FOLD_IMM(psrlw     , uint16_t, uint16_t, uint32_t, (l >> r) & 0xFFFFU)
+FOLD_IMM(psllw     , uint16_t, uint16_t, uint32_t, (l << r) & 0xFFFFu)
+FOLD_IMM(psrlw     , uint16_t, uint16_t, uint32_t, (l >> r) & 0xFFFFu)
 FOLD_IMM(psraw     , int16_t , int16_t , int32_t , (l >> r) & 0xFFFF)
 FOLD_IMM(pslld     , uint32_t, uint32_t, uint32_t, l << r)
 FOLD_IMM(psrld     , uint32_t, uint32_t, uint32_t, l >> r)
@@ -685,7 +685,7 @@ Error foldUnaryOp(uint32_t op, Value& dVal, const Value& sVal, uint32_t sTypeInf
     case COMB(kOpPostDec  , kTypeDouble): fdecd(&out, &sVal, width); break;
 
     default: {
-      uint32_t code = OpInfo::get(op).getInstByTypeId(typeId);
+      uint32_t code = OpInfo::get(op).instByTypeId(typeId);
       if (code == kInstCodeNone)
         return MPSL_TRACE_ERROR(kErrorInvalidState);
 
@@ -704,7 +704,7 @@ Error foldBinaryOp(uint32_t op, Value& dVal,
   const Value& rVal, uint32_t rTypeInfo) noexcept {
 
   // Keep only the operator type without `Assign` part (except for `=`).
-  op = OpInfo::get(op).altType;
+  op = OpInfo::get(op).altType();
 
   uint32_t typeId = lTypeInfo & kTypeIdMask;
   uint32_t width = TypeInfo::widthOf(lTypeInfo);
@@ -727,7 +727,7 @@ Error foldBinaryOp(uint32_t op, Value& dVal,
     case COMB(kOpLogOr , kTypeQBool ): ford(&out, &lVal, &rVal, width); break;
 
     default: {
-      uint32_t code = OpInfo::get(op).getInstByTypeId(typeId);
+      uint32_t code = OpInfo::get(op).instByTypeId(typeId);
       if (code == kInstCodeNone)
         return MPSL_TRACE_ERROR(kErrorInvalidState);
 

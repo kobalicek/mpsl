@@ -35,7 +35,7 @@ AstOptimizer::~AstOptimizer() noexcept {}
 // ============================================================================
 
 static MPSL_INLINE bool mpGetBooleanValue(const Value* src, uint32_t typeId) noexcept {
-  return mpTypeInfo[typeId].size == 4 ? src->u[0] != 0 : src->q[0] != 0;
+  return mpTypeInfo[typeId].size() == 4 ? src->u[0] != 0 : src->q[0] != 0;
 }
 
 static bool mpValueAsScalarDouble(double* dst, const Value* src, uint32_t typeInfo) noexcept {
@@ -43,7 +43,7 @@ static bool mpValueAsScalarDouble(double* dst, const Value* src, uint32_t typeIn
   uint32_t count = TypeInfo::elementsOf(typeInfo);
 
   // Check whether all vectors are equivalent before converting to scalar.
-  switch (mpTypeInfo[typeId].size) {
+  switch (mpTypeInfo[typeId].size()) {
     case 4: {
       uint32_t v = src->u[0];
       for (uint32_t i = 1; i < count; i++)
@@ -86,12 +86,12 @@ Error AstOptimizer::onProgram(AstProgram* node) noexcept {
 }
 
 Error AstOptimizer::onFunction(AstFunction* node) noexcept {
-  AstSymbol* ret = node->getRet();
+  AstSymbol* ret = node->ret();
 
   _currentRet = ret;
   _isLocalScope = true;
 
-  Error err = node->hasBody() ? onNode(node->getBody()) : static_cast<Error>(kErrorOk);
+  Error err = node->body() ? onNode(node->body()) : static_cast<Error>(kErrorOk);
 
   _currentRet = nullptr;
   _unreachable = false;
@@ -105,10 +105,10 @@ Error AstOptimizer::onFunction(AstFunction* node) noexcept {
 Error AstOptimizer::onBlock(AstBlock* node) noexcept {
   // Prevent removing nodes that are not stored in pure `AstBlock`. For example
   // function call inherits from `AstBlock`, but it needs each expression passed.
-  bool alterable = node->getNodeType() == AstNode::kTypeBlock;
+  bool alterable = node->nodeType() == AstNode::kTypeBlock;
 
   uint32_t i = 0;
-  uint32_t curCount = node->getLength();
+  uint32_t curCount = node->size();
   uint32_t oldCount;
 
   while (i < curCount) {
@@ -120,10 +120,10 @@ _DeleteNode:
     }
 
     bool wasUnreachable = isUnreachable();
-    MPSL_PROPAGATE(onNode(node->getAt(i)));
+    MPSL_PROPAGATE(onNode(node->childAt(i)));
 
     oldCount = curCount;
-    curCount = node->getLength();
+    curCount = node->size();
 
     if (curCount < oldCount) {
       if (!alterable)
@@ -131,7 +131,7 @@ _DeleteNode:
       continue;
     }
 
-    if (alterable && (wasUnreachable || node->getAt(i)->isImm()))
+    if (alterable && (wasUnreachable || node->childAt(i)->isImm()))
       goto _DeleteNode;
 
     i++;
@@ -141,36 +141,36 @@ _DeleteNode:
 }
 
 Error AstOptimizer::onBranch(AstBranch* node) noexcept {
-  if (node->hasCond()) {
-    MPSL_PROPAGATE(onNode(node->getCond()));
-    AstNode* cond = node->getCond();
+  if (node->condition()) {
+    MPSL_PROPAGATE(onNode(node->condition()));
+    AstNode* condition = node->condition();
 
-    if (cond->isImm()) {
-      uint32_t typeId = cond->getTypeInfo() & kTypeIdMask;
+    if (condition->isImm()) {
+      uint32_t typeId = condition->typeInfo() & kTypeIdMask;
 
-      AstImm* imm = cond->as<AstImm>();
+      AstImm* imm = condition->as<AstImm>();
       AstNode* alwaysTaken = nullptr;
       AstNode* neverTaken = nullptr;
 
-      // Simplify if (cond) {a} else {b} to either {a} or {b}.
+      // Simplify if (condition) {a} else {b} to either {a} or {b}.
       if (mpGetBooleanValue(&imm->_value, typeId)) {
-        if (node->hasThen())
-          alwaysTaken = node->unlinkThen();
-        if (node->hasElse())
-          neverTaken = node->unlinkElse();
+        if (node->thenBody())
+          alwaysTaken = node->unlinkThenBody();
+        if (node->elseBody())
+          neverTaken = node->unlinkElseBody();
       }
       else {
-        if (node->hasThen())
-          neverTaken = node->unlinkThen();
-        if (node->hasElse())
-          alwaysTaken = node->unlinkElse();
+        if (node->thenBody())
+          neverTaken = node->unlinkThenBody();
+        if (node->elseBody())
+          alwaysTaken = node->unlinkElseBody();
       }
 
       if (neverTaken)
         _ast->deleteNode(neverTaken);
 
       _ast->deleteNode(
-        node->getParent()->replaceNode(
+        node->parent()->replaceNode(
           node, alwaysTaken));
 
       if (alwaysTaken) {
@@ -183,15 +183,15 @@ Error AstOptimizer::onBranch(AstBranch* node) noexcept {
     }
   }
 
-  if (node->hasThen()) {
+  if (node->thenBody()) {
     bool prevUnreachable = _unreachable;
-    MPSL_PROPAGATE(onNode(node->getThen()));
+    MPSL_PROPAGATE(onNode(node->thenBody()));
     _unreachable = prevUnreachable;
   }
 
-  if (node->hasElse()) {
+  if (node->elseBody()) {
     bool prevUnreachable = _unreachable;
-    MPSL_PROPAGATE(onNode(node->getElse()));
+    MPSL_PROPAGATE(onNode(node->elseBody()));
     _unreachable = prevUnreachable;
   }
 
@@ -199,18 +199,18 @@ Error AstOptimizer::onBranch(AstBranch* node) noexcept {
 }
 
 Error AstOptimizer::onLoop(AstLoop* node) noexcept {
-  if (node->hasInit())
-    MPSL_PROPAGATE(onNode(node->getInit()));
+  if (node->forInit())
+    MPSL_PROPAGATE(onNode(node->forInit()));
 
-  if (node->hasIter())
-    MPSL_PROPAGATE(onNode(node->getIter()));
+  if (node->forIter())
+    MPSL_PROPAGATE(onNode(node->forIter()));
 
-  if (node->hasCond())
-    MPSL_PROPAGATE(onNode(node->getCond()));
+  if (node->condition())
+    MPSL_PROPAGATE(onNode(node->condition()));
 
-  if (node->hasBody()) {
+  if (node->body()) {
     bool prevUnreachable = _unreachable;
-    MPSL_PROPAGATE(onNode(node->getBody()));
+    MPSL_PROPAGATE(onNode(node->body()));
     _unreachable = prevUnreachable;
   }
 
@@ -228,52 +228,52 @@ Error AstOptimizer::onContinue(AstContinue* node) noexcept {
 }
 
 Error AstOptimizer::onReturn(AstReturn* node) noexcept {
-  if (node->hasChild())
-    MPSL_PROPAGATE(onNode(node->getChild()));
+  if (node->child())
+    MPSL_PROPAGATE(onNode(node->child()));
 
   _unreachable = true;
   return kErrorOk;
 }
 
 Error AstOptimizer::onVarDecl(AstVarDecl* node) noexcept {
-  AstSymbol* sym = node->getSymbol();
+  AstSymbol* sym = node->symbol();
 
-  if (node->hasChild()) {
-    MPSL_PROPAGATE(onNode(node->getChild()));
-    AstNode* child = node->getChild();
+  if (node->child()) {
+    MPSL_PROPAGATE(onNode(node->child()));
+    AstNode* child = node->child();
 
     if (child->isImm())
-      sym->setValue(static_cast<AstImm*>(child)->getValue());
+      sym->setValue(static_cast<AstImm*>(child)->value());
   }
 
   return kErrorOk;
 }
 
 Error AstOptimizer::onVarMemb(AstVarMemb* node) noexcept {
-  if (!node->hasChild())
+  if (!node->child())
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-  MPSL_PROPAGATE(onNode(node->getChild()));
-  AstNode* child = node->getChild();
+  MPSL_PROPAGATE(onNode(node->child()));
+  AstNode* child = node->child();
 
-  uint32_t typeInfo = child->getTypeInfo();
+  uint32_t typeInfo = child->typeInfo();
   uint32_t typeId = typeInfo & kTypeIdMask;
 
   if (TypeInfo::isPtrId(typeId)) {
-    if (child->getNodeType() != AstNode::kTypeVar)
+    if (child->nodeType() != AstNode::kTypeVar)
       return MPSL_TRACE_ERROR(kErrorInvalidState);
 
     // The field accesses an object's member.
-    const AstSymbol* symbol = static_cast<AstVar*>(child)->getSymbol();
-    const Layout* layout = symbol->getLayout();
+    const AstSymbol* symbol = static_cast<AstVar*>(child)->symbol();
+    const Layout* layout = symbol->layout();
 
     if (layout == nullptr)
       return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-    const Layout::Member* m = layout->getMember(node->getField());
+    const Layout::Member* m = layout->member(node->field());
     if (m == nullptr)
-      return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
-        "Object '%s' doesn't have member '%s'", symbol->getName(), node->getField().getData());
+      return _errorReporter->onError(kErrorInvalidProgram, node->position(),
+        "Object '%s' doesn't have member '%s'", symbol->name(), node->field().data());
 
     node->setTypeInfo(m->typeInfo | kTypeRef | (typeInfo & kTypeRW));
     node->setOffset(m->offset);
@@ -281,8 +281,8 @@ Error AstOptimizer::onVarMemb(AstVarMemb* node) noexcept {
   else {
     // The field should access/shuffle a vector.
     if ((typeInfo & kTypeVecMask) == 0)
-      return _errorReporter->onError(kErrorInvalidProgram, node->getPosition(),
-        "Type '%{Type}' doesn't have member '%s'", typeInfo, node->getField().getData());
+      return _errorReporter->onError(kErrorInvalidProgram, node->position(),
+        "Type '%{Type}' doesn't have member '%s'", typeInfo, node->field().data());
 
     // TODO: Field
   }
@@ -291,8 +291,8 @@ Error AstOptimizer::onVarMemb(AstVarMemb* node) noexcept {
 }
 
 Error AstOptimizer::onVar(AstVar* node) noexcept {
-  AstSymbol* sym = node->getSymbol();
-  uint32_t typeInfo = node->getTypeInfo();
+  AstSymbol* sym = node->symbol();
+  uint32_t typeInfo = node->typeInfo();
 
   if (!isUnreachable() &&
       !isConditional() &&
@@ -301,8 +301,8 @@ Error AstOptimizer::onVar(AstVar* node) noexcept {
     typeInfo |= kTypeRead;
     typeInfo &= ~(kTypeWrite | kTypeRef);
 
-    AstImm* imm = _ast->newNode<AstImm>(sym->getValue(), typeInfo);
-    _ast->deleteNode(node->getParent()->replaceNode(node, imm));
+    AstImm* imm = _ast->newNode<AstImm>(sym->value(), typeInfo);
+    _ast->deleteNode(node->parent()->replaceNode(node, imm));
   }
   else {
     typeInfo |= kTypeRef;
@@ -317,18 +317,18 @@ Error AstOptimizer::onImm(AstImm* node) noexcept {
 }
 
 Error AstOptimizer::onUnaryOp(AstUnaryOp* node) noexcept {
-  const OpInfo& op = OpInfo::get(node->getOp());
+  const OpInfo& op = OpInfo::get(node->opType());
 
-  MPSL_PROPAGATE(onNode(node->getChild()));
-  AstNode* child = node->getChild();
+  MPSL_PROPAGATE(onNode(node->child()));
+  AstNode* child = node->child();
 
   if (!isUnreachable()) {
     if (child->isImm()) {
-      AstImm* child = static_cast<AstImm*>(node->getChild());
+      AstImm* child = static_cast<AstImm*>(node->child());
       Value& value = child->_value;
 
-      uint32_t dTypeInfo = node->getTypeInfo();
-      uint32_t sTypeInfo = child->getTypeInfo();
+      uint32_t dTypeInfo = node->typeInfo();
+      uint32_t sTypeInfo = child->typeInfo();
 
       if (op.isCast()) {
         MPSL_PROPAGATE(
@@ -336,54 +336,54 @@ Error AstOptimizer::onUnaryOp(AstUnaryOp* node) noexcept {
 
         child->setTypeInfo(dTypeInfo);
         node->unlinkChild();
-        node->getParent()->replaceNode(node, child);
+        node->parent()->replaceNode(node, child);
         _ast->deleteNode(node);
       }
       else if (op.isSwizzle()) {
         MPSL_PROPAGATE(
-          Fold::foldSwizzle(node->getSwizzleArray(), value, value, dTypeInfo));
+          Fold::foldSwizzle(node->swizzleArray(), value, value, dTypeInfo));
 
         child->setTypeInfo(dTypeInfo);
         node->unlinkChild();
-        node->getParent()->replaceNode(node, child);
+        node->parent()->replaceNode(node, child);
         _ast->deleteNode(node);
       }
       else {
         MPSL_PROPAGATE(
-          Fold::foldUnaryOp(op.type, value, value, sTypeInfo));
+          Fold::foldUnaryOp(op.type(), value, value, sTypeInfo));
 
         child->setTypeInfo(dTypeInfo);
         node->unlinkChild();
-        node->getParent()->replaceNode(node, child);
+        node->parent()->replaceNode(node, child);
         _ast->deleteNode(node);
       }
     }
     // Evaluate an assignment.
     else if (!isConditional() && op.isAssignment() && child->isVar()) {
-      AstSymbol* sym = static_cast<AstVar*>(child)->getSymbol();
+      AstSymbol* sym = static_cast<AstVar*>(child)->symbol();
       if (sym->isAssigned()) {
-        Value newValue = sym->getValue();
-        uint32_t typeInfo = child->getTypeInfo() & ~(kTypeRef | kTypeWrite);
+        Value newValue = sym->value();
+        uint32_t typeInfo = child->typeInfo() & ~(kTypeRef | kTypeWrite);
 
         MPSL_PROPAGATE(
-          Fold::foldUnaryOp(op.type, sym->_value, sym->_value, typeInfo));
+          Fold::foldUnaryOp(op.type(), sym->_value, sym->_value, typeInfo));
 
         // Only `(.)++` and `(.)--` operators keep the previous value.
-        if (!(op.flags & kOpFlagAssignPost))
-          newValue = sym->getValue();
+        if (!(op.flags() & kOpFlagAssignPost))
+          newValue = sym->value();
 
         AstImm* newNode = _ast->newNode<AstImm>(newValue, typeInfo);
         MPSL_NULLCHECK(newNode);
 
-        AstNode* oldNode = node->getParent()->replaceNode(node, newNode);
+        AstNode* oldNode = node->parent()->replaceNode(node, newNode);
         _ast->deleteNode(oldNode);
       }
     }
     // Simplify `-(-(x))` -> `x` and `~(~(x))` -> `x`.
-    else if (child->getNodeType() == AstNode::kTypeUnaryOp && node->getOp() == child->getOp()) {
-      if (node->getOp() == kOpNeg || node->getOp() == kOpBitNeg) {
+    else if (child->nodeType() == AstNode::kTypeUnaryOp && node->opType() == child->opType()) {
+      if (node->opType() == kOpNeg || node->opType() == kOpBitNeg) {
         AstNode* childOfChild = static_cast<AstUnaryOp*>(child)->unlinkChild();
-        node->getParent()->replaceNode(node, childOfChild);
+        node->parent()->replaceNode(node, childOfChild);
         _ast->deleteNode(node);
       }
     }
@@ -394,45 +394,45 @@ Error AstOptimizer::onUnaryOp(AstUnaryOp* node) noexcept {
 }
 
 Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
-  const OpInfo& op = OpInfo::get(node->getOp());
+  const OpInfo& op = OpInfo::get(node->opType());
 
-  AstNode* left = node->getLeft();
-  AstNode* right = node->getRight();
+  AstNode* left = node->left();
+  AstNode* right = node->right();
 
   if (op.isAssignment())
     left->addNodeFlags(AstNode::kFlagSideEffect);
 
   MPSL_PROPAGATE(onNode(left));
-  left = node->getLeft();
+  left = node->left();
 
   // Support minimal evaluation of `&&` and `||` operators.
   if (left->isImm() && op.isLogical()) {
     AstImm* lVal = static_cast<AstImm*>(left);
     AstNode* result = nullptr;
 
-    bool b = mpGetBooleanValue(&lVal->_value, lVal->getTypeInfo() & kTypeIdMask);
-    if ((op.type == kOpLogAnd &&  b) || // Fold `true  && x` -> `x`.
-        (op.type == kOpLogOr  && !b)) { // Fold `false || x` -> `x`.
+    bool b = mpGetBooleanValue(&lVal->_value, lVal->typeInfo() & kTypeIdMask);
+    if ((op.type() == kOpLogAnd &&  b) || // Fold `true  && x` -> `x`.
+        (op.type() == kOpLogOr  && !b)) { // Fold `false || x` -> `x`.
       result = node->unlinkRight();
     }
     else if (
-        (op.type == kOpLogAnd &&  b) || // Fold `false && x` -> `false`.
-        (op.type == kOpLogOr  && !b)) { // Fold `true  || x` -> `true`.
+        (op.type() == kOpLogAnd &&  b) || // Fold `false && x` -> `false`.
+        (op.type() == kOpLogOr  && !b)) { // Fold `true  || x` -> `true`.
       result = node->unlinkLeft();
     }
 
     if (result == nullptr)
       return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-    _ast->deleteNode(node->getParent()->replaceNode(node, result));
+    _ast->deleteNode(node->parent()->replaceNode(node, result));
     return onNode(result);
   }
 
   MPSL_PROPAGATE(onNode(right));
-  right = node->getRight();
+  right = node->right();
 
   if (!isUnreachable()) {
-    uint32_t typeInfo = node->getTypeInfo();
+    uint32_t typeInfo = node->typeInfo();
 
     bool lIsImm = left->isImm();
     bool rIsImm = right->isImm();
@@ -442,14 +442,14 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
       AstImm* lNode = static_cast<AstImm*>(left);
       AstImm* rNode = static_cast<AstImm*>(right);
 
-      MPSL_PROPAGATE(Fold::foldBinaryOp(op.type,
+      MPSL_PROPAGATE(Fold::foldBinaryOp(op.type(),
           lNode->_value,
-          lNode->_value, lNode->getTypeInfo(),
-          rNode->_value, rNode->getTypeInfo()));
+          lNode->_value, lNode->typeInfo(),
+          rNode->_value, rNode->typeInfo()));
       lNode->setTypeInfo(typeInfo | kTypeRead);
 
       node->unlinkLeft();
-      node->getParent()->replaceNode(node, lNode);
+      node->parent()->replaceNode(node, lNode);
 
       _ast->deleteNode(node);
     }
@@ -458,11 +458,11 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
       AstImm* lNode = static_cast<AstImm*>(left);
       double val;
 
-      if (TypeInfo::isIntOrFPType(typeInfo) && mpValueAsScalarDouble(&val, &lNode->_value, left->getTypeInfo())) {
-        if ((val == 0.0 && (op.flags & kOpFlagNopIfL0)) ||
-            (val == 1.0 && (op.flags & kOpFlagNopIfL1))) {
+      if (TypeInfo::isIntOrFPType(typeInfo) && mpValueAsScalarDouble(&val, &lNode->_value, left->typeInfo())) {
+        if ((val == 0.0 && (op.flags() & kOpFlagNopIfL0)) ||
+            (val == 1.0 && (op.flags() & kOpFlagNopIfL1))) {
           node->unlinkRight();
-          node->getParent()->replaceNode(node, right);
+          node->parent()->replaceNode(node, right);
 
           _ast->deleteNode(node);
         }
@@ -473,31 +473,31 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
 
       // Evaluate an assignment.
       if (!isConditional() && op.isAssignment() && left->isVar()) {
-        AstSymbol* sym = static_cast<AstVar*>(left)->getSymbol();
-        if (op.type == kOpAssign || sym->isAssigned()) {
+        AstSymbol* sym = static_cast<AstVar*>(left)->symbol();
+        if (op.type() == kOpAssign || sym->isAssigned()) {
           MPSL_PROPAGATE(
-            Fold::foldBinaryOp(op.type,
+            Fold::foldBinaryOp(op.type(),
               sym->_value,
-              sym->_value, left->getTypeInfo(),
-              rNode->_value, rNode->getTypeInfo()));
+              sym->_value, left->typeInfo(),
+              rNode->_value, rNode->typeInfo()));
 
-          typeInfo = (left->getTypeInfo() & ~(kTypeRef | kTypeWrite)) | kTypeRead;
+          typeInfo = (left->typeInfo() & ~(kTypeRef | kTypeWrite)) | kTypeRead;
           sym->setAssigned();
 
-          AstImm* newNode = _ast->newNode<AstImm>(sym->getValue(), typeInfo);
+          AstImm* newNode = _ast->newNode<AstImm>(sym->value(), typeInfo);
           MPSL_NULLCHECK(newNode);
 
-          AstNode* oldNode = node->getParent()->replaceNode(node, newNode);
+          AstNode* oldNode = node->parent()->replaceNode(node, newNode);
           _ast->deleteNode(oldNode);
         }
       }
       else {
         double val;
-        if (TypeInfo::isIntOrFPType(typeInfo) && mpValueAsScalarDouble(&val, &rNode->_value, right->getTypeInfo())) {
-          if ((val == 0.0 && (op.flags & kOpFlagNopIfR0)) ||
-              (val == 1.0 && (op.flags & kOpFlagNopIfR1))) {
+        if (TypeInfo::isIntOrFPType(typeInfo) && mpValueAsScalarDouble(&val, &rNode->_value, right->typeInfo())) {
+          if ((val == 0.0 && (op.flags() & kOpFlagNopIfR0)) ||
+              (val == 1.0 && (op.flags() & kOpFlagNopIfR1))) {
             node->unlinkLeft();
-            node->getParent()->replaceNode(node, left);
+            node->parent()->replaceNode(node, left);
 
             _ast->deleteNode(node);
           }
@@ -510,11 +510,11 @@ Error AstOptimizer::onBinaryOp(AstBinaryOp* node) noexcept {
 }
 
 Error AstOptimizer::onCall(AstCall* node) noexcept {
-  AstSymbol* sym = node->getSymbol();
-  uint32_t i, count = node->getLength();
+  AstSymbol* sym = node->symbol();
+  uint32_t i, count = node->size();
 
   for (i = 0; i < count; i++)
-    MPSL_PROPAGATE(onNode(node->getAt(i)));
+    MPSL_PROPAGATE(onNode(node->childAt(i)));
 
   // TODO:
 

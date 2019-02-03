@@ -198,7 +198,7 @@ static uint32_t mpGetKeyword(const uint8_t* s, size_t sLen) noexcept {
 }
 
 uint32_t Tokenizer::peek(Token* token) noexcept {
-  uint32_t uToken = _token.token;
+  uint32_t uToken = _token.tokenType();
   if (uToken != kTokenInvalid || (uToken = next(&_token)) != kTokenInvalid)
     *token = _token;
   return uToken;
@@ -206,12 +206,12 @@ uint32_t Tokenizer::peek(Token* token) noexcept {
 
 uint32_t Tokenizer::next(Token* token) noexcept {
   // Skip parsing if the next token is already done, caused by `peek()`.
-  uint32_t c = _token.token;
+  uint32_t c = _token.tokenType();
   uint32_t hVal;
 
   if (c != kTokenInvalid) {
     *token = _token;
-    _token.token = kTokenInvalid;
+    _token._tokenType = kTokenInvalid;
     return c;
   }
 
@@ -286,7 +286,7 @@ _Repeat:
         goto _Invalid;
 
       token->setData((size_t)(pToken - pStart), (size_t)(p - pToken), kTypeInt, kTokenNumber);
-      token->value = static_cast<double>(static_cast<int32_t>(hexVal));
+      token->_value = static_cast<double>(static_cast<int32_t>(hexVal));
     }
     else {
       // Integer or double precision floating point.
@@ -330,7 +330,6 @@ _Repeat:
         // Fraction, even if it's just '.' promotes the number to `double`.
         nType = kTypeDouble;
 
-        size_t scale = 0;
         while (++p != pEnd) {
           c = static_cast<uint32_t>(p[0]) - static_cast<uint32_t>('0');
           if (c > 9)
@@ -417,7 +416,7 @@ _Repeat:
 
       // Limit a range of safe values from Xe-15 to Xe15.
       safe = safe && exponent >= -kPow10TableSize && exponent <= kPow10TableSize;
-      size_t len = (size_t)(p - pToken);
+      size_t size = (size_t)(p - pToken);
 
       if (safe) {
         // Now decide whether to report `int` or `double` if there was no type specifier.
@@ -440,11 +439,11 @@ _Repeat:
         char tmp[512];
         char* buf = tmp;
 
-        if (len >= MPSL_ARRAY_SIZE(tmp) && (buf = static_cast<char*>(::malloc(len + 1))) == nullptr)
+        if (size >= MPSL_ARRAY_SIZE(tmp) && (buf = static_cast<char*>(::malloc(size + 1))) == nullptr)
           return kTokenInvalid;
 
-        memcpy(buf, pToken, len);
-        buf[len] = '\0';
+        memcpy(buf, pToken, size);
+        buf[size] = '\0';
 
         val = _strtod.conv(buf, nullptr);
 
@@ -452,8 +451,8 @@ _Repeat:
           ::free(buf);
       }
 
-      token->value = val;
-      token->setData((size_t)(pToken - pStart), len, nType, kTokenNumber);
+      token->_value = val;
+      token->setData((size_t)(pToken - pStart), size, nType, kTokenNumber);
     }
 
     _p = reinterpret_cast<const char*>(p);
@@ -465,7 +464,7 @@ _Repeat:
   // --------------------------------------------------------------------------
 
   else if (c <= kTokenCharSym) {
-    // We always generate the hVal during tokenization to improve performance.
+    // We always calculate hashCode during tokenization to improve performance.
     while (++p != pEnd) {
       uint32_t ord = static_cast<uint8_t>(p[0]);
       c = mpCharClass[ord];
@@ -474,9 +473,9 @@ _Repeat:
       hVal = HashUtils::hashChar(hVal, ord);
     }
 
-    size_t len = (size_t)(p - pToken);
+    size_t size = (size_t)(p - pToken);
     _p = reinterpret_cast<const char*>(p);
-    return token->setData((size_t)(pToken - pStart), len, hVal, mpGetKeyword(pToken, len));
+    return token->setData((size_t)(pToken - pStart), size, hVal, mpGetKeyword(pToken, size));
   }
 
   // --------------------------------------------------------------------------

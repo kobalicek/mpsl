@@ -45,39 +45,39 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept;
+  IRBuilder(ZoneAllocator* allocator, uint32_t numSlots) noexcept;
   ~IRBuilder() noexcept;
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _heap; }
+  MPSL_INLINE ZoneAllocator* allocator() const noexcept { return _allocator; }
 
-  MPSL_INLINE IRBlocks& getBlocks() noexcept { return _blocks; }
-  MPSL_INLINE const IRBlocks& getBlocks() const noexcept { return _blocks; }
+  MPSL_INLINE IRBlocks& blocks() noexcept { return _blocks; }
+  MPSL_INLINE const IRBlocks& blocks() const noexcept { return _blocks; }
 
-  MPSL_INLINE IRBlocks& getExits() noexcept { return _exits; }
-  MPSL_INLINE const IRBlocks& getExits() const noexcept { return _exits; }
+  MPSL_INLINE IRBlocks& exits() noexcept { return _exits; }
+  MPSL_INLINE const IRBlocks& exits() const noexcept { return _exits; }
 
-  MPSL_INLINE IRBlock* getEntry() const noexcept {
-    MPSL_ASSERT(!_blocks.isEmpty());
+  MPSL_INLINE IRBlock* entryBlock() const noexcept {
+    MPSL_ASSERT(!_blocks.empty());
     return _blocks[0];
   }
 
-  MPSL_INLINE IRReg* getDataPtr(uint32_t slot) const noexcept {
+  MPSL_INLINE IRReg* dataPtr(uint32_t slot) const noexcept {
     MPSL_ASSERT(slot < _numSlots);
     return _dataSlots[slot];
   }
 
-  MPSL_INLINE uint32_t getNumSlots() const noexcept { return _numSlots; }
+  MPSL_INLINE uint32_t numSlots() const noexcept { return _numSlots; }
 
   // --------------------------------------------------------------------------
   // [Factory]
   // --------------------------------------------------------------------------
 
 #define MPSL_ALLOC_IR_OBJECT(SIZE) \
-  void* obj = _heap->alloc(SIZE); \
+  void* obj = _allocator->alloc(SIZE); \
   if (MPSL_UNLIKELY(obj == nullptr)) \
     return nullptr
 
@@ -148,13 +148,13 @@ public:
   // [Dump]
   // --------------------------------------------------------------------------
 
-  Error dump(StringBuilder& sb) noexcept;
+  Error dump(String& sb) noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
-  ZoneHeap* _heap;                       //!< Memory heap used to allocate IR objects.
+  ZoneAllocator* _allocator;             //!< Zone allocator used to allocate IR objects.
   IRBlocks _blocks;                      //!< IR basic blocks.
   IRBlocks _exits;                       //!< IR basic blocks without successors (exits).
 
@@ -203,28 +203,28 @@ public:
   // --------------------------------------------------------------------------
 
   //! Get the object type, see \ref IRObjectType.
-  MPSL_INLINE uint32_t getObjectType() const noexcept { return _anyData._objectType; }
+  MPSL_INLINE uint32_t objectType() const noexcept { return _anyData._objectType; }
 
   //! Get whether the `IRObject` is `IRReg`.
-  MPSL_INLINE bool isReg() const noexcept { return getObjectType() == kTypeReg; }
+  MPSL_INLINE bool isReg() const noexcept { return objectType() == kTypeReg; }
   //! Get whether the `IRObject` is `IRMem`.
-  MPSL_INLINE bool isMem() const noexcept { return getObjectType() == kTypeMem; }
+  MPSL_INLINE bool isMem() const noexcept { return objectType() == kTypeMem; }
   //! Get whether the `IRObject` is `IRImm`.
-  MPSL_INLINE bool isImm() const noexcept { return getObjectType() == kTypeImm; }
+  MPSL_INLINE bool isImm() const noexcept { return objectType() == kTypeImm; }
   //! Get whether the `IRObject` is `IRBlock`.
-  MPSL_INLINE bool isBlock() const noexcept { return getObjectType() == kTypeBlock; }
+  MPSL_INLINE bool isBlock() const noexcept { return objectType() == kTypeBlock; }
 
   //! Get the object ID.
-  MPSL_INLINE uint32_t getId() const noexcept { return _id; }
+  MPSL_INLINE uint32_t id() const noexcept { return _id; }
 
   //! Get register type, only \ref IRReg and \ref IRImm.
-  MPSL_INLINE uint32_t getReg() const noexcept {
+  MPSL_INLINE uint32_t reg() const noexcept {
     MPSL_ASSERT(isReg() || isImm());
     // This member is the same for IRReg and IRImm.
     return _varData._reg;
   }
 
-  MPSL_INLINE uint32_t getRefCount() noexcept { return _refCount; }
+  MPSL_INLINE uint32_t refCount() noexcept { return _refCount; }
   MPSL_INLINE void addRef() noexcept { _refCount++; }
 
   template<typename T>
@@ -274,7 +274,7 @@ public:
 
   //! ID of the IRObject.
   //!
-  //! NOTE: IDs are used by IRBlock, IRReg, and IRImm objects. They have all
+  //! \note IDs are used by IRBlock, IRReg, and IRImm objects. They have all
   //! their own ID generator so IDs can collide between different object types.
   uint32_t _id;
 
@@ -318,10 +318,10 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE uint32_t getReg() const noexcept { return _varData._reg; }
-  MPSL_INLINE uint32_t getWidth() const noexcept { return _varData._width; }
+  MPSL_INLINE uint32_t reg() const noexcept { return _varData._reg; }
+  MPSL_INLINE uint32_t width() const noexcept { return _varData._width; }
 
-  MPSL_INLINE uint32_t getJitId() const noexcept { return _varData._jitId; }
+  MPSL_INLINE uint32_t jitId() const noexcept { return _varData._jitId; }
   MPSL_INLINE void setJitId(uint32_t id) noexcept { _varData._jitId = id; }
 };
 
@@ -353,18 +353,17 @@ public:
 
   //! Get if the memory operand has a base register.
   MPSL_INLINE bool hasBase() const noexcept { return _base != nullptr; }
-  //! Get base register.
-  MPSL_INLINE IRReg* getBase() const noexcept { return _base; }
-
   //! Get if the memory operand has an index register.
   MPSL_INLINE bool hasIndex() const noexcept { return _index != nullptr; }
-  //! Get index register.
-  MPSL_INLINE IRReg* getIndex() const noexcept { return _index; }
-
   //! Get if the memory operand contains an offset.
   MPSL_INLINE bool hasOffset() const noexcept { return _offset != 0; }
+
+  //! Get base register.
+  MPSL_INLINE IRReg* base() const noexcept { return _base; }
+  //! Get index register.
+  MPSL_INLINE IRReg* index() const noexcept { return _index; }
   //! Get immediate offset.
-  MPSL_INLINE int32_t getOffset() const noexcept { return _offset; }
+  MPSL_INLINE int32_t offset() const noexcept { return _offset; }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -404,13 +403,13 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE uint32_t getReg() const noexcept { return _immData._reg; }
-  MPSL_INLINE uint32_t getWidth() const noexcept { return _immData._width; }
+  MPSL_INLINE uint32_t reg() const noexcept { return _immData._reg; }
+  MPSL_INLINE uint32_t width() const noexcept { return _immData._width; }
 
-  MPSL_INLINE uint32_t getTypeInfo() const noexcept { return _immData._typeInfo; }
+  MPSL_INLINE uint32_t typeInfo() const noexcept { return _immData._typeInfo; }
   MPSL_INLINE void setTypeInfo(uint32_t ti) noexcept { _immData._typeInfo = ti; }
 
-  MPSL_INLINE const Value& getValue() const noexcept { return _value; }
+  MPSL_INLINE const Value& value() const noexcept { return _value; }
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -442,12 +441,12 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE uint32_t getInstCode() const noexcept { return _instCode; }
-  MPSL_INLINE uint32_t getOpCount() const noexcept { return _opCount; }
-  MPSL_INLINE IRObject** getOpArray() const noexcept { return (IRObject**)&_opArray; }
+  MPSL_INLINE uint32_t instCode() const noexcept { return _instCode; }
+  MPSL_INLINE uint32_t opCount() const noexcept { return _opCount; }
+  MPSL_INLINE IRObject** operands() const noexcept { return (IRObject**)&_opArray; }
 
-  MPSL_INLINE IRObject* getOperand(size_t index) const noexcept {
-    MPSL_ASSERT(index < static_cast<size_t>(getOpCount()));
+  MPSL_INLINE IRObject* op(size_t index) const noexcept {
+    MPSL_ASSERT(index < static_cast<size_t>(opCount()));
     return _opArray[index];
   }
 
@@ -466,7 +465,7 @@ public:
 
 MPSL_INLINE IRInst* IRBuilder::_newInst(uint32_t instCode, uint32_t opCount) noexcept {
   size_t size = (sizeof(IRInst) - sizeof(IRObject*)) + sizeof(IRObject*) * opCount;
-  void* inst = _heap->alloc(size);
+  void* inst = _allocator->alloc(size);
 
   if (inst == nullptr)
     return nullptr;
@@ -545,34 +544,34 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE bool isEmpty() const noexcept { return _body.isEmpty(); }
-  MPSL_INLINE uint32_t getBlockType() const noexcept { return _blockData._blockType; }
+  MPSL_INLINE bool empty() const noexcept { return _body.empty(); }
+  MPSL_INLINE uint32_t blockType() const noexcept { return _blockData._blockType; }
 
   MPSL_INLINE bool isAssembled() const noexcept { return _blockData._isAssembled != 0; }
   MPSL_INLINE void setAssembled() noexcept { _blockData._isAssembled = true; }
 
-  MPSL_INLINE uint32_t getJitId() const noexcept { return _blockData._jitId; }
+  MPSL_INLINE uint32_t jitId() const noexcept { return _blockData._jitId; }
   MPSL_INLINE void setJitId(uint32_t id) noexcept { _blockData._jitId = id; }
 
-  MPSL_INLINE bool hasPredecessors() const noexcept { return !_predecessors.isEmpty(); }
-  MPSL_INLINE IRBlocks& getPredecessors() noexcept { return _predecessors; }
-  MPSL_INLINE const IRBlocks& getPredecessors() const noexcept { return _predecessors; }
+  MPSL_INLINE bool hasPredecessors() const noexcept { return !_predecessors.empty(); }
+  MPSL_INLINE IRBlocks& predecessors() noexcept { return _predecessors; }
+  MPSL_INLINE const IRBlocks& predecessors() const noexcept { return _predecessors; }
 
-  MPSL_INLINE bool hasSuccessors() const noexcept { return !_successors.isEmpty(); }
-  MPSL_INLINE IRBlocks& getSuccessors() noexcept { return _successors; }
-  MPSL_INLINE const IRBlocks& getSuccessors() const noexcept { return _successors; }
+  MPSL_INLINE bool hasSuccessors() const noexcept { return !_successors.empty(); }
+  MPSL_INLINE IRBlocks& successors() noexcept { return _successors; }
+  MPSL_INLINE const IRBlocks& successors() const noexcept { return _successors; }
 
   MPSL_INLINE Error addSuccessor(IRBlock* successor) noexcept { return _ir->connectBlocks(this, successor); }
   MPSL_INLINE Error addPredecessor(IRBlock* predecessor) noexcept { return _ir->connectBlocks(predecessor, this); }
 
-  MPSL_INLINE IRBody& getBody() noexcept { return _body; }
-  MPSL_INLINE const IRBody& getBody() const noexcept { return _body; }
+  MPSL_INLINE IRBody& body() noexcept { return _body; }
+  MPSL_INLINE const IRBody& body() const noexcept { return _body; }
 
-  MPSL_INLINE Error append(IRInst* inst) noexcept { return _body.append(_ir->_heap, inst); }
-  MPSL_INLINE Error prepend(IRInst* inst) noexcept { return _body.prepend(_ir->_heap, inst); }
+  MPSL_INLINE Error append(IRInst* inst) noexcept { return _body.append(_ir->_allocator, inst); }
+  MPSL_INLINE Error prepend(IRInst* inst) noexcept { return _body.prepend(_ir->_allocator, inst); }
 
   MPSL_INLINE void neuterAt(size_t i) noexcept {
-    MPSL_ASSERT(i < _body.getLength());
+    MPSL_ASSERT(i < _body.size());
     _body[i] = nullptr;
     _requiresFixup = true;
   }

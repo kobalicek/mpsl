@@ -6,5 +6,5 @@ ASMJIT_DIR="../../asmjit"
 
 mkdir -p ../${BUILD_DIR}
 cd ../${BUILD_DIR}
-cmake .. -G"Xcode" -DASMJIT_DIR="${ASMJIT_DIR}" -DMPSL_BUILD_TEST=1
+cmake .. -G"Xcode" -DASMJIT_DIR="${ASMJIT_DIR}" -DMPSL_TEST=1
 cd ${CURRENT_DIR}

@@ -25,10 +25,10 @@ void IRBlock::_fixupAfterNeutering() noexcept {
   size_t srcIndex = 0;
   size_t dstIndex = 0;
 
-  IRInst** data = _body.getData();
-  size_t len = static_cast<uint32_t>(_body.getLength());
+  IRInst** data = _body.data();
+  size_t size = static_cast<uint32_t>(_body.size());
 
-  while (srcIndex < len) {
+  while (srcIndex < size) {
     IRInst* inst = data[srcIndex++];
     if (!inst) continue;
     data[dstIndex++] = inst;
@@ -42,8 +42,8 @@ void IRBlock::_fixupAfterNeutering() noexcept {
 // [mpsl::IRBuilder - Construction / Destruction]
 // ============================================================================
 
-IRBuilder::IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept
-  : _heap(heap),
+IRBuilder::IRBuilder(ZoneAllocator* allocator, uint32_t numSlots) noexcept
+  : _allocator(allocator),
     _numSlots(numSlots),
     _blockIdGen(0),
     _varIdGen(0) {
@@ -56,7 +56,7 @@ IRBuilder::IRBuilder(ZoneHeap* heap, uint32_t numSlots) noexcept
   }
 }
 IRBuilder::~IRBuilder() noexcept {
-  _blocks.release(_heap);
+  _blocks.release(_allocator);
 }
 
 // ============================================================================
@@ -119,7 +119,7 @@ IRImm* IRBuilder::newImmByTypeInfo(const Value& value, uint32_t typeInfo) noexce
 }
 
 IRBlock* IRBuilder::newBlock() noexcept {
-  if (MPSL_UNLIKELY(_blocks.willGrow(_heap, 1) != kErrorOk))
+  if (MPSL_UNLIKELY(_blocks.willGrow(_allocator, 1) != kErrorOk))
     return nullptr;
 
   IRBlock* block = newObject<IRBlock>();
@@ -138,8 +138,8 @@ Error IRBuilder::connectBlocks(IRBlock* predecessor, IRBlock* successor) noexcep
   MPSL_ASSERT(!predecessor->_successors.contains(successor));
   MPSL_ASSERT(!successor->_predecessors.contains(predecessor));
 
-  MPSL_PROPAGATE(predecessor->_successors.willGrow(_heap, 1));
-  MPSL_PROPAGATE(successor->_predecessors.willGrow(_heap, 1));
+  MPSL_PROPAGATE(predecessor->_successors.willGrow(_allocator, 1));
+  MPSL_PROPAGATE(successor->_predecessors.willGrow(_allocator, 1));
 
   predecessor->_successors.appendUnsafe(successor);
   successor->_predecessors.appendUnsafe(predecessor);
@@ -148,19 +148,19 @@ Error IRBuilder::connectBlocks(IRBlock* predecessor, IRBlock* successor) noexcep
 }
 
 void IRBuilder::deleteInst(IRInst* inst) noexcept {
-  IRObject** opArray = inst->getOpArray();
-  uint32_t count = inst->getOpCount();
+  IRObject** opArray = inst->operands();
+  uint32_t count = inst->opCount();
 
   for (uint32_t i = 0; i < count; i++)
     derefObject(opArray[i]);
 
-  _heap->release(inst, sizeof(IRInst));
+  _allocator->release(inst, sizeof(IRInst));
 }
 
 void IRBuilder::deleteObject(IRObject* obj) noexcept {
   size_t objectSize = 0;
 
-  switch (obj->getObjectType()) {
+  switch (obj->objectType()) {
     case IRObject::kTypeReg: {
       objectSize = sizeof(IRReg);
       break;
@@ -169,8 +169,8 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
     case IRObject::kTypeMem: {
       IRMem* mem = obj->as<IRMem>();
 
-      if (mem->hasBase()) derefObject(mem->getBase());
-      if (mem->hasIndex()) derefObject(mem->getIndex());
+      if (mem->hasBase()) derefObject(mem->base());
+      if (mem->hasIndex()) derefObject(mem->index());
 
       objectSize = sizeof(IRMem);
       break;
@@ -183,16 +183,12 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
 
     case IRObject::kTypeBlock: {
       IRBlock* block = obj->as<IRBlock>();
-      IRBody& body = block->getBody();
-
-      for (size_t i = 0, len = body.getLength(); i < len; i++) {
-        IRInst* inst = body[i];
+      for (IRInst* inst : block->body())
         if (inst) deleteInst(inst);
-      }
 
       // TODO: Blocks should not be deleted, just marked as removed.
-      block->_body.release(_heap);
-      _blocks[block->getId()] = nullptr;
+      block->_body.release(_allocator);
+      _blocks[block->id()] = nullptr;
 
       objectSize = sizeof(IRBlock);
       break;
@@ -202,7 +198,7 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
       MPSL_ASSERT(!"Reached");
   }
 
-  _heap->release(obj, objectSize);
+  _allocator->release(obj, objectSize);
 }
 
 // ============================================================================
@@ -210,7 +206,7 @@ void IRBuilder::deleteObject(IRObject* obj) noexcept {
 // ============================================================================
 
 Error IRBuilder::initEntry() noexcept {
-  MPSL_ASSERT(_blocks.isEmpty());
+  MPSL_ASSERT(_blocks.empty());
 
   IRBlock* entry = newBlock();
   MPSL_NULLCHECK(entry);
@@ -246,7 +242,7 @@ Error IRBuilder::emitInst(IRBlock* block, uint32_t instCode, IRObject* o0, IRObj
 Error IRBuilder::emitMove(IRBlock* block, IRReg* dst, IRReg* src) noexcept {
   uint32_t inst = kInstCodeNone;
 
-  switch (mpMin<uint32_t>(dst->getWidth(), src->getWidth())) {
+  switch (mpMin<uint32_t>(dst->width(), src->width())) {
     case  4: inst = kInstCodeMov32 ; break;
     case  8: inst = kInstCodeMov64 ; break;
     case 16: inst = kInstCodeMov128; break;
@@ -263,7 +259,7 @@ Error IRBuilder::emitFetch(IRBlock* block, IRReg* dst, IRObject* src) noexcept {
   uint32_t inst = kInstCodeNone;
 
   if (src->isImm() || src->isMem()) {
-    switch (dst->getWidth()) {
+    switch (dst->width()) {
       case  4: inst = kInstCodeFetch32 ; break;
       case  8: inst = kInstCodeFetch64 ; break;
       case 16: inst = kInstCodeFetch128; break;
@@ -281,29 +277,20 @@ Error IRBuilder::emitFetch(IRBlock* block, IRReg* dst, IRObject* src) noexcept {
 // [mpsl::IRBuilder - Dump]
 // ============================================================================
 
-Error IRBuilder::dump(StringBuilder& sb) noexcept {
-  IRBlocks& blocks = getBlocks();
-  size_t count = blocks.getLength();
+Error IRBuilder::dump(String& sb) noexcept {
+  for (IRBlock* block : blocks()) {
+    sb.appendFormat(".B%u\n", block->id());
+    for (IRInst* inst : block->body()) {
+      uint32_t code = inst->instCode() & kInstCodeMask;
+      uint32_t vec = inst->instCode() & kInstVecMask;
 
-  for (size_t i = 0; i < count; i++) {
-    IRBlock* block = blocks[i];
-    const IRBody& body = block->getBody();
-
-    sb.appendFormat(".B%u\n", block->getId());
-
-    for (size_t i = 0, len = body.getLength(); i < len; i++) {
-      IRInst* inst = body[i];
-
-      uint32_t code = inst->getInstCode() & kInstCodeMask;
-      uint32_t vec = inst->getInstCode() & kInstVecMask;
-
-      sb.appendFormat("  %s", mpInstInfo[code].name);
+      sb.appendFormat("  %s", mpInstInfo[code].name());
 
       if (vec == kInstVec128) sb.appendString("@128");
       if (vec == kInstVec256) sb.appendString("@256");
 
-      IRObject** opArray = inst->getOpArray();
-      size_t opIndex, count = inst->getOpCount();
+      IRObject** opArray = inst->operands();
+      size_t opIndex, count = inst->opCount();
 
       for (opIndex = 0; opIndex < count; opIndex++) {
         IRObject* op = opArray[opIndex];
@@ -313,30 +300,30 @@ Error IRBuilder::dump(StringBuilder& sb) noexcept {
         else
           sb.appendString(", ");
 
-        switch (op->getObjectType()) {
+        switch (op->objectType()) {
           case IRObject::kTypeReg: {
             IRReg* var = static_cast<IRReg*>(op);
-            sb.appendFormat("%%%u", var->getId());
+            sb.appendFormat("%%%u", var->id());
             break;
           }
 
           case IRObject::kTypeMem: {
             IRMem* mem = static_cast<IRMem*>(op);
             sb.appendFormat("[%%%u + %d]",
-              mem->getBase()->getId(),
-              static_cast<int>(mem->getOffset()));
+              mem->base()->id(),
+              static_cast<int>(mem->offset()));
             break;
           }
 
           case IRObject::kTypeImm: {
             IRImm* imm = static_cast<IRImm*>(op);
-            FormatUtils::formatValue(sb, imm->getTypeInfo(), &imm->_value);
+            FormatUtils::formatValue(sb, imm->typeInfo(), &imm->_value);
             break;
           }
 
           case IRObject::kTypeBlock: {
             IRBlock* block = static_cast<IRBlock*>(op);
-            sb.appendFormat("B%u", block->getId());
+            sb.appendFormat("B%u", block->id());
             break;
           }
         }

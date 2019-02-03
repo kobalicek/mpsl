@@ -11,15 +11,23 @@
 // [Dependencies]
 #include "./mpsl_p.h"
 
-// `mpsl_p` includes asmjit, so we can use `ASMJIT_OS_...`.
-#if ASMJIT_OS_WINDOWS
-# define MPSL_STRTOD_MSLOCALE
-# include <locale.h>
+#if defined(_WIN32)
+  #define MPSL_STRTOD_MSLOCALE
+  #include <locale.h>
+  #include <stdlib.h>
 #else
-# define MPSL_STRTOD_XLOCALE
-# include <stdlib.h>
-# include <locale.h>
-# include <xlocale.h>
+  #define MPSL_STRTOD_XLOCALE
+  #include <locale.h>
+  #include <stdlib.h>
+  // xlocale.h is not available on Linux anymore, it uses <locale.h>.
+  #if defined(__APPLE__    ) || \
+      defined(__bsdi__     ) || \
+      defined(__DragonFly__) || \
+      defined(__FreeBSD__  ) || \
+      defined(__NetBSD__   ) || \
+      defined(__OpenBSD__  )
+    #include <xlocale.h>
+  #endif
 #endif
 
 // [Api-Begin]

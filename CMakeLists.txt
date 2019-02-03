@@ -10,12 +10,20 @@ endif()
 # [MPSL - Configuration]
 # =============================================================================
 
-set(MPSL_DIR         "${CMAKE_CURRENT_LIST_DIR}" CACHE PATH "Location of 'mpsl'")
-set(ASMJIT_DIR       "${MPSL_DIR}/../asmjit"     CACHE PATH "Location of 'asmjit'")
+if (NOT DEFINED MPSL_DIR)
+  set(MPSL_DIR "${CMAKE_CURRENT_LIST_DIR}")
+endif()
 
-set(MPSL_EMBED       FALSE         CACHE BOOLEAN "Embed 'mpsl' library (no targets)")
-set(MPSL_STATIC      ${MPSL_EMBED} CACHE BOOLEAN "Build 'mpsl' library as static")
-set(MPSL_BUILD_TEST  FALSE         CACHE BOOLEAN "Build 'mpsl_test' applications")
+if (NOT DEFINED ASMJIT_DIR)
+  set(ASMJIT_DIR "${MPSL_DIR}/../asmjit")
+endif()
+
+set(MPSL_DIR    "${MPSL_DIR}"   CACHE PATH "Location of 'mpsl'")
+set(ASMJIT_DIR  "${ASMJIT_DIR}" CACHE PATH "Location of 'asmjit'")
+
+set(MPSL_TEST   FALSE           CACHE BOOL "Build 'mpsl' test applications")
+set(MPSL_EMBED  FALSE           CACHE BOOL "Embed 'mpsl' library (no targets)")
+set(MPSL_STATIC ${MPSL_EMBED}   CACHE BOOL "Build 'mpsl' library as static")
 
 if(NOT DEFINED ASMJIT_EMBED)
   set(ASMJIT_EMBED TRUE)
@@ -24,9 +32,6 @@ endif()
 # =============================================================================
 # [MPSL - Project]
 # =============================================================================
-
-include("${MPSL_DIR}/CxxProject.cmake")
-cxx_project(mpsl)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
   list(APPEND MPSL_PRIVATE_CFLAGS /GF)
@@ -39,7 +44,7 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
   endif()
 endif()
 
-if("${CMAKE_CXX_COMPILER_ID}" MATCHES "^(GNU|Clang)$")
+if("${CMAKE_CXX_COMPILER_ID}" MATCHES "^(GNU|Clang|AppleClang)$")
   cxx_detect_standard(MPSL_PRIVATE_CFLAGS)
   cxx_detect_cflags(MPSL_PRIVATE_CFLAGS
     "-fvisibility=hidden"
@@ -49,17 +54,12 @@ if("${CMAKE_CXX_COMPILER_ID}" MATCHES "^(GNU|Clang)$")
   list(APPEND MPSL_PRIVATE_CFLAGS_REL -fmerge-all-constants)
 endif()
 
-# Use Unicode by default on Windows target.
-if(WIN32)
-  list(APPEND MPSL_PRIVATE_CFLAGS "${CXX_DEFINE}_UNICODE")
-endif()
-
 include("${ASMJIT_DIR}/CMakeLists.txt")
 list(APPEND MPSL_DEPS ${ASMJIT_LIBS})
 list(APPEND MPSL_PRIVATE_CFLAGS ${ASMJIT_CFLAGS})
 
 set(MPSL_LIBS ${MPSL_DEPS})
-if(NOT MPSL_EMBED)
+if(NOT MPSL_BUILD_EMBED)
   list(INSERT MPSL_LIBS 0 mpsl)
 endif()
 
@@ -115,14 +115,14 @@ cxx_add_source(mpsl MPSL_SRC mpsl
 # [MPSL - Targets]
 # =============================================================================
 
-if(NOT MPSL_EMBED)
+if(NOT MPSL_BUILD_EMBED)
   cxx_add_library(mpsl mpsl
     "${MPSL_SRC};${ASMJIT_SRC}"
     "${MPSL_DEPS}"
     "${MPSL_PRIVATE_CFLAGS}"
-    "${MPSL_PRIVATE_CFLAGS_REL}"
-    "${MPSL_PRIVATE_CFLAGS_DBG}")
-  target_include_directories(mpsl PRIVATE BEFORE ${ASMJIT_INCLUDE_DIR})
+    "${MPSL_PRIVATE_CFLAGS_DBG}"
+    "${MPSL_PRIVATE_CFLAGS_REL}")
+  target_include_directories(mpsl PRIVATE BEFORE ${ASMJIT_INCLUDE_DIRS})
 
   foreach(i ${MPSL_SRC})
     get_filename_component(path ${i} PATH)
@@ -140,14 +140,15 @@ endif()
 # [MPSL - ...]
 # =============================================================================
 
-if(MPSL_BUILD_TEST)
+if(MPSL_TEST)
+  cxx_detect_standard(CXX_STD)
   set(MPSL_SRC_TEST mp_dsp mp_test mp_tutorial)
 
   foreach(file ${MPSL_SRC_TEST})
     cxx_add_executable(mpsl ${file}
       "test/${file}.cpp;test/mp_utils.h"
       "${MPSL_LIBS}"
-      "${MPSL_CFLAGS}"
+      "${MPSL_CFLAGS};${CXX_STD}"
       ""
       "")
   endforeach(file)

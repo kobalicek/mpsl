@@ -18,18 +18,12 @@
 
 namespace mpsl {
 
+namespace x86 = asmjit::x86;
+
+using asmjit::BaseNode;
+using asmjit::ConstPool;
 using asmjit::Label;
 using asmjit::Operand;
-
-using asmjit::X86Compiler;
-using asmjit::X86Reg;
-using asmjit::X86Gp;
-using asmjit::X86Mm;
-using asmjit::X86Xmm;
-using asmjit::X86Mem;
-
-using asmjit::kConstScopeLocal;
-using asmjit::kConstScopeGlobal;
 
 // ============================================================================
 // [mpsl::IRToX86]
@@ -43,7 +37,7 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  IRToX86(ZoneHeap* heap, X86Compiler* cc);
+  IRToX86(ZoneAllocator* allocator, x86::Compiler* cc);
   ~IRToX86();
 
   // --------------------------------------------------------------------------
@@ -52,11 +46,11 @@ public:
 
   void prepareConstPool();
 
-  X86Mem getConstantU64(uint64_t value);
-  X86Mem getConstantU64AsPD(uint64_t value);
-  X86Mem getConstantD64(double value);
-  X86Mem getConstantD64AsPD(double value);
-  X86Mem getConstantByValue(const Value& value, uint32_t width);
+  x86::Mem getConstantU64(uint64_t value);
+  x86::Mem getConstantU64AsPD(uint64_t value);
+  x86::Mem getConstantD64(double value);
+  x86::Mem getConstantD64AsPD(double value);
+  x86::Mem getConstantByValue(const Value& value, uint32_t width);
 
   // --------------------------------------------------------------------------
   // [Compile]
@@ -74,27 +68,27 @@ public:
   void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2);
   void emit3d(uint32_t instId, const Operand& o0, const Operand& o1, const Operand& o2, int imm);
 
-  X86Gp varAsPtr(IRReg* irVar);
-  X86Gp varAsI32(IRReg* irVar);
-  X86Xmm varAsXmm(IRReg* irVar);
+  x86::Gp varAsPtr(IRReg* irVar);
+  x86::Gp varAsI32(IRReg* irVar);
+  x86::Xmm varAsXmm(IRReg* irVar);
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
-  ZoneHeap* _heap;
-  X86Compiler* _cc;
+  ZoneAllocator* _allocator;
+  x86::Compiler* _cc;
 
-  X86Gp _data[Globals::kMaxArgumentsCount];
-  X86Gp _ret;
+  x86::Gp _data[Globals::kMaxArgumentsCount];
+  x86::Gp _ret;
 
-  asmjit::CBNode* _functionBody;
-  asmjit::ConstPool _constPool;
+  BaseNode* _functionBody;
+  ConstPool _constPool;
   Label _constLabel;
-  X86Gp _constPtr;
+  x86::Gp _constPtr;
 
-  X86Xmm _tmpXmm0;
-  X86Xmm _tmpXmm1;
+  x86::Xmm _tmpXmm0;
+  x86::Xmm _tmpXmm1;
 
   bool _enableSSE4_1;
 };

@@ -27,19 +27,19 @@ static const uint32_t mpPrimeTable[] = {
 // [mpsl::HashUtils]
 // ============================================================================
 
-uint32_t HashUtils::hashString(const char* str, size_t len) noexcept {
-  if (len == 0)
+uint32_t HashUtils::hashString(const char* data, size_t size) noexcept {
+  if (size == 0)
     return 0;
 
-  uint32_t hVal = *str++;
-  if (--len == 0)
-    return hVal;
+  uint32_t hashCode = *data++;
+  if (--size == 0)
+    return hashCode;
 
   do {
-    hVal = hashChar(hVal, static_cast<unsigned char>(*str++));
-  } while (--len);
+    hashCode = hashChar(hashCode, static_cast<unsigned char>(*data++));
+  } while (--size);
 
-  return hVal;
+  return hashCode;
 }
 
 uint32_t HashUtils::closestPrime(uint32_t x) noexcept {
@@ -58,11 +58,11 @@ uint32_t HashUtils::closestPrime(uint32_t x) noexcept {
 // ============================================================================
 
 void HashBase::_rehash(uint32_t newCount) noexcept {
-  ZoneHeap* heap = _heap;
+  ZoneAllocator* allocator = _allocator;
 
   HashNode** oldData = _data;
   HashNode** newData = static_cast<HashNode**>(
-    heap->allocZeroed(
+    allocator->allocZeroed(
       static_cast<size_t>(newCount + kExtraCount) * sizeof(void*)));
 
   if (newData == nullptr)
@@ -75,7 +75,7 @@ void HashBase::_rehash(uint32_t newCount) noexcept {
     HashNode* node = oldData[i];
     while (node) {
       HashNode* next = node->_next;
-      uint32_t hMod = node->_hVal % newCount;
+      uint32_t hMod = node->_hashCode % newCount;
 
       node->_next = newData[hMod];
       newData[hMod] = node;
@@ -96,7 +96,7 @@ void HashBase::_rehash(uint32_t newCount) noexcept {
 
   _data = newData;
   if (oldData != _embedded)
-    heap->release(oldData,
+    allocator->release(oldData,
       static_cast<size_t>(oldCount + kExtraCount) * sizeof(void*));
 }
 
@@ -147,13 +147,13 @@ void HashBase::_mergeToInvisibleSlot(HashBase& other) noexcept {
 // ============================================================================
 
 HashNode* HashBase::_put(HashNode* node) noexcept {
-  uint32_t hMod = node->_hVal % _bucketsCount;
+  uint32_t hMod = node->_hashCode % _bucketsCount;
   HashNode* next = _data[hMod];
 
   node->_next = next;
   _data[hMod] = node;
 
-  if (++_length >= _bucketsGrow && next != nullptr) {
+  if (++_size >= _bucketsGrow && next != nullptr) {
     uint32_t newCapacity = HashUtils::closestPrime(_bucketsCount + kExtraCount);
     if (newCapacity != _bucketsCount)
       _rehash(newCapacity);
@@ -163,7 +163,7 @@ HashNode* HashBase::_put(HashNode* node) noexcept {
 }
 
 HashNode* HashBase::_del(HashNode* node) noexcept {
-  uint32_t hMod = node->_hVal % _bucketsCount;
+  uint32_t hMod = node->_hashCode % _bucketsCount;
 
   HashNode** pPrev = &_data[hMod];
   HashNode* p = *pPrev;

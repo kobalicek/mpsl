@@ -87,9 +87,9 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE IRBuilder* getIR() const noexcept { return _ir; }
-  MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _ir->getHeap(); }
-  MPSL_INLINE IRBlock* getBlock() const noexcept { return _block; }
+  MPSL_INLINE IRBuilder* ir() const noexcept { return _ir; }
+  MPSL_INLINE IRBlock* block() const noexcept { return _block; }
+  MPSL_INLINE ZoneAllocator* allocator() const noexcept { return _ir->allocator(); }
 
   MPSL_INLINE bool hasV256() const noexcept { return _hasV256; }
   MPSL_INLINE bool needSplit(uint32_t width) const { return width > 16 && !_hasV256; }

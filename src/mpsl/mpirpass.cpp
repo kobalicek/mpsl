@@ -16,20 +16,20 @@
 namespace mpsl {
 
 static Error mpIRPassBlock(IRBuilder* ir, IRBlock* block) noexcept {
-  IRBody& body = block->getBody();
-  size_t i = body.getLength();
+  IRBody& body = block->body();
+  size_t i = body.size();
 
   while (i != 0) {
     IRInst* inst = body[--i];
     if (inst) {
       // TODO: Just testing some concepts.
-      const InstInfo& info = mpInstInfo[inst->getInstCode() & kInstCodeMask];
+      const InstInfo& info = mpInstInfo[inst->instCode() & kInstCodeMask];
       if (!info.isStore() && !info.isCall() && !info.isRet()) {
-        IRObject** opArray = inst->getOpArray();
-        uint32_t opCount = inst->getOpCount();
+        IRObject** opArray = inst->operands();
+        uint32_t opCount = inst->opCount();
 
         IRObject* dst = opArray[0];
-        if (dst->isReg() && dst->getRefCount() == 1) {
+        if (dst->isReg() && dst->refCount() == 1) {
           block->neuterAt(i);
           ir->deleteInst(inst);
         }
@@ -42,14 +42,8 @@ static Error mpIRPassBlock(IRBuilder* ir, IRBlock* block) noexcept {
 }
 
 Error mpIRPass(IRBuilder* ir) noexcept {
-  IRBlocks& blocks = ir->getBlocks();
-  size_t count = blocks.getLength();
-
-  for (size_t i = 0; i < count; i++) {
-    IRBlock* block = blocks[i];
+  for (IRBlock* block : ir->blocks())
     MPSL_PROPAGATE(mpIRPassBlock(ir, block));
-  }
-
   return kErrorOk;
 }
 

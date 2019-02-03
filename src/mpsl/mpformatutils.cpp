@@ -32,7 +32,7 @@ static const EnumString mpAstSymbolType[] = {
 // [mpsl::Utils]
 // ============================================================================
 
-StringBuilder& FormatUtils::sformat(StringBuilder& sb, const char* fmt, ...) noexcept {
+String& FormatUtils::sformat(String& sb, const char* fmt, ...) noexcept {
   va_list ap;
   va_start(ap, fmt);
 
@@ -42,7 +42,7 @@ StringBuilder& FormatUtils::sformat(StringBuilder& sb, const char* fmt, ...) noe
   return sb;
 }
 
-StringBuilder& FormatUtils::vformat(StringBuilder& sb, const char* fmt, va_list ap) noexcept {
+String& FormatUtils::vformat(String& sb, const char* fmt, va_list ap) noexcept {
   const char kFormatChar = '%';
 
   const char* p = fmt;
@@ -99,7 +99,7 @@ StringBuilder& FormatUtils::vformat(StringBuilder& sb, const char* fmt, va_list 
       if (ext.eq("StringRef", 9)) {
         const StringRef* value = va_arg(ap, StringRef*);
 
-        sb.appendString(value->getData(), value->getLength());
+        sb.appendString(value->data(), value->size());
         continue;
       }
 
@@ -129,7 +129,7 @@ StringBuilder& FormatUtils::vformat(StringBuilder& sb, const char* fmt, va_list 
       }
 
       // Unhandled, revert to '%'.
-      mark = ext.getData() - 2;
+      mark = ext.data() - 2;
     }
     else {
       // ----------------------------------------------------------------------
@@ -175,7 +175,7 @@ _Done:
   return sb;
 }
 
-StringBuilder& FormatUtils::formatType(StringBuilder& sb, uint32_t typeInfo) noexcept {
+String& FormatUtils::formatType(String& sb, uint32_t typeInfo) noexcept {
   uint32_t typeId = typeInfo & kTypeIdMask;
   const char* typeName = "<unknown>";
 
@@ -185,7 +185,7 @@ StringBuilder& FormatUtils::formatType(StringBuilder& sb, uint32_t typeInfo) noe
   }
 
   if (typeId < kTypeCount)
-    typeName = TypeInfo::get(typeId).name;
+    typeName = TypeInfo::get(typeId).name();
 
   sb.appendString(typeName);
 
@@ -199,7 +199,7 @@ StringBuilder& FormatUtils::formatType(StringBuilder& sb, uint32_t typeInfo) noe
   return sb;
 }
 
-StringBuilder& FormatUtils::formatValue(StringBuilder& sb, uint32_t typeInfo, const Value* value_) noexcept {
+String& FormatUtils::formatValue(String& sb, uint32_t typeInfo, const Value* value_) noexcept {
   uint32_t id = typeInfo & kTypeIdMask;
   uint32_t count = TypeInfo::elementsOf(typeInfo);
 
@@ -284,7 +284,7 @@ StringBuilder& FormatUtils::formatValue(StringBuilder& sb, uint32_t typeInfo, co
 }
 
 void FormatUtils::formatSwizzleArray(char* dst, const uint8_t* swizzleArray, uint32_t count) noexcept {
-  const char* letters = mpVectorIdentifiers[0].letters;
+  const char* letters = mpVectorIdentifiers[0].letters();
   uint32_t i, max = 8;
 
   for (i = 0; i < count; i++) {

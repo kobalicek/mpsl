@@ -84,10 +84,10 @@ CodeGen::CodeGen(AstBuilder* ast, IRBuilder* ir) noexcept
     _hasV256(false),
     _hiddenRet(nullptr),
     _currentRet(),
-    _nestedFunctions(ir->getHeap()),
-    _varMap(ir->getHeap()),
-    _memMap(ir->getHeap()) {
-  _hiddenRet = ast->getGlobalScope()->resolveSymbol(StringRef("@ret", 4));
+    _nestedFunctions(ir->allocator()),
+    _varMap(ir->allocator()),
+    _memMap(ir->allocator()) {
+  _hiddenRet = ast->globalScope()->resolveSymbol(StringRef("@ret", 4));
 }
 CodeGen::~CodeGen() noexcept {}
 
@@ -96,17 +96,17 @@ CodeGen::~CodeGen() noexcept {}
 // ============================================================================
 
 Error CodeGen::onProgram(AstProgram* node, Result& out) noexcept {
-  AstNode** children = node->getChildren();
-  uint32_t i, count = node->getLength();
+  AstNode** children = node->children();
+  uint32_t i, count = node->size();
 
   // Find the "main()" function and use it as an entry point.
   for (i = 0; i < count; i++) {
     AstNode* child = children[i];
-    if (child->getNodeType() == AstNode::kTypeFunction) {
+    if (child->nodeType() == AstNode::kTypeFunction) {
       AstFunction* func = static_cast<AstFunction*>(child);
-      if (func->getFunc()->eq("main", 4)) {
+      if (func->func()->eq("main", 4)) {
         MPSL_PROPAGATE(_ir->initEntry());
-        _block = _ir->getEntry();
+        _block = _ir->entryBlock();
         return onFunction(func, out);
       }
     }
@@ -118,17 +118,17 @@ Error CodeGen::onProgram(AstProgram* node, Result& out) noexcept {
 // NOTE: This is only called once per "main()". Other functions are simply
 // inlined during AST to IR translation.
 Error CodeGen::onFunction(AstFunction* node, Result& out) noexcept {
-  if (node->hasBody()) {
+  if (node->body()) {
     MPSL_PROPAGATE(_nestedFunctions.put(node));
-    MPSL_PROPAGATE(onNode(node->getBody(), out));
+    MPSL_PROPAGATE(onNode(node->body(), out));
   }
 
   return kErrorOk;
 }
 
 Error CodeGen::onBlock(AstBlock* node, Result& out) noexcept {
-  AstNode** children = node->getChildren();
-  uint32_t i, count = node->getLength();
+  AstNode** children = node->children();
+  uint32_t i, count = node->size();
 
   for (i = 0; i < count; i++) {
     Result noResult(false);
@@ -163,11 +163,11 @@ Error CodeGen::onContinue(AstContinue* node, Result& out) noexcept {
 }
 
 Error CodeGen::onReturn(AstReturn* node, Result& out) noexcept {
-  if (node->hasChild()) {
+  if (node->child()) {
     Result val(true);
-    MPSL_PROPAGATE(onNode(node->getChild(), val));
+    MPSL_PROPAGATE(onNode(node->child(), val));
 
-    uint32_t typeInfo = _hiddenRet->getTypeInfo();
+    uint32_t typeInfo = _hiddenRet->typeInfo();
     uint32_t width = TypeInfo::widthOf(typeInfo);
 
     if (_functionLevel == 0) {
@@ -175,7 +175,7 @@ Error CodeGen::onReturn(AstReturn* node, Result& out) noexcept {
       MPSL_PROPAGATE(asVar(var, val.result, typeInfo));
 
       IRPair<IRMem> mem;
-      MPSL_PROPAGATE(addrOfData(mem, DataSlot(_hiddenRet->getDataSlot(), _hiddenRet->getDataOffset()), width));
+      MPSL_PROPAGATE(addrOfData(mem, DataSlot(_hiddenRet->dataSlot(), _hiddenRet->dataOffset()), width));
       MPSL_PROPAGATE(emitStore(mem, var, typeInfo));
     }
     else {
@@ -187,12 +187,12 @@ Error CodeGen::onReturn(AstReturn* node, Result& out) noexcept {
 }
 
 Error CodeGen::onVarDecl(AstVarDecl* node, Result& out) noexcept {
-  uint32_t typeInfo = node->getTypeInfo();
+  uint32_t typeInfo = node->typeInfo();
   IRPair<IRReg> var;
 
-  if (node->hasChild()) {
+  if (node->child()) {
     Result exp(true);
-    MPSL_PROPAGATE(onNode(node->getChild(), exp));
+    MPSL_PROPAGATE(onNode(node->child(), exp));
     MPSL_PROPAGATE(asVar(var, exp.result, typeInfo));
   }
   else {
@@ -200,27 +200,27 @@ Error CodeGen::onVarDecl(AstVarDecl* node, Result& out) noexcept {
   }
 
   out.result.set(var);
-  return mapVarToAst(node->getSymbol(), var);
+  return mapVarToAst(node->symbol(), var);
 }
 
 Error CodeGen::onVarMemb(AstVarMemb* node, Result& out) noexcept {
-  AstNode* childNode = node->getChild();
+  AstNode* childNode = node->child();
   if (!childNode || !childNode->isVar())
     return MPSL_TRACE_ERROR(kErrorInvalidState);
   AstVar* child = static_cast<AstVar*>(childNode);
 
-  uint32_t typeInfo = node->getTypeInfo();
+  uint32_t typeInfo = node->typeInfo();
   uint32_t width = TypeInfo::widthOf(typeInfo);
-  return addrOfData(out.result, DataSlot(child->getSymbol()->getDataSlot(), node->getOffset()), width);
+  return addrOfData(out.result, DataSlot(child->symbol()->dataSlot(), node->offset()), width);
 }
 
 Error CodeGen::onVar(AstVar* node, Result& out) noexcept {
-  AstSymbol* symbol = node->getSymbol();
+  AstSymbol* symbol = node->symbol();
 
-  if (symbol->getDataSlot() != kInvalidDataSlot) {
-    uint32_t typeInfo = node->getTypeInfo();
+  if (symbol->dataSlot() != kInvalidDataSlot) {
+    uint32_t typeInfo = node->typeInfo();
     uint32_t width = TypeInfo::widthOf(typeInfo);
-    return addrOfData(out.result, DataSlot(symbol->getDataSlot(), symbol->getDataOffset()), width);
+    return addrOfData(out.result, DataSlot(symbol->dataSlot(), symbol->dataOffset()), width);
   }
   else {
     out.result.set(_varMap.get(symbol));
@@ -230,22 +230,21 @@ Error CodeGen::onVar(AstVar* node, Result& out) noexcept {
 }
 
 Error CodeGen::onImm(AstImm* node, Result& out) noexcept {
-  return newImm(out.result, node->getValue(), node->getTypeInfo());
+  return newImm(out.result, node->value(), node->typeInfo());
 }
 
 #define COMBINE_OP_TYPE(op, typeId) (((op) << 8) | ((typeId) << 4))
 #define COMBINE_OP_CAST(toId, fromId) (((toId) << 8) | ((fromId) << 4))
 
 Error CodeGen::onUnaryOp(AstUnaryOp* node, Result& out) noexcept {
-  if (MPSL_UNLIKELY(!node->hasChild()))
+  if (MPSL_UNLIKELY(!node->child()))
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
   Result tmp(true);
-  MPSL_PROPAGATE(onNode(node->getChild(), tmp));
+  MPSL_PROPAGATE(onNode(node->child(), tmp));
 
-  IRBlock* block = getBlock();
-  uint32_t typeInfo = node->getTypeInfo();
-  const OpInfo& op = OpInfo::get(node->getOp());
+  uint32_t typeInfo = node->typeInfo();
+  const OpInfo& op = OpInfo::get(node->opType());
 
   IRPair<IRReg> var;
   MPSL_PROPAGATE(asVar(var, tmp.result, typeInfo));
@@ -260,10 +259,10 @@ Error CodeGen::onUnaryOp(AstUnaryOp* node, Result& out) noexcept {
     uint32_t instCode = kInstCodeNone;
 
     switch (typeInfo & kTypeIdMask) {
-      case kTypeBool  : instCode = op.insti    ; break;
-      case kTypeInt   : instCode = op.insti    ; immContent.i.set(1   ); break;
-      case kTypeFloat : instCode = op.instf    ; immContent.f.set(1.0f); break;
-      case kTypeDouble: instCode = op.instf + 1; immContent.d.set(1.0 ); break;
+      case kTypeBool  : instCode = op._insti    ; break;
+      case kTypeInt   : instCode = op._insti    ; immContent.i.set(1   ); break;
+      case kTypeFloat : instCode = op._instf    ; immContent.f.set(1.0f); break;
+      case kTypeDouble: instCode = op._instf + 1; immContent.d.set(1.0 ); break;
       default:
         return MPSL_TRACE_ERROR(kErrorInvalidState);
     }
@@ -295,7 +294,7 @@ Error CodeGen::onUnaryOp(AstUnaryOp* node, Result& out) noexcept {
 
     if (op.isCast()) {
       // TODO: Vector casting doesn't work right now.
-      uint32_t fromId = node->getChild()->getTypeInfo() & kTypeIdMask;
+      uint32_t fromId = node->child()->typeInfo() & kTypeIdMask;
       uint32_t instCode = kInstCodeNone;
 
       switch (COMBINE_OP_CAST(typeInfo & kTypeIdMask, fromId)) {
@@ -323,12 +322,12 @@ Error CodeGen::onUnaryOp(AstUnaryOp* node, Result& out) noexcept {
       }
       else {
         swizzleValue.i[0] = swizzleMask;
-        IRImm* msk = getIR()->newImm(swizzleValue, IRReg::kKindNone, 4);
-        MPSL_PROPAGATE(getIR()->emitInst(getBlock(), kInstCodePshufd, out.result.lo, tmp.result.lo, msk));
+        IRImm* msk = ir()->newImm(swizzleValue, IRReg::kKindNone, 4);
+        MPSL_PROPAGATE(ir()->emitInst(block(), kInstCodePshufd, out.result.lo, tmp.result.lo, msk));
       }
     }
     else {
-      uint32_t instCode = op.getInstByTypeId(typeInfo & kTypeIdMask);
+      uint32_t instCode = op.instByTypeId(typeInfo & kTypeIdMask);
       if (MPSL_UNLIKELY(instCode == kInstCodeNone))
         return MPSL_TRACE_ERROR(kErrorInvalidState);
       MPSL_PROPAGATE(emitInst2(instCode, out.result, tmp.result, typeInfo));
@@ -339,26 +338,26 @@ Error CodeGen::onUnaryOp(AstUnaryOp* node, Result& out) noexcept {
 }
 
 Error CodeGen::onBinaryOp(AstBinaryOp* node, Result& out) noexcept {
-  if (MPSL_UNLIKELY(!node->hasLeft() || !node->hasRight()))
+  if (MPSL_UNLIKELY(!node->left() || !node->right()))
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
   Result lValue(true);
   Result rValue(true);
 
-  MPSL_PROPAGATE(onNode(node->getLeft(), lValue));
-  MPSL_PROPAGATE(onNode(node->getRight(), rValue));
+  MPSL_PROPAGATE(onNode(node->left(), lValue));
+  MPSL_PROPAGATE(onNode(node->right(), rValue));
 
-  uint32_t typeInfo = node->getTypeInfo();
-  const OpInfo& op = OpInfo::get(node->getOp());
+  uint32_t typeInfo = node->typeInfo();
+  const OpInfo& op = OpInfo::get(node->opType());
 
   IRPair<IRReg> result;
   IRPair<IRReg> lVar;
   IRPair<IRReg> rVar;
   MPSL_PROPAGATE(newVar(result, typeInfo));
 
-  uint32_t instCode = op.getInstByTypeId(typeInfo & kTypeIdMask);
+  uint32_t instCode = op.instByTypeId(typeInfo & kTypeIdMask);
   if (op.isAssignment()) {
-    if (op.getType() == kOpAssign) {
+    if (op.type() == kOpAssign) {
       // Pure assignment operator `=`.
       MPSL_PROPAGATE(asVar(rVar, rValue.result, typeInfo));
 
@@ -415,24 +414,23 @@ Error CodeGen::onBinaryOp(AstBinaryOp* node, Result& out) noexcept {
 
 Error CodeGen::onCall(AstCall* node, Result& out) noexcept {
   uint32_t i;
-
-  AstSymbol* fSym = node->getSymbol();
+  AstSymbol* fSym = node->symbol();
   if (MPSL_UNLIKELY(!fSym))
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
-  AstFunction* func = static_cast<AstFunction*>(fSym->getNode());
-  if (MPSL_UNLIKELY(!func) || func->getNodeType() != AstNode::kTypeFunction)
+  AstFunction* func = static_cast<AstFunction*>(fSym->node());
+  if (MPSL_UNLIKELY(!func) || func->nodeType() != AstNode::kTypeFunction)
     return MPSL_TRACE_ERROR(kErrorInvalidState);
 
   if (MPSL_UNLIKELY(_nestedFunctions.has(func)))
     return MPSL_TRACE_ERROR(kErrorRecursionNotAllowed);
 
 
-  AstBlock* fArgsDecl = func->getArgs();
-  bool argsUsed = func->hasBody();
+  AstBlock* fArgsDecl = func->args();
+  bool argsUsed = func->body();
 
-  uint32_t fArgsCount = func->getArgs()->getLength();
-  uint32_t cArgsCount = node->getLength();
+  uint32_t fArgsCount = func->args()->size();
+  uint32_t cArgsCount = node->size();
 
   if (MPSL_UNLIKELY(fArgsCount < cArgsCount))
     return MPSL_TRACE_ERROR(kErrorInvalidState);
@@ -441,34 +439,34 @@ Error CodeGen::onCall(AstCall* node, Result& out) noexcept {
   for (i = 0; i < cArgsCount; i++) {
     Result value(argsUsed);
 
-    AstVarDecl* argDecl = static_cast<AstVarDecl*>(fArgsDecl->getAt(i));
-    MPSL_PROPAGATE(onNode(node->getAt(i), value));
+    AstVarDecl* argDecl = static_cast<AstVarDecl*>(fArgsDecl->childAt(i));
+    MPSL_PROPAGATE(onNode(node->childAt(i), value));
 
     IRPair<IRReg> var;
-    MPSL_PROPAGATE(asVar(var, value.result, argDecl->getTypeInfo()));
+    MPSL_PROPAGATE(asVar(var, value.result, argDecl->typeInfo()));
 
-    mapVarToAst(argDecl->getSymbol(), var);
+    mapVarToAst(argDecl->symbol(), var);
   }
 
   // Map all function arguments to `varMap`.
   while (i < fArgsCount) {
     Result value(argsUsed);
 
-    AstVarDecl* argDecl = static_cast<AstVarDecl*>(fArgsDecl->getAt(i));
+    AstVarDecl* argDecl = static_cast<AstVarDecl*>(fArgsDecl->childAt(i));
     MPSL_PROPAGATE(onNode(argDecl, value));
 
     IRPair<IRReg> var;
-    MPSL_PROPAGATE(asVar(var, value.result, argDecl->getTypeInfo()));
+    MPSL_PROPAGATE(asVar(var, value.result, argDecl->typeInfo()));
 
-    mapVarToAst(argDecl->getSymbol(), var);
+    mapVarToAst(argDecl->symbol(), var);
     i++;
   }
 
   // Emit the function body.
-  if (func->hasBody()) {
+  if (func->body()) {
     _functionLevel++;
     MPSL_PROPAGATE(_nestedFunctions.put(func));
-    MPSL_PROPAGATE(onNode(func->getBody(), out));
+    MPSL_PROPAGATE(onNode(func->body(), out));
 
     _functionLevel--;
     _nestedFunctions.del(func);
@@ -502,13 +500,13 @@ Error CodeGen::newVar(IRPair<IRObject>& dst, uint32_t typeInfo) noexcept {
     uint32_t loTI, hiTI;
     mpSplitTypeInfo(loTI, hiTI, typeInfo);
 
-    lo = getIR()->newVarByTypeInfo(loTI);
+    lo = ir()->newVarByTypeInfo(loTI);
     MPSL_NULLCHECK(lo);
-    hi = getIR()->newVarByTypeInfo(hiTI);
+    hi = ir()->newVarByTypeInfo(hiTI);
     MPSL_NULLCHECK(hi);
   }
   else {
-    lo = getIR()->newVarByTypeInfo(typeInfo);
+    lo = ir()->newVarByTypeInfo(typeInfo);
     MPSL_NULLCHECK(lo);
   }
 
@@ -522,7 +520,7 @@ Error CodeGen::newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeIn
     mpSplitTypeInfo(loTI, hiTI, typeInfo);
 
     if (mpIsValueLoHiEqual(value)) {
-      IRImm* imm = getIR()->newImmByTypeInfo(value, loTI);
+      IRImm* imm = ir()->newImmByTypeInfo(value, loTI);
       MPSL_NULLCHECK(imm);
       return dst.set(imm, imm);
     }
@@ -531,37 +529,37 @@ Error CodeGen::newImm(IRPair<IRObject>& dst, const Value& value, uint32_t typeIn
       loVal.q.set(value.q[0], value.q[1], 0, 0);
       hiVal.q.set(value.q[2], value.q[3], 0, 0);
 
-      IRImm* loImm = getIR()->newImmByTypeInfo(loVal, loTI);
+      IRImm* loImm = ir()->newImmByTypeInfo(loVal, loTI);
       MPSL_NULLCHECK(loImm);
 
-      IRImm* hiImm = getIR()->newImmByTypeInfo(hiVal, hiTI);
+      IRImm* hiImm = ir()->newImmByTypeInfo(hiVal, hiTI);
       MPSL_NULLCHECK(hiImm);
 
       return dst.set(loImm, hiImm);
     }
   }
   else {
-    IRImm* imm = getIR()->newImmByTypeInfo(value, typeInfo);
+    IRImm* imm = ir()->newImmByTypeInfo(value, typeInfo);
     MPSL_NULLCHECK(imm);
     return dst.set(imm, nullptr);
   }
 }
 
 Error CodeGen::addrOfData(IRPair<IRObject>& dst, DataSlot data, uint32_t width) noexcept {
-  IRReg* base = getIR()->getDataPtr(data.slot);
+  IRReg* base = ir()->dataPtr(data.slot);
 
   IRMem* lo = nullptr;
   IRMem* hi = nullptr;
 
   if (width > 16 && !hasV256()) {
-    lo = getIR()->newMem(base, nullptr, data.offset);
-    hi = getIR()->newMem(base, nullptr, data.offset + 16);
+    lo = ir()->newMem(base, nullptr, data.offset);
+    hi = ir()->newMem(base, nullptr, data.offset + 16);
 
     MPSL_NULLCHECK(lo);
     MPSL_NULLCHECK(hi);
   }
   else {
-    lo = getIR()->newMem(base, nullptr, data.offset);
+    lo = ir()->newMem(base, nullptr, data.offset);
     MPSL_NULLCHECK(lo);
   }
 
@@ -587,7 +585,7 @@ Error CodeGen::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeIn
       continue;
     }
 
-    switch (inObj->getObjectType()) {
+    switch (inObj->objectType()) {
       case IRObject::kTypeReg: {
         out.obj[i] = inObj->as<IRReg>();
         break;
@@ -597,7 +595,7 @@ Error CodeGen::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeIn
         typeInfo = ti[i];
 
         IRMem* mem = inObj->as<IRMem>();
-        IRReg* var = getIR()->newVarByTypeInfo(typeInfo);
+        IRReg* var = ir()->newVarByTypeInfo(typeInfo);
 
         MPSL_NULLCHECK(var);
         MPSL_PROPAGATE(emitFetchX(var, mem, typeInfo));
@@ -608,10 +606,10 @@ Error CodeGen::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeIn
 
       case IRObject::kTypeImm: {
         IRImm* imm = inObj->as<IRImm>();
-        IRReg* var = getIR()->newVarByTypeInfo(typeInfo);
+        IRReg* var = ir()->newVarByTypeInfo(typeInfo);
 
         MPSL_NULLCHECK(var);
-        MPSL_PROPAGATE(getIR()->emitFetch(getBlock(), var, imm));
+        MPSL_PROPAGATE(ir()->emitFetch(block(), var, imm));
 
         out.obj[i] = var;
         break;
@@ -625,10 +623,9 @@ Error CodeGen::asVar(IRPair<IRObject>& out, IRPair<IRObject> in, uint32_t typeIn
 
 Error CodeGen::emitMove(IRPair<IRReg> dst, IRPair<IRReg> src, uint32_t typeInfo) noexcept {
   uint32_t width = TypeInfo::widthOf(typeInfo);
-  IRBlock* block = getBlock();
 
-  if (dst.lo) MPSL_PROPAGATE(getIR()->emitMove(block, dst.lo, src.lo));
-  if (dst.hi) MPSL_PROPAGATE(getIR()->emitMove(block, dst.hi, src.hi));
+  if (dst.lo) MPSL_PROPAGATE(ir()->emitMove(block(), dst.lo, src.lo));
+  if (dst.hi) MPSL_PROPAGATE(ir()->emitMove(block(), dst.hi, src.hi));
 
   return kErrorOk;
 }
@@ -655,18 +652,17 @@ Error CodeGen::emitInst2(uint32_t instCode,
   IRPair<IRObject> o1, uint32_t typeInfo) noexcept {
 
   uint32_t width = TypeInfo::widthOf(typeInfo);
-  IRBlock* block = getBlock();
 
   if (needSplit(width)) {
     uint32_t loTI, hiTI;
     mpSplitTypeInfo(loTI, hiTI, typeInfo);
 
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetVecFlags(loTI), o0.lo, o1.lo));
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetVecFlags(hiTI), o0.hi, o1.hi));
+    MPSL_PROPAGATE(ir()->emitInst(block(), instCode | mpGetVecFlags(loTI), o0.lo, o1.lo));
+    MPSL_PROPAGATE(ir()->emitInst(block(), instCode | mpGetVecFlags(hiTI), o0.hi, o1.hi));
     return kErrorOk;
   }
   else {
-    return getIR()->emitInst(block, instCode | mpGetVecFlags(typeInfo), o0.lo, o1.lo);
+    return ir()->emitInst(block(), instCode | mpGetVecFlags(typeInfo), o0.lo, o1.lo);
   }
 }
 
@@ -676,18 +672,17 @@ Error CodeGen::emitInst3(uint32_t instCode,
   IRPair<IRObject> o2, uint32_t typeInfo) noexcept {
 
   uint32_t width = TypeInfo::widthOf(typeInfo);
-  IRBlock* block = getBlock();
 
   if (needSplit(width)) {
     uint32_t loTI, hiTI;
     mpSplitTypeInfo(loTI, hiTI, typeInfo);
 
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetVecFlags(loTI), o0.lo, o1.lo, o2.lo));
-    MPSL_PROPAGATE(getIR()->emitInst(block, instCode | mpGetVecFlags(hiTI), o0.hi, o1.hi, o2.hi));
+    MPSL_PROPAGATE(ir()->emitInst(block(), instCode | mpGetVecFlags(loTI), o0.lo, o1.lo, o2.lo));
+    MPSL_PROPAGATE(ir()->emitInst(block(), instCode | mpGetVecFlags(hiTI), o0.hi, o1.hi, o2.hi));
     return kErrorOk;
   }
   else {
-    return getIR()->emitInst(block, instCode | mpGetVecFlags(typeInfo), o0.lo, o1.lo, o2.lo);
+    return ir()->emitInst(block(), instCode | mpGetVecFlags(typeInfo), o0.lo, o1.lo, o2.lo);
   }
 }
 
@@ -731,7 +726,7 @@ Error CodeGen::emitFetchX(IRReg* dst, IRMem* src, uint32_t typeInfo) noexcept {
       return MPSL_TRACE_ERROR(kErrorInvalidState);
   }
 
-  return getIR()->emitInst(getBlock(), instCode, dst, src);
+  return ir()->emitInst(block(), instCode, dst, src);
 }
 
 Error CodeGen::emitStoreX(IRMem* dst, IRReg* src, uint32_t typeInfo) noexcept {
@@ -774,7 +769,7 @@ Error CodeGen::emitStoreX(IRMem* dst, IRReg* src, uint32_t typeInfo) noexcept {
       return MPSL_TRACE_ERROR(kErrorInvalidState);
   }
 
-  MPSL_PROPAGATE(getIR()->emitInst(getBlock(), instCode, dst, src));
+  MPSL_PROPAGATE(ir()->emitInst(block(), instCode, dst, src));
   return kErrorOk;
 }
 

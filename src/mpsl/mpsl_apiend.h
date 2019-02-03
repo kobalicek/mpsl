@@ -12,28 +12,6 @@
 #endif // MPSL_API_SCOPE
 
 // ============================================================================
-// [C++ Support]
-// ============================================================================
-
-// [NoExcept]
-#if defined(MPSL_UNDEF_NOEXCEPT)
-# undef noexcept
-# undef MPSL_UNDEF_NOEXCEPT
-#endif // MPSL_UNDEF_NOEXCEPT
-
-// [NullPtr]
-#if defined(MPSL_UNDEF_NULLPTR)
-# undef nullptr
-# undef MPSL_UNDEF_NULLPTR
-#endif // MPSL_UNDEF_NULLPTR
-
-// [Override]
-#if defined(MPSL_UNDEF_OVERRIDE)
-# undef override
-# undef MPSL_UNDEF_OVERRIDE
-#endif // MPSL_UNDEF_OVERRIDE
-
-// ============================================================================
 // [Compiler Support]
 // ============================================================================
 

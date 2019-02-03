@@ -56,7 +56,7 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE AstSymbol* getCurrentRet() const noexcept { return _currentRet; }
+  MPSL_INLINE AstSymbol* currentRet() const noexcept { return _currentRet; }
   MPSL_INLINE bool isUnreachable() const noexcept { return _unreachable; }
   MPSL_INLINE bool isConditional() const noexcept { return _isConditional; }
   MPSL_INLINE bool isLocalScope() const noexcept { return _isLocalScope; }

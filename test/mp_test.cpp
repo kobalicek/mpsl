@@ -371,7 +371,6 @@ int main(int argc, char* argv[]) {
   Test test(options);
 
   // Test MPSL basics.
-  /*
   test.basicTest("int     main() { return ia + ib; }", mpsl::kTypeInt    , makeIVal(10   ));
   test.basicTest("float   main() { return fa + fb; }", mpsl::kTypeFloat  , makeFVal(10.0f));
   test.basicTest("double  main() { return da + db; }", mpsl::kTypeDouble , makeDVal(10.0 ));
@@ -411,7 +410,6 @@ int main(int argc, char* argv[]) {
   test.basicTest("float4  main() { return f4a.xyxy; }", mpsl::kTypeFloat4 , makeFVal(1, 2, 1, 2));
   test.basicTest("double4 main() { return d4a.xxxx; }", mpsl::kTypeDouble4, makeDVal(1, 1, 1, 1));
   test.basicTest("double4 main() { return d4a.xyxy; }", mpsl::kTypeDouble4, makeDVal(1, 2, 1, 2));
-  */
 
   // Test control flow - branches.
   test.basicTest("int main() { if (ia == 1) return ib; else return ic; }", mpsl::kTypeInt, makeIVal( 9));

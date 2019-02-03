@@ -163,7 +163,7 @@ enum TypeIdFlags {
 
   //! Scalar type.
   //!
-  //! NOTE: Embedders do not have to mark type as scalar when passing a type
+  //! \note Embedders do not have to mark type as scalar when passing a type
   //! information to the public MPSL API. However, MPSL always marks all scalar
   //! types to simplify its internals.
   kTypeVec1 = 1 << kTypeVecShift,
@@ -272,14 +272,14 @@ enum Options {
 
 namespace Globals {
 
-//! Invalid index and/or length.
+//! Invalid index and/or size.
 static const size_t kInvalidIndex = ~static_cast<size_t>(0);
 
 //! MPSL limits.
 enum Limits {
   //! Maximum data arguments of a shader program.
   kMaxArgumentsCount = 4,
-  //! Maximum length of an identifier.
+  //! Maximum size of an identifier.
   kMaxIdentifierLength = 64,
   //! Maximum number of members of one data `Layout`.
   kMaxMembersCount = 512
@@ -444,9 +444,9 @@ union Value {
 // [mpsl::StringRef]
 // ============================================================================
 
-//! String reference (pointer to string data data and length).
+//! String reference (pointer to string data data and size).
 //!
-//! NOTE: MPSL always provides NULL terminated string with length known. On the
+//! \note MPSL always provides NULL terminated string with size known. On the
 //! other hand MPSL doesn't require NULL terminated strings when passed to MPSL
 //! APIs.
 struct StringRef {
@@ -456,15 +456,15 @@ struct StringRef {
 
   MPSL_INLINE StringRef() noexcept
     : _data(nullptr),
-      _length(0) {}
+      _size(0) {}
 
   explicit MPSL_INLINE StringRef(const char* data) noexcept
     : _data(data),
-      _length(::strlen(data)) {}
+      _size(::strlen(data)) {}
 
-  MPSL_INLINE StringRef(const char* data, size_t len) noexcept
+  MPSL_INLINE StringRef(const char* data, size_t size) noexcept
     : _data(data),
-      _length(len) {}
+      _size(size) {}
 
   // --------------------------------------------------------------------------
   // [Reset / Setup]
@@ -474,13 +474,13 @@ struct StringRef {
     set(nullptr, 0);
   }
 
-  MPSL_INLINE void set(const char* s) noexcept {
-    set(s, ::strlen(s));
+  MPSL_INLINE void set(const char* data) noexcept {
+    set(data, ::strlen(data));
   }
 
-  MPSL_INLINE void set(const char* s, size_t len) noexcept {
-    _data = s;
-    _length = len;
+  MPSL_INLINE void set(const char* data, size_t size) noexcept {
+    _data = data;
+    _size = size;
   }
 
   // --------------------------------------------------------------------------
@@ -488,9 +488,9 @@ struct StringRef {
   // --------------------------------------------------------------------------
 
   //! Get the string data.
-  MPSL_INLINE const char* getData() const noexcept { return _data; }
-  //! Get the string length.
-  MPSL_INLINE size_t getLength() const noexcept { return _length; }
+  MPSL_INLINE const char* data() const noexcept { return _data; }
+  //! Get the string size.
+  MPSL_INLINE size_t size() const noexcept { return _size; }
 
   // --------------------------------------------------------------------------
   // [Eq]
@@ -498,7 +498,7 @@ struct StringRef {
 
   MPSL_INLINE bool eq(const char* s) const noexcept {
     const char* a = _data;
-    const char* aEnd = a + _length;
+    const char* aEnd = a + _size;
 
     while (a != aEnd) {
       if (*a++ != *s++)
@@ -508,8 +508,8 @@ struct StringRef {
     return *s == '\0';
   }
 
-  MPSL_INLINE bool eq(const char* s, size_t len) const noexcept {
-    return len == _length && ::memcmp(_data, s, len) == 0;
+  MPSL_INLINE bool eq(const char* data, size_t size) const noexcept {
+    return size == _size && ::memcmp(_data, data, size) == 0;
   }
 
   // --------------------------------------------------------------------------
@@ -517,7 +517,7 @@ struct StringRef {
   // --------------------------------------------------------------------------
 
   const char* _data;
-  size_t _length;
+  size_t _size;
 };
 
 // ============================================================================
@@ -535,14 +535,10 @@ struct Layout {
 
   //! \internal
   struct Member {
-    //! Member name, it's located somewhere at `Layout::_data`.
-    const char* name;
-    //! Member name length.
-    uint32_t nameLength;
-    //! Member type information.
-    uint32_t typeInfo;
-    //! Member offset in the passed data (negative offset is allowed).
-    int32_t offset;
+    const char* name;                    //!< Member name, it's located somewhere at `Layout::_data`.
+    uint32_t nameSize;                   //!< Member name size.
+    uint32_t typeInfo;                   //!< Member type information.
+    int32_t offset;                      //!< Member offset in the passed data (negative offset is allowed).
   };
 
   // --------------------------------------------------------------------------
@@ -563,7 +559,7 @@ protected:
   // --------------------------------------------------------------------------
 
 public:
-  MPSL_API Error _configure(const char* name, size_t len) noexcept;
+  MPSL_API Error _configure(const char* name, size_t nameSize) noexcept;
 
   //! Set the name of this `Layout`.
   //!
@@ -575,28 +571,28 @@ public:
   }
   //! \overload
   MPSL_INLINE Error configure(const StringRef& name) noexcept {
-    return _configure(name.getData(), name.getLength());
+    return _configure(name.data(), name.size());
   }
 
   //! \internal
-  MPSL_API const Member* _get(const char* name, size_t len) const noexcept;
+  MPSL_API const Member* _get(const char* name, size_t nameSize) const noexcept;
   //! \internal
-  MPSL_API Error _add(const char* name, size_t len, uint32_t typeInfo, int32_t offset) noexcept;
+  MPSL_API Error _add(const char* name, size_t nameSize, uint32_t typeInfo, int32_t offset) noexcept;
 
   //! Get whether the layout has a name. Name is an identifier that is used
   //! in a shader program to access the data and its members. Name has to be
   //! assigned by `Layout::configure()` and it's initially NULL.
   MPSL_INLINE bool hasName() const noexcept { return _name != nullptr; }
 
-  //! Get the layout name, see `hasName()` for more details.
-  MPSL_INLINE const char* getName() const noexcept { return _name; }
-  MPSL_INLINE uint32_t getNameLength() const noexcept { return _nameLength; }
+  //! Get the layout name.
+  MPSL_INLINE const char* name() const noexcept { return _name; }
+  MPSL_INLINE uint32_t nameSize() const noexcept { return _nameSize; }
 
-  MPSL_INLINE const Member* getMembersArray() const noexcept { return _members; }
-  MPSL_INLINE uint32_t getMembersCount() const noexcept { return _membersCount; }
+  MPSL_INLINE const Member* membersArray() const noexcept { return _members; }
+  MPSL_INLINE uint32_t membersCount() const noexcept { return _membersCount; }
 
   //! Get whether the layout is empty (has no members).
-  MPSL_INLINE bool isEmpty() const noexcept { return _membersCount > 0; }
+  MPSL_INLINE bool empty() const noexcept { return _membersCount == 0; }
 
   //! Get whether the member of name `name` exists.
   MPSL_INLINE bool hasMember(const char* name) const noexcept {
@@ -605,17 +601,17 @@ public:
 
   //! \overload
   MPSL_INLINE bool hasMember(const StringRef& name) const noexcept {
-    return _get(name.getData(), name.getLength()) != nullptr;
+    return _get(name.data(), name.size()) != nullptr;
   }
 
   //! Get the member of name `name`, returns null if such member doesn't exist.
-  MPSL_INLINE const Member* getMember(const char* name) const noexcept {
+  MPSL_INLINE const Member* member(const char* name) const noexcept {
     return _get(name, Globals::kInvalidIndex);
   }
 
   //! \overload
-  MPSL_INLINE const Member* getMember(const StringRef& name) const noexcept {
-    return _get(name.getData(), name.getLength());
+  MPSL_INLINE const Member* member(const StringRef& name) const noexcept {
+    return _get(name.data(), name.size());
   }
 
   //! Add a new member to the arguments object.
@@ -625,7 +621,7 @@ public:
 
   //! \overload
   MPSL_INLINE Error addMember(const StringRef& name, uint32_t typeInfo, int32_t offset) noexcept {
-    return _add(name.getData(), name.getLength(), typeInfo, offset);
+    return _add(name.data(), name.size(), typeInfo, offset);
   }
 
   // --------------------------------------------------------------------------
@@ -641,8 +637,8 @@ public:
 
   //! Object name.
   const char* _name;
-  //! Object name length;
-  uint32_t _nameLength;
+  //! Object name size;
+  uint32_t _nameSize;
 
   //! Count of members.
   uint32_t _membersCount;
@@ -745,8 +741,8 @@ struct Context {
 
   //! \internal
   struct CompileArgs {
-    MPSL_INLINE CompileArgs(const char* s, size_t len, uint32_t options, uint32_t numArgs) noexcept :
-      body(s, len),
+    MPSL_INLINE CompileArgs(const char* s, size_t size, uint32_t options, uint32_t numArgs) noexcept :
+      body(s, size),
       options(options),
       numArgs(numArgs) {}
 
@@ -898,7 +894,7 @@ struct Program1 : public Program {
     const Layout& layout0,
     OutputLog* log = nullptr) noexcept {
 
-    Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
+    Context::CompileArgs args(body.data(), body.size(), options, kNumArgs);
     args.layout[0] = &layout0;
     return context._compile(*this, args, log);
   }
@@ -941,7 +937,7 @@ struct Program2 : public Program {
     const Layout& layout1,
     OutputLog* log = nullptr) noexcept {
 
-    Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
+    Context::CompileArgs args(body.data(), body.size(), options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
     return context._compile(*this, args, log);
@@ -988,7 +984,7 @@ struct Program3 : public Program {
     const Layout& layout2,
     OutputLog* log = nullptr) noexcept {
 
-    Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
+    Context::CompileArgs args(body.data(), body.size(), options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
     args.layout[2] = &layout2;
@@ -1039,7 +1035,7 @@ struct Program4 : public Program {
     const Layout& layout3,
     OutputLog* log = nullptr) noexcept {
 
-    Context::CompileArgs args(body.getData(), body.getLength(), options, kNumArgs);
+    Context::CompileArgs args(body.data(), body.size(), options, kNumArgs);
     args.layout[0] = &layout0;
     args.layout[1] = &layout1;
     args.layout[2] = &layout2;
@@ -1095,14 +1091,14 @@ struct MPSL_VIRTAPI OutputLog {
     MPSL_INLINE bool hasPosition() const noexcept { return _line != 0; }
 
     //! Get message type, see \ref MessageType.
-    MPSL_INLINE uint32_t getType() const noexcept { return _type; }
+    MPSL_INLINE uint32_t type() const noexcept { return _type; }
     //! Get line number, indexed from 1.
-    MPSL_INLINE uint32_t getLine() const noexcept { return _line; }
+    MPSL_INLINE uint32_t line() const noexcept { return _line; }
     //! Get column, indexed from 1.
-    MPSL_INLINE uint32_t getColumn() const noexcept { return _column; }
+    MPSL_INLINE uint32_t column() const noexcept { return _column; }
 
-    MPSL_INLINE const StringRef& getHeader() const noexcept { return _header; }
-    MPSL_INLINE const StringRef& getContent() const noexcept { return _content; }
+    MPSL_INLINE const StringRef& header() const noexcept { return _header; }
+    MPSL_INLINE const StringRef& content() const noexcept { return _content; }
 
     uint32_t _type;
     uint32_t _line;

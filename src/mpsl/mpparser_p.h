@@ -45,18 +45,18 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE Parser(AstBuilder* ast, ErrorReporter* errorReporter, const char* body, size_t len) noexcept
+  MPSL_INLINE Parser(AstBuilder* ast, ErrorReporter* errorReporter, const char* body, size_t size) noexcept
     : _ast(ast),
       _errorReporter(errorReporter),
-      _currentScope(ast->getGlobalScope()),
-      _tokenizer(body, len) {}
+      _currentScope(ast->globalScope()),
+      _tokenizer(body, size) {}
   MPSL_INLINE ~Parser() noexcept {}
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE AstScope* getCurrentScope() const noexcept { return _currentScope; }
+  MPSL_INLINE AstScope* currentScope() const noexcept { return _currentScope; }
 
   // --------------------------------------------------------------------------
   // [Parse]

@@ -25,7 +25,7 @@ namespace HashUtils {
   static MPSL_INLINE uint32_t hashPointer(const void* kPtr) noexcept {
     uintptr_t p = (uintptr_t)kPtr;
     return static_cast<uint32_t>(
-      ((p >> 3) ^ (p >> 7) ^ (p >> 12) ^ (p >> 20) ^ (p >> 27)) & 0xFFFFFFFFU);
+      ((p >> 3) ^ (p >> 7) ^ (p >> 12) ^ (p >> 20) ^ (p >> 27)) & 0xFFFFFFFFu);
   }
 
   // \internal
@@ -35,12 +35,12 @@ namespace HashUtils {
 
   // \internal
   //
-  // Get a hash of the given string `str` of `len` length. This function doesn't
-  // require `str` to be NULL terminated.
-  uint32_t hashString(const char* str, size_t len) noexcept;
+  // Get a hash of the given string `data` of size `size`. This function doesn't
+  // require `data` to be NULL terminated.
+  uint32_t hashString(const char* data, size_t size) noexcept;
   //! \overload
   static MPSL_INLINE uint32_t hashString(const StringRef& str) noexcept {
-    return hashString(str.getData(), str.getLength());
+    return hashString(str.data(), str.size());
   }
 
   // \internal
@@ -55,13 +55,13 @@ namespace HashUtils {
 
 class HashNode {
 public:
-  MPSL_INLINE HashNode(uint32_t hVal = 0) noexcept
-    : _next(nullptr), _hVal(hVal) {}
+  MPSL_INLINE HashNode(uint32_t hashCode = 0) noexcept
+    : _next(nullptr), _hashCode(hashCode) {}
 
   //! Next node in the chain, null if last node.
   HashNode* _next;
   //! Hash code.
-  uint32_t _hVal;
+  uint32_t _hashCode;
 };
 
 // ============================================================================
@@ -81,9 +81,9 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE HashBase(ZoneHeap* heap) noexcept {
-    _heap = heap;
-    _length = 0;
+  MPSL_INLINE HashBase(ZoneAllocator* allocator) noexcept {
+    _allocator = allocator;
+    _size = 0;
 
     _bucketsCount = 1;
     _bucketsGrow = 1;
@@ -95,14 +95,14 @@ public:
 
   MPSL_INLINE ~HashBase() noexcept {
     if (_data != _embedded)
-      _heap->release(_data, static_cast<size_t>(_bucketsCount + kExtraCount) * sizeof(void*));
+      _allocator->release(_data, static_cast<size_t>(_bucketsCount + kExtraCount) * sizeof(void*));
   }
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE ZoneHeap* getHeap() const noexcept { return _heap; }
+  MPSL_INLINE ZoneAllocator* allocator() const noexcept { return _allocator; }
 
   // --------------------------------------------------------------------------
   // [Ops]
@@ -118,9 +118,9 @@ public:
   // [Members]
   // --------------------------------------------------------------------------
 
-  ZoneHeap* _heap;
+  ZoneAllocator* _allocator;
 
-  uint32_t _length;
+  uint32_t _size;
   uint32_t _bucketsCount;
   uint32_t _bucketsGrow;
 
@@ -159,8 +159,8 @@ public:
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE Hash(ZoneHeap* heap) noexcept
-    : HashBase(heap) {}
+  MPSL_INLINE Hash(ZoneAllocator* allocator) noexcept
+    : HashBase(allocator) {}
 
   // --------------------------------------------------------------------------
   // [Ops]
@@ -169,9 +169,9 @@ public:
   template<typename ReleaseHandler>
   void reset(ReleaseHandler& handler) noexcept {
     HashNode** data = _data;
-    uint32_t count = _bucketsCount + kExtraCount;
+    uint32_t bucketsCount = _bucketsCount + kExtraCount;
 
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < bucketsCount; i++) {
       HashNode* node = data[i];
 
       while (node) {
@@ -182,12 +182,12 @@ public:
     }
 
     if (data != _embedded)
-      _heap->release(data, static_cast<size_t>(count + kExtraCount) * sizeof(void*));
+      _allocator->release(data, static_cast<size_t>(bucketsCount + kExtraCount) * sizeof(void*));
 
     _bucketsCount = 1;
     _bucketsGrow = 1;
 
-    _length = 0;
+    _size = 0;
     _data = _embedded;
 
     for (uint32_t i = 0; i <= kExtraCount; i++)
@@ -198,8 +198,8 @@ public:
     _mergeToInvisibleSlot(other);
   }
 
-  MPSL_INLINE Node* get(const Key& key, uint32_t hVal) const noexcept {
-    uint32_t hMod = hVal % _bucketsCount;
+  MPSL_INLINE Node* get(const Key& key, uint32_t hashCode) const noexcept {
+    uint32_t hMod = hashCode % _bucketsCount;
     Node* node = static_cast<Node*>(_data[hMod]);
 
     while (node) {
@@ -226,8 +226,8 @@ public:
   MPSL_NONCOPYABLE(Map)
 
   struct Node : public HashNode {
-    MPSL_INLINE Node(const Key& key, const Value& value, uint32_t hVal) noexcept
-      : HashNode(hVal),
+    MPSL_INLINE Node(const Key& key, const Value& value, uint32_t hashCode) noexcept
+      : HashNode(hashCode),
         _key(key),
         _value(value) {}
     MPSL_INLINE bool eq(const Key& key) noexcept { return _key == key; }
@@ -237,25 +237,25 @@ public:
   };
 
   struct ReleaseHandler {
-    MPSL_INLINE ReleaseHandler(ZoneHeap* heap) noexcept
-      : _heap(heap) {}
+    MPSL_INLINE ReleaseHandler(ZoneAllocator* allocator) noexcept
+      : _allocator(allocator) {}
 
     MPSL_INLINE void release(Node* node) noexcept {
-      _heap->release(node, sizeof(Node));
+      _allocator->release(node, sizeof(Node));
     }
 
-    ZoneHeap* _heap;
+    ZoneAllocator* _allocator;
   };
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE Map(ZoneHeap* heap) noexcept
-    : _hash(heap) {}
+  MPSL_INLINE Map(ZoneAllocator* allocator) noexcept
+    : _hash(allocator) {}
 
   MPSL_INLINE ~Map() noexcept {
-    ReleaseHandler releaseHandler(_hash.getHeap());
+    ReleaseHandler releaseHandler(_hash.allocator());
     _hash.reset(releaseHandler);
   }
 
@@ -264,8 +264,8 @@ public:
   // --------------------------------------------------------------------------
 
   MPSL_INLINE bool has(const Key& key) const noexcept {
-    uint32_t hVal = HashUtils::hashPointer(key);
-    uint32_t hMod = hVal % _hash._bucketsCount;
+    uint32_t hashCode = HashUtils::hashPointer(key);
+    uint32_t hMod = hashCode % _hash._bucketsCount;
     Node* node = static_cast<Node*>(_hash._data[hMod]);
 
     while (node) {
@@ -277,8 +277,8 @@ public:
   }
 
   MPSL_INLINE Value get(const Key& key) const noexcept {
-    uint32_t hVal = HashUtils::hashPointer(key);
-    uint32_t hMod = hVal % _hash._bucketsCount;
+    uint32_t hashCode = HashUtils::hashPointer(key);
+    uint32_t hMod = hashCode % _hash._bucketsCount;
     Node* node = static_cast<Node*>(_hash._data[hMod]);
 
     while (node) {
@@ -291,8 +291,8 @@ public:
   }
 
   MPSL_INLINE bool get(const Key& key, Value** pValue) const noexcept {
-    uint32_t hVal = HashUtils::hashPointer(key);
-    uint32_t hMod = hVal % _hash._bucketsCount;
+    uint32_t hashCode = HashUtils::hashPointer(key);
+    uint32_t hMod = hashCode % _hash._bucketsCount;
     Node* node = static_cast<Node*>(_hash._data[hMod]);
 
     while (node) {
@@ -306,12 +306,12 @@ public:
   }
 
   MPSL_INLINE Error put(const Key& key, const Value& value) noexcept {
-    Node* node = static_cast<Node*>(_hash._heap->alloc(sizeof(Node)));
+    Node* node = static_cast<Node*>(_hash._allocator->alloc(sizeof(Node)));
     if (node == nullptr)
       return MPSL_TRACE_ERROR(kErrorNoMemory);
 
-    uint32_t hVal = HashUtils::hashPointer(key);
-    _hash.put(new(node) Node(key, value, hVal));
+    uint32_t hashCode = HashUtils::hashPointer(key);
+    _hash.put(new(node) Node(key, value, hashCode));
 
     return kErrorOk;
   }
@@ -330,8 +330,8 @@ public:
   MPSL_NONCOPYABLE(Set)
 
   struct Node : public HashNode {
-    MPSL_INLINE Node(const Key& key, uint32_t hVal) noexcept
-      : HashNode(hVal),
+    MPSL_INLINE Node(const Key& key, uint32_t hashCode) noexcept
+      : HashNode(hashCode),
         _key(key) {}
     MPSL_INLINE bool eq(const Key& key) noexcept { return _key == key; }
 
@@ -339,25 +339,25 @@ public:
   };
 
   struct ReleaseHandler {
-    MPSL_INLINE ReleaseHandler(ZoneHeap* heap) noexcept
-      : _heap(heap) {}
+    MPSL_INLINE ReleaseHandler(ZoneAllocator* allocator) noexcept
+      : _allocator(allocator) {}
 
     MPSL_INLINE void release(Node* node) noexcept {
-      _heap->release(node, sizeof(Node));
+      _allocator->release(node, sizeof(Node));
     }
 
-    ZoneHeap* _heap;
+    ZoneAllocator* _allocator;
   };
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  MPSL_INLINE Set(ZoneHeap* heap) noexcept
-    : _hash(heap) {}
+  MPSL_INLINE Set(ZoneAllocator* allocator) noexcept
+    : _hash(allocator) {}
 
   MPSL_INLINE ~Set() noexcept {
-    ReleaseHandler releaseHandler(_hash.getHeap());
+    ReleaseHandler releaseHandler(_hash.allocator());
     _hash.reset(releaseHandler);
   }
 
@@ -366,8 +366,8 @@ public:
   // --------------------------------------------------------------------------
 
   MPSL_INLINE bool has(const Key& key) const noexcept {
-    uint32_t hVal = HashUtils::hashPointer(key);
-    uint32_t hMod = hVal % _hash._bucketsCount;
+    uint32_t hashCode = HashUtils::hashPointer(key);
+    uint32_t hMod = hashCode % _hash._bucketsCount;
     Node* node = static_cast<Node*>(_hash._data[hMod]);
 
     while (node) {
@@ -381,24 +381,24 @@ public:
   MPSL_INLINE Error put(const Key& key) noexcept {
     MPSL_ASSERT(!has(key));
 
-    Node* node = static_cast<Node*>(_hash._heap->alloc(sizeof(Node)));
+    Node* node = static_cast<Node*>(_hash._allocator->alloc(sizeof(Node)));
     if (node == nullptr)
       return MPSL_TRACE_ERROR(kErrorNoMemory);
 
-    uint32_t hVal = HashUtils::hashPointer(key);
-    _hash.put(new(node) Node(key, hVal));
+    uint32_t hashCode = HashUtils::hashPointer(key);
+    _hash.put(new(node) Node(key, hashCode));
 
     return kErrorOk;
   }
 
   MPSL_INLINE bool del(const Key& key) noexcept {
-    uint32_t hVal = HashUtils::hashPointer(key);
-    uint32_t hMod = hVal % _hash._bucketsCount;
+    uint32_t hashCode = HashUtils::hashPointer(key);
+    uint32_t hMod = hashCode % _hash._bucketsCount;
     Node* node = static_cast<Node*>(_hash._data[hMod]);
 
     while (node) {
       if (node->eq(key)) {
-        _hash._heap->release(_hash.del(node), sizeof(Node));
+        _hash._allocator->release(_hash.del(node), sizeof(Node));
         return true;
       }
       node = static_cast<Node*>(node->_next);
