@@ -1,9 +1,9 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.8)
 
 # Don't create a project if it was already created by another CMakeLists.txt.
 # This allows one library to embed another library without a project collision.
 if(NOT CMAKE_PROJECT_NAME OR "${CMAKE_PROJECT_NAME}" STREQUAL "mpsl")
-  project(mpsl C CXX)
+  project(mpsl CXX)
 endif()
 
 # =============================================================================
@@ -25,131 +25,143 @@ set(MPSL_TEST   FALSE           CACHE BOOL "Build 'mpsl' test applications")
 set(MPSL_EMBED  FALSE           CACHE BOOL "Embed 'mpsl' library (no targets)")
 set(MPSL_STATIC ${MPSL_EMBED}   CACHE BOOL "Build 'mpsl' library as static")
 
-if(NOT DEFINED ASMJIT_EMBED)
-  set(ASMJIT_EMBED TRUE)
-endif()
-
 # =============================================================================
 # [MPSL - Project]
 # =============================================================================
 
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-  list(APPEND MPSL_PRIVATE_CFLAGS /GF)
-  list(APPEND MPSL_PRIVATE_CFLAGS_DBG /GS /GR-)
-  list(APPEND MPSL_PRIVATE_CFLAGS_REL /Oi /Oy /GS- /GR-)
+set(MPSL_INCLUDE_DIRS ${MPSL_DIR}/src)
+set(MPSL_DEPS "")
+set(MPSL_LIBS "")
+set(MPSL_CFLAGS "")
+set(MPSL_PRIVATE_CFLAGS "")
+set(MPSL_PRIVATE_CFLAGS_DBG "")
+set(MPSL_PRIVATE_CFLAGS_REL "")
 
-  # Enable multi-process compilation.
-  if(NOT MSVC60 AND NOT MSVC70 AND NOT MSVC71)
-    list(APPEND MPSL_PRIVATE_CFLAGS /MP)
-  endif()
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC" OR "x${CMAKE_CXX_SIMULATE_ID}" STREQUAL "xMSVC")
+  set(MPSL_PRIVATE_LFLAGS "/OPT:REF /OPT:ICF")
+
+  list(APPEND MPSL_PRIVATE_CFLAGS -MP)        # [+] Multi-process compilation
+  list(APPEND MPSL_PRIVATE_CFLAGS -GF)        # [+] Eliminate duplicate strings.
+  list(APPEND MPSL_PRIVATE_CFLAGS -GR-)       # [-] Runtime type information.
+  list(APPEND MPSL_PRIVATE_CFLAGS_DBG -GS)    # [+] Buffer security-check.
+  list(APPEND MPSL_PRIVATE_CFLAGS_REL -GS-)   # [-] Buffer security-check.
+  list(APPEND MPSL_PRIVATE_CFLAGS_REL -O2)    # [+] Favor speed over size.
 endif()
 
 if("${CMAKE_CXX_COMPILER_ID}" MATCHES "^(GNU|Clang|AppleClang)$")
-  cxx_detect_standard(MPSL_PRIVATE_CFLAGS)
-  cxx_detect_cflags(MPSL_PRIVATE_CFLAGS
-    "-fvisibility=hidden"
-    "-fno-exceptions"
-    "-fno-tree-vectorize"
-    "-Winconsistent-missing-override")
-  list(APPEND MPSL_PRIVATE_CFLAGS_REL -fmerge-all-constants)
+  list(APPEND MPSL_PRIVATE_CFLAGS -Wall -Wextra)
 endif()
 
+if(NOT DEFINED ASMJIT_EMBED)
+  set(ASMJIT_EMBED TRUE)
+endif()
 include("${ASMJIT_DIR}/CMakeLists.txt")
-list(APPEND MPSL_DEPS ${ASMJIT_LIBS})
-list(APPEND MPSL_PRIVATE_CFLAGS ${ASMJIT_CFLAGS})
 
-set(MPSL_LIBS ${MPSL_DEPS})
-if(NOT MPSL_BUILD_EMBED)
+list(APPEND MPSL_DEPS ${ASMJIT_LIBS})
+list(APPEND MPSL_PRIVATE_CFLAGS "${ASMJIT_CFLAGS}")
+
+list(APPEND MPSL_LIBS ${MPSL_DEPS})
+if (NOT MPSL_EMBED)
   list(INSERT MPSL_LIBS 0 mpsl)
+endif()
+
+if (MPSL_EMBED)
+  set(MPSL_TARGET_TYPE "EMBED")
+elseif (MPSL_STATIC)
+  set(MPSL_TARGET_TYPE "STATIC")
+else()
+  set(MPSL_TARGET_TYPE "SHARED")
+endif()
+
+if (MPSL_EMBED OR MPSL_STATIC)
+  list(APPEND MPSL_CFLAGS -DMPSL_STATIC)
 endif()
 
 list(REMOVE_DUPLICATES MPSL_DEPS)
 list(REMOVE_DUPLICATES MPSL_PRIVATE_CFLAGS)
 
-cxx_project_info(mpsl)
-
 # =============================================================================
 # [MPSL - Source]
 # =============================================================================
 
-cxx_add_source(mpsl MPSL_SRC mpsl
-  mpsl_apibegin.h
-  mpsl_apiend.h
-  mpsl_build.h
+set(MPSL_SRC_LIST
+  mpsl/mpsl_apibegin.h
+  mpsl/mpsl_apiend.h
+  mpsl/mpsl_build.h
 
-  mpsl.cpp
-  mpsl.h
-  mpsl_p.h
+  mpsl/mpsl.cpp
+  mpsl/mpsl.h
+  mpsl/mpsl_p.h
 
-  mpast.cpp
-  mpast_p.h
-  mpastoptimizer.cpp
-  mpastoptimizer_p.h
-  mpatomic_p.h
-  mpcodegen.cpp
-  mpcodegen_p.h
-  mpfold.cpp
-  mpfold_p.h
-  mpformatutils.cpp
-  mpformatutils_p.h
-  mphash.cpp
-  mphash_p.h
-  mpir.cpp
-  mpir_p.h
-  mpirpass.cpp
-  mpirpass_p.h
-  mpirtox86.cpp
-  mpirtox86_p.h
-  mplang.cpp
-  mplang_p.h
-  mpmath.cpp
-  mpmath_p.h
-  mpparser.cpp
-  mpparser_p.h
-  mpstrtod_p.h
-  mptokenizer.cpp
-  mptokenizer_p.h
+  mpsl/mpast.cpp
+  mpsl/mpast_p.h
+  mpsl/mpastoptimizer.cpp
+  mpsl/mpastoptimizer_p.h
+  mpsl/mpatomic_p.h
+  mpsl/mpcodegen.cpp
+  mpsl/mpcodegen_p.h
+  mpsl/mpfold.cpp
+  mpsl/mpfold_p.h
+  mpsl/mpformatutils.cpp
+  mpsl/mpformatutils_p.h
+  mpsl/mphash.cpp
+  mpsl/mphash_p.h
+  mpsl/mpir.cpp
+  mpsl/mpir_p.h
+  mpsl/mpirpass.cpp
+  mpsl/mpirpass_p.h
+  mpsl/mpirtox86.cpp
+  mpsl/mpirtox86_p.h
+  mpsl/mplang.cpp
+  mpsl/mplang_p.h
+  mpsl/mpmath.cpp
+  mpsl/mpmath_p.h
+  mpsl/mpparser.cpp
+  mpsl/mpparser_p.h
+  mpsl/mpstrtod_p.h
+  mpsl/mptokenizer.cpp
+  mpsl/mptokenizer_p.h
 )
+
+set(MPSL_SRC)
+foreach(_src_file ${MPSL_SRC_LIST})
+  list(APPEND MPSL_SRC src/${_src_file})
+endforeach()
+source_group(TREE "${MPSL_DIR}" FILES ${MPSL_SRC})
 
 # =============================================================================
 # [MPSL - Targets]
 # =============================================================================
 
-if(NOT MPSL_BUILD_EMBED)
-  cxx_add_library(mpsl mpsl
-    "${MPSL_SRC};${ASMJIT_SRC}"
-    "${MPSL_DEPS}"
-    "${MPSL_PRIVATE_CFLAGS}"
-    "${MPSL_PRIVATE_CFLAGS_DBG}"
-    "${MPSL_PRIVATE_CFLAGS_REL}")
-  target_include_directories(mpsl PRIVATE BEFORE ${ASMJIT_INCLUDE_DIRS})
+if (NOT MPSL_EMBED)
+  add_library(mpsl ${MPSL_TARGET_TYPE} ${MPSL_SRC} ${ASMJIT_SRC})
+  target_link_libraries(mpsl PRIVATE ${MPSL_DEPS})
+  target_compile_options(mpsl PUBLIC ${MPSL_CFLAGS})
+  target_compile_options(mpsl PRIVATE ${MPSL_PRIVATE_CFLAGS}
+    $<$<CONFIG:Debug>:${MPSL_PRIVATE_CFLAGS_DBG}>
+    $<$<NOT:$<CONFIG:Debug>>:${MPSL_PRIVATE_CFLAGS_REL}>)
+  target_compile_features(mpsl PUBLIC cxx_std_11)
+  set_property(TARGET mpsl PROPERTY CXX_VISIBILITY_PRESET hidden)
 
-  foreach(i ${MPSL_SRC})
-    get_filename_component(path ${i} PATH)
-    get_filename_component(name ${i} NAME)
-    string(REGEX REPLACE "^${MPSL_SOURCE_DIR}/" "" targetpath "${path}")
-    if(${name} MATCHES ".h$")
-      if(NOT "${name}" MATCHES "_p.h$")
-        install(FILES ${i} DESTINATION "include/${targetpath}")
-      endif()
+  target_include_directories(mpsl PRIVATE BEFORE ${ASMJIT_INCLUDE_DIRS})
+  target_include_directories(mpsl PUBLIC BEFORE ${MPSL_INCLUDE_DIRS})
+
+  foreach(_src_file ${MPSL_SRC_LIST})
+    if ("${_src_file}" MATCHES "\\.h$" AND NOT "${_src_file}" MATCHES "_p\\.h$")
+      get_filename_component(_src_dir ${_src_file} PATH)
+      install(FILES "${MPSL_DIR}/src/${_src_file}" DESTINATION "include/${_src_dir}")
     endif()
   endforeach()
 endif()
 
-# =============================================================================
-# [MPSL - ...]
-# =============================================================================
-
-if(MPSL_TEST)
-  cxx_detect_standard(CXX_STD)
-  set(MPSL_SRC_TEST mp_dsp mp_test mp_tutorial)
-
-  foreach(file ${MPSL_SRC_TEST})
-    cxx_add_executable(mpsl ${file}
-      "test/${file}.cpp;test/mp_utils.h"
-      "${MPSL_LIBS}"
-      "${MPSL_CFLAGS};${CXX_STD}"
-      ""
-      "")
-  endforeach(file)
+if (MPSL_TEST)
+  foreach(_target mp_dsp mp_test mp_tutorial)
+    add_executable(${_target} test/${_target}.cpp)
+    target_link_libraries(${_target} ${MPSL_LIBS})
+    target_compile_options(${_target} PRIVATE ${MPSL_PRIVATE_CFLAGS}
+      $<$<CONFIG:Debug>:${MPSL_PRIVATE_CFLAGS_DBG}>
+      $<$<NOT:$<CONFIG:Debug>>:${MPSL_PRIVATE_CFLAGS_REL}>)
+    target_compile_features(${_target} PUBLIC cxx_std_11)
+    set_property(TARGET ${_target} PROPERTY CXX_VISIBILITY_PRESET hidden)
+  endforeach()
 endif()

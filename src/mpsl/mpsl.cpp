@@ -506,7 +506,7 @@ Error Context::_compile(Program& program, const CompileArgs& ca, OutputLog* log)
         OutputLog::Message(
           OutputLog::kMessageDump, 0, 0,
           StringRef(kDebugHeadingASM, MPSL_ARRAY_SIZE(kDebugHeadingASM) - 1),
-          StringRef(asmlog.data(), asmlog.size())));
+          StringRef(asmlog.data(), asmlog.dataSize())));
   }
 
   if (programD->_refCount == 1 && static_cast<RuntimeData*>(programD->_runtimeData) == rt) {
